@@ -1,4 +1,4 @@
-export type Feature = {
+﻿export type Feature = {
   title: string;
   description: string;
 };
@@ -172,6 +172,69 @@ export type ToolRunResult<TData = Record<string, unknown>> = {
   data?: TData;
   error?: string;
   executedAt: string;
+};
+
+export type AgentScenario = "enterprise" | "ecommerce" | "recruitment" | "general";
+
+export type AgentIntent =
+  | "knowledge_qa"
+  | "policy_check"
+  | "order_query"
+  | "product_query"
+  | "after_sale_reply"
+  | "jd_match"
+  | "ticket_create"
+  | "general_chat";
+
+export type AgentRoute = {
+  scenario: AgentScenario;
+  intent: AgentIntent;
+  needRag: boolean;
+  toolsNeeded: ToolName[];
+  confidence: number;
+  reason: string;
+};
+
+export type AgentStep = {
+  id: string;
+  name: string;
+  type: "router" | "rag" | "tool" | "response";
+  status: "success" | "failed" | "skipped";
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+  durationMs: number;
+};
+
+export type AgentStructuredOutput = {
+  scenario: AgentScenario;
+  intent: AgentIntent;
+  answer: string;
+  evidence: string[];
+  toolsUsed: ToolName[];
+  sources: string[];
+  confidence: number;
+  riskLevel: "low" | "medium" | "high";
+  nextAction: string;
+};
+
+export type AgentPipelineResult = {
+  question: string;
+  route: AgentRoute;
+  steps: AgentStep[];
+  ragAnswer: RagAnswer | null;
+  toolResults: ToolRunResult[];
+  finalAnswer: string;
+  structuredOutput: AgentStructuredOutput;
+  createdAt: string;
+  mode: "mock-agent";
+};
+
+export type AgentExample = {
+  question: string;
+  expectedScenario: AgentScenario;
+  expectedIntent: AgentIntent;
+  expectedTools: ToolName[];
+  expectedNeedRag: boolean;
 };
 
 export type EvaluationMetric = {

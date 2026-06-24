@@ -1,5 +1,6 @@
 import type {
   AfterSalePolicy,
+  AgentExample,
   AgentDecision,
   ChatMessage,
   CompanyPolicy,
@@ -371,4 +372,62 @@ export const testCases: TestCase[] = [
   { id: "TC-002", scenario: "电商客服与售后 Agent", input: "订单三天未发货，帮我处理。", expectedTool: "queryOrder + searchPolicy", result: "pass", latency: "1.9s" },
   { id: "TC-003", scenario: "招聘求职 JD 匹配 Agent", input: "这个 AI 应用开发岗位和我的项目匹配吗？", expectedTool: "analyzeJD", result: "review", latency: "2.2s" },
   { id: "TC-004", scenario: "电商客服与售后 Agent", input: "帮客户创建一个退货工单。", expectedTool: "createTicket", result: "pass", latency: "1.6s" },
+];
+export const agentExamples: AgentExample[] = [
+  {
+    question: "公司报销需要什么材料？",
+    expectedScenario: "enterprise",
+    expectedIntent: "knowledge_qa",
+    expectedTools: [],
+    expectedNeedRag: true,
+  },
+  {
+    question: "年假制度是什么？",
+    expectedScenario: "enterprise",
+    expectedIntent: "knowledge_qa",
+    expectedTools: [],
+    expectedNeedRag: true,
+  },
+  {
+    question: "订单10001能不能退？",
+    expectedScenario: "ecommerce",
+    expectedIntent: "policy_check",
+    expectedTools: ["queryOrder", "searchPolicy"],
+    expectedNeedRag: true,
+  },
+  {
+    question: "商品P001还有库存吗？",
+    expectedScenario: "ecommerce",
+    expectedIntent: "product_query",
+    expectedTools: ["queryProduct"],
+    expectedNeedRag: false,
+  },
+  {
+    question: "客户说尺码不合适怎么回复？",
+    expectedScenario: "ecommerce",
+    expectedIntent: "after_sale_reply",
+    expectedTools: ["generateCustomerReply"],
+    expectedNeedRag: true,
+  },
+  {
+    question: "这个 AI 应用开发工程师岗位和我的简历匹配吗？",
+    expectedScenario: "recruitment",
+    expectedIntent: "jd_match",
+    expectedTools: ["analyzeJD"],
+    expectedNeedRag: false,
+  },
+  {
+    question: "帮我创建一个高优先级售后工单。",
+    expectedScenario: "ecommerce",
+    expectedIntent: "ticket_create",
+    expectedTools: ["createTicket"],
+    expectedNeedRag: false,
+  },
+  {
+    question: "火星基地怎么申请？",
+    expectedScenario: "general",
+    expectedIntent: "general_chat",
+    expectedTools: [],
+    expectedNeedRag: false,
+  },
 ];
