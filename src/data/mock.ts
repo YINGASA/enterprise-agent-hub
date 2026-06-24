@@ -1,9 +1,17 @@
 import type {
+  AfterSalePolicy,
   AgentDecision,
   ChatMessage,
+  CompanyPolicy,
   EvaluationMetric,
   Feature,
+  InterviewQuestion,
+  JobDescription,
   KnowledgeDocument,
+  Order,
+  PolicyDocument,
+  Product,
+  ResumeProfile,
   Scenario,
   TestCase,
   ToolCallLog,
@@ -64,6 +72,225 @@ export const scenarios: Scenario[] = [
   },
 ];
 
+export const companyPolicies: CompanyPolicy[] = [
+  {
+    id: "CP-EXP-001",
+    title: "员工报销制度",
+    category: "expense",
+    summary: "规范差旅、交通、餐补和客户拜访相关费用报销流程。",
+    rules: ["差旅申请需在出行前 3 个工作日提交。", "单次交通费用超过 2000 元需补充客户拜访记录。", "报销单据需在费用发生后 30 天内提交。"],
+    updatedAt: "2026-06-01",
+  },
+  {
+    id: "CP-VAC-001",
+    title: "年假制度",
+    category: "vacation",
+    summary: "说明员工年假额度、申请规则和跨年结转限制。",
+    rules: ["入职满一年后可申请带薪年假。", "连续休假超过 5 天需提前 10 个工作日申请。", "年假原则上不跨两个自然年累计。"],
+    updatedAt: "2026-05-20",
+  },
+  {
+    id: "CP-LEV-001",
+    title: "请假制度",
+    category: "leave",
+    summary: "覆盖事假、病假、调休和紧急请假审批规则。",
+    rules: ["病假需在返岗后 3 个工作日内补充证明。", "事假超过 2 天需部门负责人审批。", "紧急请假可先口头报备，24 小时内补交申请。"],
+    updatedAt: "2026-04-18",
+  },
+  {
+    id: "CP-SEC-001",
+    title: "信息安全制度",
+    category: "security",
+    summary: "规范账号权限、敏感数据、外发资料和办公设备安全。",
+    rules: ["禁止将客户数据上传到未审批的第三方工具。", "离职或转岗需在 1 个工作日内回收系统权限。", "外发合同、报价单和客户清单前需完成脱敏审查。"],
+    updatedAt: "2026-06-12",
+  },
+];
+
+export const policyDocuments: PolicyDocument[] = [
+  {
+    id: "DOC-HR-001",
+    title: "员工报销与差旅制度",
+    category: "HR Policy",
+    content: "员工差旅申请需在出行前 3 个工作日提交，直属主管审批后方可预订交通和住宿。报销单据需在费用发生后 30 天内提交。",
+    updatedAt: "2026-06-01",
+  },
+  {
+    id: "DOC-HR-002",
+    title: "请假与年假管理办法",
+    category: "HR Policy",
+    content: "入职满一年后可申请带薪年假；连续休假超过 5 天需提前 10 个工作日申请。病假需补充正规医疗证明。",
+    updatedAt: "2026-05-20",
+  },
+  {
+    id: "DOC-SEC-001",
+    title: "信息安全与数据外发规范",
+    category: "Security",
+    content: "客户数据、合同报价和候选人资料均属于敏感信息，外发前必须经过权限审批和脱敏处理。",
+    updatedAt: "2026-06-12",
+  },
+];
+
+export const products: Product[] = [
+  {
+    id: "SKU-AGENT-PLUS",
+    name: "Agent Plus 智能夹克",
+    category: "服饰",
+    price: 399,
+    sizeAdvice: "标准版型，身高 170-178cm 且体重 60-72kg 建议 M 码。",
+    stock: 128,
+    sellingPoints: ["防泼水面料", "通勤轻量设计", "支持 7 天无理由退货"],
+  },
+  {
+    id: "SKU-RAG-BAG",
+    name: "RAG Commuter 双肩包",
+    category: "箱包",
+    price: 269,
+    sizeAdvice: "容量 22L，可放 15.6 英寸笔记本。",
+    stock: 42,
+    sellingPoints: ["独立电脑仓", "多层收纳", "一年质保"],
+  },
+  {
+    id: "SKU-LLM-EARBUDS",
+    name: "LLM Lite 降噪耳机",
+    category: "数码",
+    price: 599,
+    sizeAdvice: "附 S/M/L 三套耳塞，建议首次使用 M 码。",
+    stock: 0,
+    sellingPoints: ["主动降噪", "低延迟会议模式", "拆封后非质量问题不支持退货"],
+  },
+];
+
+export const orders: Order[] = [
+  {
+    id: "EAH20260624001",
+    user: "张女士",
+    productId: "SKU-AGENT-PLUS",
+    productName: "Agent Plus 智能夹克",
+    status: "picking",
+    signedAt: null,
+    opened: false,
+    returnSupported: true,
+  },
+  {
+    id: "EAH20260618008",
+    user: "李先生",
+    productId: "SKU-RAG-BAG",
+    productName: "RAG Commuter 双肩包",
+    status: "signed",
+    signedAt: "2026-06-20T10:32:00+08:00",
+    opened: false,
+    returnSupported: true,
+  },
+  {
+    id: "EAH20260612003",
+    user: "王同学",
+    productId: "SKU-LLM-EARBUDS",
+    productName: "LLM Lite 降噪耳机",
+    status: "signed",
+    signedAt: "2026-06-14T16:20:00+08:00",
+    opened: true,
+    returnSupported: false,
+  },
+];
+
+export const afterSalePolicies: AfterSalePolicy[] = [
+  {
+    id: "ASP-RETURN-7D",
+    title: "7 天无理由退货",
+    category: "return",
+    rules: ["签收后 7 天内且不影响二次销售可申请无理由退货。", "服饰和箱包类商品需吊牌、包装完整。"],
+    updatedAt: "2026-06-05",
+  },
+  {
+    id: "ASP-QUALITY-001",
+    title: "质量问题售后",
+    category: "quality",
+    rules: ["质量问题需上传照片或视频凭证。", "确认质量问题后可优先换货，缺货时支持退款。"],
+    updatedAt: "2026-06-05",
+  },
+  {
+    id: "ASP-OPENED-001",
+    title: "已拆封限制",
+    category: "opened_limit",
+    rules: ["数码耳机、贴身用品拆封后非质量问题不支持退货。", "已拆封商品如存在质量问题仍可进入质量售后流程。"],
+    updatedAt: "2026-06-05",
+  },
+  {
+    id: "ASP-SPECIAL-001",
+    title: "特殊商品限制",
+    category: "special_goods",
+    rules: ["定制商品、临期清仓商品不支持无理由退货。", "特殊限制会在商品详情页明确展示。"],
+    updatedAt: "2026-06-05",
+  },
+];
+
+export const jobDescriptions: JobDescription[] = [
+  {
+    id: "JD-AI-APP-ENG",
+    title: "AI 应用开发工程师",
+    level: "初中级/校招可投",
+    keywords: ["RAG", "Agent", "Tool Calling", "结构化输出", "Next.js", "TypeScript", "评测"],
+    responsibilities: ["开发企业知识库问答和业务流程自动化 Agent。", "设计工具调用协议和结构化输出格式。", "建设评测集并跟踪模型应用质量。"],
+    requirements: ["熟悉 TypeScript 和前端工程化。", "理解 RAG、Agent Router 和 Tool Calling 基本流程。", "能够用 mock 数据快速搭建可演示原型。"],
+  },
+  {
+    id: "JD-LLM-INTERN",
+    title: "大模型应用开发实习生",
+    level: "实习",
+    keywords: ["Prompt", "RAG", "Python", "API 调用", "数据清洗", "评测"],
+    responsibilities: ["协助整理业务知识库和测试集。", "编写 Prompt 与 API 调用脚本。", "分析模型回答质量并输出优化建议。"],
+    requirements: ["了解大模型 API 基本调用方式。", "具备脚本开发和数据处理能力。", "有 AI 应用 Demo 或课程项目优先。"],
+  },
+  {
+    id: "JD-FE-INTERN",
+    title: "前端开发实习生",
+    level: "实习",
+    keywords: ["React", "Next.js", "TypeScript", "Tailwind CSS", "组件化", "可视化"],
+    responsibilities: ["开发 B 端页面和可复用组件。", "对接后端 API 并处理异常状态。", "参与前端体验优化和数据展示。"],
+    requirements: ["熟悉 React 和 TypeScript。", "理解响应式布局和组件状态管理。", "有中后台项目经验优先。"],
+  },
+];
+
+export const sampleResume: ResumeProfile = {
+  id: "resume-demo-ai-app",
+  name: "候选人 Demo",
+  summary: "面向 AI 应用开发工程师岗位的模拟简历，包含企业 Agent 平台、RAG 问答、工具调用和前端工程化项目经验。",
+  skills: ["TypeScript", "Next.js", "React", "Tailwind CSS", "RAG", "Agent Router", "Tool Calling", "结构化输出", "Mock 数据", "评测面板"],
+  projects: [
+    "Enterprise Agent Hub：企业知识库与业务流程自动化 Agent 平台，覆盖知识库问答、客服售后和 JD 匹配场景。",
+    "RAG Knowledge Demo：实现文档切片、来源引用展示和检索结果 mock 编排。",
+    "客服工具中心：模拟订单查询、商品查询、售后政策检索和客服回复生成。",
+  ],
+};
+
+export const interviewQuestions: InterviewQuestion[] = [
+  {
+    id: "IQ-AI-001",
+    jobId: "JD-AI-APP-ENG",
+    question: "请说明你会如何设计一个支持多业务场景的 Agent Router？",
+    focus: "场景识别、意图拆解、工具选择、结构化输出。",
+  },
+  {
+    id: "IQ-AI-002",
+    jobId: "JD-AI-APP-ENG",
+    question: "RAG 回答为什么需要来源引用？你会如何在前端展示 citation？",
+    focus: "可信度、可追溯性、chunk 与文档映射。",
+  },
+  {
+    id: "IQ-LLM-001",
+    jobId: "JD-LLM-INTERN",
+    question: "如果模型回答命中率不稳定，你会如何构造测试集和评测指标？",
+    focus: "测试样本、准确率、工具命中率、失败案例分析。",
+  },
+  {
+    id: "IQ-FE-001",
+    jobId: "JD-FE-INTERN",
+    question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？",
+    focus: "组件拆分、状态管理、异常展示、JSON 可读性。",
+  },
+];
+
 export const chatMessages: ChatMessage[] = [
   {
     role: "user",
@@ -106,7 +333,7 @@ export const toolCallLogs: ToolCallLog[] = [
   {
     tool: "searchPolicy",
     input: { keyword: "延迟发货补偿", scene: "after_sales" },
-    output: { policyId: "POLICY-18", compensation: "8 元优惠券", citation: "售后政策第 4.2 条" },
+    output: { policyId: "ASP-RETURN-7D", compensation: "8 元优惠券", citation: "售后政策第 4.2 条" },
   },
   {
     tool: "generateCustomerReply",
@@ -118,8 +345,7 @@ export const toolCallLogs: ToolCallLog[] = [
 export const structuredOutput = {
   scenario: "commerce_support",
   intent: "shipping_delay_reply",
-  answer:
-    "订单 EAH20260624001 当前在华东一号仓拣货中，预计 24 小时内发出。建议向客户致歉并补发 8 元优惠券。",
+  answer: "订单 EAH20260624001 当前在华东一号仓拣货中，预计 24 小时内发出。建议向客户致歉并补发 8 元优惠券。",
   tools: ["queryOrder", "searchPolicy", "generateCustomerReply"],
   citations: ["售后政策第 4.2 条"],
   confidence: 0.92,
@@ -191,39 +417,48 @@ export const documents: KnowledgeDocument[] = [
 export const tools: ToolDefinition[] = [
   {
     name: "queryOrder",
-    description: "查询订单状态、物流节点和预计发货时间。",
+    scenario: "电商客服与售后 Agent",
+    description: "根据订单 id 查询订单状态、商品、签收时间和退货相关信息。",
     inputExample: { orderId: "EAH20260624001" },
-    outputExample: { status: "picking", etaHours: 24, warehouse: "华东一号仓" },
+    outputExample: { status: "picking", productName: "Agent Plus 智能夹克", returnSupported: true },
   },
   {
     name: "queryProduct",
-    description: "查询商品库存、价格、售后规则和核心卖点。",
-    inputExample: { skuId: "SKU-AGENT-PLUS" },
-    outputExample: { stock: 128, price: 399, returnPolicy: "7 天无理由" },
+    scenario: "电商客服与售后 Agent",
+    description: "根据商品 id 查询商品信息、尺码建议、库存和核心卖点。",
+    inputExample: { productId: "SKU-AGENT-PLUS" },
+    outputExample: { name: "Agent Plus 智能夹克", stock: 128, sizeAdvice: "标准版型，建议 M 码。" },
   },
   {
     name: "searchPolicy",
-    description: "检索企业制度、售后政策或招聘标准，并返回引用来源。",
-    inputExample: { keyword: "延迟发货补偿", scene: "after_sales" },
-    outputExample: { policyId: "POLICY-18", citation: "售后政策第 4.2 条" },
+    scenario: "企业知识库 Agent / 电商客服与售后 Agent",
+    description: "根据关键词从公司制度、企业文档和售后规则中检索相关规则。",
+    inputExample: { keyword: "退货" },
+    outputExample: { total: 3, matches: [{ id: "ASP-RETURN-7D", title: "7 天无理由退货" }] },
   },
   {
     name: "createTicket",
-    description: "为售后、IT 支持或内部流程创建跟进工单。",
-    inputExample: { category: "shipping_delay", priority: "medium", owner: "support" },
-    outputExample: { ticketId: "TCK-20260624-009", status: "created" },
+    scenario: "电商客服与售后 Agent / 企业流程自动化",
+    description: "模拟创建工单，返回 ticketId、summary、priority、status 和 createdAt。",
+    inputExample: { summary: "客户订单超过 48 小时未发货，需要客服跟进。", priority: "medium" },
+    outputExample: { ticketId: "TCK-20260624-001", status: "created" },
   },
   {
     name: "analyzeJD",
-    description: "分析 JD 与候选人经历，输出匹配度和能力差距。",
-    inputExample: { jdId: "JD-AI-APP", resumeProfileId: "candidate-demo" },
-    outputExample: { matchScore: 86, gaps: ["线上评测经验", "多工具编排案例"] },
+    scenario: "招聘求职 JD 匹配 Agent",
+    description: "用规则方式模拟 JD 与简历匹配分析，输出匹配分、匹配点、缺口和补强关键词。",
+    inputExample: {
+      jdText: "AI 应用开发工程师，需要 RAG、Agent、Tool Calling、Next.js、TypeScript、评测经验。",
+      resumeText: sampleResume.summary,
+    },
+    outputExample: { matchScore: 86, matchedKeywords: ["RAG", "Agent", "Tool Calling"], gaps: ["线上 A/B 评测"] },
   },
   {
     name: "generateCustomerReply",
-    description: "根据业务事实、政策和语气生成客服回复。",
-    inputExample: { facts: ["订单拣货中"], tone: "friendly", includeCoupon: true },
-    outputExample: { reply: "很抱歉让您久等了，您的订单预计 24 小时内发出。" },
+    scenario: "电商客服与售后 Agent",
+    description: "根据输入上下文生成 mock 客服回复，例如退货说明、尺码建议或物流解释。",
+    inputExample: { type: "shipping_delay", orderId: "EAH20260624001", customerName: "张女士" },
+    outputExample: { reply: "张女士您好，很抱歉让您久等了，您的订单预计 24 小时内发出。" },
   },
 ];
 
