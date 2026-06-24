@@ -239,12 +239,21 @@ export type LlmMessage = {
   content: string;
 };
 
-export type LlmClientConfig = {
-  apiKey?: string;
+export type LlmConfigDiagnostics = {
+  hasApiKey: boolean;
+  maskedApiKey: string;
+  apiKeyLength: number;
   baseUrl: string;
+  normalizedBaseUrl: string;
+  requestUrl: string;
   model: string;
   provider: LlmProvider;
+};
+
+export type LlmClientConfig = LlmConfigDiagnostics & {
+  apiKey?: string;
   isConfigured: boolean;
+  missing: Array<"missing_api_key" | "missing_base_url" | "missing_model">;
 };
 
 export type LlmGenerateOptions = {
@@ -252,6 +261,15 @@ export type LlmGenerateOptions = {
   maxTokens?: number;
   responseFormat?: "json_object" | "text";
 };
+
+export type LlmErrorType =
+  | "missing_api_key"
+  | "missing_base_url"
+  | "missing_model"
+  | "network_error"
+  | "http_error"
+  | "invalid_response_shape"
+  | "json_parse_error";
 
 export type LlmGenerateResult = {
   content: string;
@@ -261,6 +279,15 @@ export type LlmGenerateResult = {
   provider: LlmProvider;
   mode: LlmMode;
   durationMs: number;
+  requestUrl: string;
+  httpStatus?: number;
+  statusText?: string;
+  responseBodyPreview?: string;
+  errorType?: LlmErrorType;
+  errorName?: string;
+  errorMessage?: string;
+  causeMessage?: string;
+  causeCode?: string;
   error?: string;
 };
 
@@ -269,7 +296,12 @@ export type AgentApiMetadata = {
   responseMode: "mock" | "real" | "fallback";
   provider: LlmProvider;
   model: string;
-  fallbackReason?: "missing_api_key" | "llm_error" | "json_parse_error";
+  fallbackReason?: LlmErrorType | "llm_error";
+  requestUrl?: string;
+  hasApiKey?: boolean;
+  maskedApiKey?: string;
+  apiKeyLength?: number;
+  errorType?: LlmErrorType;
   llmDurationMs?: number;
   llmError?: string;
 };

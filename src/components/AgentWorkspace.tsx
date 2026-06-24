@@ -12,7 +12,9 @@ export function AgentWorkspace() {
   const [question, setQuestion] = useState(fallbackQuestion);
   const [mode, setMode] = useState<LlmMode>("mock");
   const [result, setResult] = useState<AgentApiResponse | null>(null);
+  const [healthResult, setHealthResult] = useState<unknown>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [clientError, setClientError] = useState("");
 
   const selectedExample = useMemo(() => agentExamples.find((example) => example.question === question), [question]);
@@ -41,6 +43,21 @@ export function AgentWorkspace() {
     }
   }
 
+  async function handleHealthCheck() {
+    setIsCheckingHealth(true);
+    setClientError("");
+
+    try {
+      const response = await fetch("/api/llm/health", { method: "GET" });
+      const data = (await response.json()) as unknown;
+      setHealthResult(data);
+    } catch (error) {
+      setHealthResult({ ok: false, stage: "client_error", errorMessage: error instanceof Error ? error.message : "Unknown client error." });
+    } finally {
+      setIsCheckingHealth(false);
+    }
+  }
+
   return (
     <div className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_420px]">
       <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -61,6 +78,15 @@ export function AgentWorkspace() {
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          onClick={handleHealthCheck}
+          disabled={isCheckingHealth}
+          className="mb-4 w-full rounded-md border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-ink-500"
+        >
+          {isCheckingHealth ? "检查中..." : "检查 LLM 连接"}
+        </button>
 
         <textarea
           value={question}
@@ -140,10 +166,23 @@ export function AgentWorkspace() {
               <p>响应模式：{result.api.responseMode}</p>
               <p>provider：{result.api.provider}</p>
               <p>model：{result.api.model}</p>
+              <p>requestUrl：{result.api.requestUrl ?? "无"}</p>
+              <p>hasApiKey：{String(result.api.hasApiKey ?? false)}</p>
+              <p>maskedApiKey：{result.api.maskedApiKey ?? "missing"}</p>
               <p>fallbackReason：{result.api.fallbackReason ?? "无"}</p>
+              <p>errorType：{result.api.errorType ?? "无"}</p>
               <p>LLM duration：{result.api.llmDurationMs ? `${result.api.llmDurationMs}ms` : "无"}</p>
             </div>
             {result.api.llmError ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-700">{result.api.llmError}</p> : null}
+          </section>
+        ) : null}
+
+        {healthResult ? (
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-semibold text-ink-900">LLM 连接诊断</h2>
+            <pre className="max-h-[420px] overflow-auto rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-100">
+              {JSON.stringify(healthResult, null, 2)}
+            </pre>
           </section>
         ) : null}
 

@@ -1,4 +1,4 @@
-﻿import { PageHeader } from "@/components/PageHeader";
+import { PageHeader } from "@/components/PageHeader";
 
 const sections = [
   {
@@ -17,9 +17,13 @@ const sections = [
     title: "V0.4 Agent Router 流程",
     body: "用户输入后，Router 判断场景与意图，决定是否调用 RAG，决定需要哪些工具，执行工具调用，汇总 RAG 和工具结果，输出结构化 AgentResponse，并在前端展示完整决策轨迹。",
   },
-  {
+    {
     title: "V0.5 OpenAI-compatible API",
     body: "新增 OpenAI-compatible Chat Completions 调用能力，兼容 DeepSeek。用户可在 /chat 选择 mock 或 real 模式，真实调用只发生在服务端 API Route，浏览器不会暴露 API Key。",
+  },
+  {
+    title: "V0.5.1 DeepSeek 诊断",
+    body: "新增 /api/llm/health 和 /chat 的连接诊断入口，可查看脱敏 Key 状态、最终请求 URL、HTTP 状态、网络错误、响应预览和 JSON 解析结果。如果 deepseek-v4-flash 当前账号不可用，可以临时尝试 deepseek-chat 做兼容测试。",
   },
   {
     title: "密钥与 fallback",

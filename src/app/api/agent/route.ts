@@ -2,7 +2,7 @@
 import { documents } from "@/data/mock";
 import { runAgentPipeline } from "@/lib/agent";
 import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
-import type { AgentApiResponse, AgentStep, AgentStructuredOutput, LlmMessage, LlmMode, ToolName } from "@/types";
+import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStructuredOutput, LlmMessage, LlmMode, ToolName } from "@/types";
 
 type AgentRequestBody = {
   question?: unknown;
@@ -101,6 +101,17 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
   ];
 }
 
+function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey" | "maskedApiKey" | "apiKeyLength">): AgentApiMetadata {
+  const config = getLlmConfig();
+  return {
+    ...base,
+    requestUrl: config.requestUrl,
+    hasApiKey: config.hasApiKey,
+    maskedApiKey: config.maskedApiKey,
+    apiKeyLength: config.apiKeyLength,
+  };
+}
+
 export async function POST(request: Request) {
   let body: AgentRequestBody = {};
   try {
@@ -117,33 +128,36 @@ export async function POST(request: Request) {
   if (requestedMode === "mock") {
     const response: AgentApiResponse = {
       ...pipeline,
-      api: {
+      api: buildApiMetadata({
         requestedMode,
         responseMode: "mock",
         provider: "mock",
         model: "mock-agent",
-      },
+      }),
     };
     return NextResponse.json(response);
   }
 
-  if (!config.isConfigured) {
+  const firstMissing = config.missing[0];
+  if (firstMissing) {
     const response: AgentApiResponse = {
       ...pipeline,
-      api: {
+      api: buildApiMetadata({
         requestedMode,
         responseMode: "fallback",
         provider: config.provider,
         model: config.model,
-        fallbackReason: "missing_api_key",
-      },
+        fallbackReason: firstMissing,
+        errorType: firstMissing,
+        llmError: firstMissing,
+      }),
     };
     return NextResponse.json(response);
   }
 
   const llmResult = await callOpenAICompatibleChat(buildMessages(question, pipeline), {
     temperature: 0.2,
-    maxTokens: 1200,
+    maxTokens: 800,
     responseFormat: "json_object",
   });
 
@@ -155,36 +169,58 @@ export async function POST(request: Request) {
       structuredOutput,
       steps: [
         ...pipeline.steps,
-        makeLlmStep("success", llmResult.durationMs, { provider: llmResult.provider, model: llmResult.model }, { content: llmResult.content, parsedJson: llmResult.parsedJson }),
+        makeLlmStep(
+          "success",
+          llmResult.durationMs,
+          { provider: llmResult.provider, model: llmResult.model, requestUrl: llmResult.requestUrl },
+          { content: llmResult.content, parsedJson: llmResult.parsedJson, httpStatus: llmResult.httpStatus },
+        ),
       ],
-      api: {
+      api: buildApiMetadata({
         requestedMode,
         responseMode: "real",
         provider: llmResult.provider,
         model: llmResult.model,
+        errorType: llmResult.errorType,
         llmDurationMs: llmResult.durationMs,
-        llmError: llmResult.error,
-      },
+        llmError: llmResult.errorMessage,
+      }),
     };
     return NextResponse.json(response);
   }
 
-  const fallbackReason = llmResult.content ? "json_parse_error" : "llm_error";
+  const fallbackReason = llmResult.errorType ?? "llm_error";
   const response: AgentApiResponse = {
     ...pipeline,
     steps: [
       ...pipeline.steps,
-      makeLlmStep("failed", llmResult.durationMs, { provider: llmResult.provider, model: llmResult.model }, { error: llmResult.error ?? "LLM did not return parseable JSON.", content: llmResult.content }),
+      makeLlmStep(
+        "failed",
+        llmResult.durationMs,
+        { provider: llmResult.provider, model: llmResult.model, requestUrl: llmResult.requestUrl },
+        {
+          errorType: llmResult.errorType,
+          errorName: llmResult.errorName,
+          errorMessage: llmResult.errorMessage,
+          causeMessage: llmResult.causeMessage,
+          causeCode: llmResult.causeCode,
+          httpStatus: llmResult.httpStatus,
+          statusText: llmResult.statusText,
+          responseBodyPreview: llmResult.responseBodyPreview,
+          content: llmResult.content,
+        },
+      ),
     ],
-    api: {
+    api: buildApiMetadata({
       requestedMode,
       responseMode: "fallback",
       provider: llmResult.provider,
       model: llmResult.model,
       fallbackReason,
+      errorType: llmResult.errorType,
       llmDurationMs: llmResult.durationMs,
-      llmError: llmResult.error ?? "LLM did not return parseable JSON.",
-    },
+      llmError: llmResult.errorMessage ?? llmResult.error ?? "LLM did not return parseable JSON.",
+    }),
   };
   return NextResponse.json(response);
 }
