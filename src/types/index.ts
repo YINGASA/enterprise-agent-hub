@@ -1,4 +1,4 @@
-﻿export type Feature = {
+export type Feature = {
   title: string;
   description: string;
 };
@@ -229,6 +229,54 @@ export type AgentPipelineResult = {
   mode: "mock-agent";
 };
 
+
+export type LlmProvider = "mock" | "openai-compatible" | "deepseek";
+
+export type LlmMode = "mock" | "real";
+
+export type LlmMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+export type LlmClientConfig = {
+  apiKey?: string;
+  baseUrl: string;
+  model: string;
+  provider: LlmProvider;
+  isConfigured: boolean;
+};
+
+export type LlmGenerateOptions = {
+  temperature?: number;
+  maxTokens?: number;
+  responseFormat?: "json_object" | "text";
+};
+
+export type LlmGenerateResult = {
+  content: string;
+  parsedJson: Record<string, unknown> | null;
+  raw: unknown;
+  model: string;
+  provider: LlmProvider;
+  mode: LlmMode;
+  durationMs: number;
+  error?: string;
+};
+
+export type AgentApiMetadata = {
+  requestedMode: LlmMode;
+  responseMode: "mock" | "real" | "fallback";
+  provider: LlmProvider;
+  model: string;
+  fallbackReason?: "missing_api_key" | "llm_error" | "json_parse_error";
+  llmDurationMs?: number;
+  llmError?: string;
+};
+
+export type AgentApiResponse = AgentPipelineResult & {
+  api: AgentApiMetadata;
+};
 export type AgentExample = {
   question: string;
   expectedScenario: AgentScenario;

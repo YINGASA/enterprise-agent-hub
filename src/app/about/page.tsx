@@ -7,7 +7,7 @@ const sections = [
   },
   {
     title: "技术架构",
-    body: "当前使用 Next.js App Router、TypeScript 和 Tailwind CSS 搭建前端原型。业务数据、RAG、工具调用和 Agent Router 都是本地 mock 实现，保持轻量可演示。",
+    body: "当前使用 Next.js App Router、TypeScript 和 Tailwind CSS 搭建前端原型。业务数据、RAG、工具调用和 Agent Router 保留本地 mock 能力，V0.5 新增服务端 LLM Client 和 API Route。",
   },
   {
     title: "V0.3 RAG 流程",
@@ -18,20 +18,20 @@ const sections = [
     body: "用户输入后，Router 判断场景与意图，决定是否调用 RAG，决定需要哪些工具，执行工具调用，汇总 RAG 和工具结果，输出结构化 AgentResponse，并在前端展示完整决策轨迹。",
   },
   {
-    title: "Tool Calling 设计",
-    body: "工具层保持独立，包含 queryOrder、queryProduct、searchPolicy、createTicket、analyzeJD 和 generateCustomerReply。Agent Pipeline 只通过明确参数调用这些本地 mock 工具。",
+    title: "V0.5 OpenAI-compatible API",
+    body: "新增 OpenAI-compatible Chat Completions 调用能力，兼容 DeepSeek。用户可在 /chat 选择 mock 或 real 模式，真实调用只发生在服务端 API Route，浏览器不会暴露 API Key。",
+  },
+  {
+    title: "密钥与 fallback",
+    body: "API Key 通过 AI_API_KEY、AI_BASE_URL、AI_MODEL、AI_PROVIDER 环境变量管理。未配置 Key、网络失败、HTTP 错误或模型 JSON 解析失败时，系统自动 fallback 到 mock-agent，页面仍可演示。",
   },
   {
     title: "结构化输出设计",
-    body: "AgentResponse 包含 scenario、intent、answer、evidence、toolsUsed、sources、confidence、riskLevel 和 nextAction，方便前端展示、日志追踪和后续自动化评测。",
+    body: "AgentResponse 包含 scenario、intent、answer、evidence、toolsUsed、sources、confidence、riskLevel 和 nextAction。Real 模式会要求模型返回同样结构，并在失败时保留 mock 输出。",
   },
   {
-    title: "当前边界",
-    body: "V0.4 仍为 mock-agent，不接真实 AI API、数据库、向量库、Embedding、LangChain 或 LlamaIndex。规则路由用于面试演示和工程边界验证。",
-  },
-  {
-    title: "V0.5 方向",
-    body: "下一版可接入真实 OpenAI-compatible API，将 Router 决策、回答生成和结构化输出从规则 mock 升级为真实模型调用，同时保留当前可观测执行轨迹。",
+    title: "V0.6 方向",
+    body: "下一版可升级 Tool Calls、JSON Schema 校验、模型输出重试、流式响应和更正式的评测面板，把真实模型质量纳入可观测指标。",
   },
 ];
 
@@ -41,7 +41,7 @@ export default function AboutPage() {
       <PageHeader
         eyebrow="About"
         title="项目说明"
-        description="面向面试展示的 AI 应用开发项目说明，突出 mock RAG、Agent Router、多步骤编排和后续真实模型接入路径。"
+        description="面向面试展示的 AI 应用开发项目说明，突出 mock/real 双模式、OpenAI-compatible API、DeepSeek 兼容和可观测 Agent 执行轨迹。"
       />
       <div className="grid gap-5 lg:grid-cols-2">
         {sections.map((section) => (

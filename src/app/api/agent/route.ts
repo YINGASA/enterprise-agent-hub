@@ -1,0 +1,190 @@
+﻿import { NextResponse } from "next/server";
+import { documents } from "@/data/mock";
+import { runAgentPipeline } from "@/lib/agent";
+import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
+import type { AgentApiResponse, AgentStep, AgentStructuredOutput, LlmMessage, LlmMode, ToolName } from "@/types";
+
+type AgentRequestBody = {
+  question?: unknown;
+  mode?: unknown;
+};
+
+function asMode(value: unknown): LlmMode {
+  return value === "real" ? "real" : "mock";
+}
+
+function asQuestion(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "公司报销需要什么材料？";
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function toolArray(value: unknown): ToolName[] {
+  const names: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "analyzeJD", "generateCustomerReply"];
+  return stringArray(value).filter((item): item is ToolName => names.includes(item as ToolName));
+}
+
+function numberValue(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeStructuredOutput(value: Record<string, unknown>, fallback: AgentStructuredOutput): AgentStructuredOutput {
+  return {
+    scenario: value.scenario === "enterprise" || value.scenario === "ecommerce" || value.scenario === "recruitment" || value.scenario === "general" ? value.scenario : fallback.scenario,
+    intent:
+      value.intent === "knowledge_qa" ||
+      value.intent === "policy_check" ||
+      value.intent === "order_query" ||
+      value.intent === "product_query" ||
+      value.intent === "after_sale_reply" ||
+      value.intent === "jd_match" ||
+      value.intent === "ticket_create" ||
+      value.intent === "general_chat"
+        ? value.intent
+        : fallback.intent,
+    answer: typeof value.answer === "string" ? value.answer : fallback.answer,
+    evidence: stringArray(value.evidence),
+    toolsUsed: toolArray(value.toolsUsed),
+    sources: stringArray(value.sources),
+    confidence: numberValue(value.confidence, fallback.confidence),
+    riskLevel: value.riskLevel === "low" || value.riskLevel === "medium" || value.riskLevel === "high" ? value.riskLevel : fallback.riskLevel,
+    nextAction: typeof value.nextAction === "string" ? value.nextAction : fallback.nextAction,
+  };
+}
+
+function makeLlmStep(status: AgentStep["status"], durationMs: number, input: Record<string, unknown>, output: Record<string, unknown>): AgentStep {
+  return {
+    id: "step-llm",
+    name: "LLM structured generation",
+    type: "response",
+    status,
+    input,
+    output,
+    durationMs: Math.max(1, durationMs),
+  };
+}
+
+function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPipeline>): LlmMessage[] {
+  return [
+    {
+      role: "system",
+      content:
+        "你是 Enterprise Agent Hub 的企业 Agent。请严格基于 Router、RAG、工具调用结果回答。必须只输出 JSON 对象，字段包括 scenario, intent, answer, evidence, toolsUsed, sources, confidence, riskLevel, nextAction。不要输出 Markdown。",
+    },
+    {
+      role: "user",
+      content: JSON.stringify(
+        {
+          question,
+          route: pipeline.route,
+          rag: pipeline.ragAnswer
+            ? {
+                answer: pipeline.ragAnswer.answer,
+                sources: pipeline.ragAnswer.sources,
+                retrievedChunks: pipeline.ragAnswer.retrievedChunks.map((item) => ({
+                  score: item.score,
+                  matchedKeywords: item.matchedKeywords,
+                  content: item.chunk.content,
+                  sourceTitle: item.chunk.sourceTitle,
+                })),
+              }
+            : null,
+          toolResults: pipeline.toolResults,
+          fallbackStructuredOutput: pipeline.structuredOutput,
+        },
+        null,
+        2,
+      ),
+    },
+  ];
+}
+
+export async function POST(request: Request) {
+  let body: AgentRequestBody = {};
+  try {
+    body = (await request.json()) as AgentRequestBody;
+  } catch {
+    body = {};
+  }
+
+  const question = asQuestion(body.question);
+  const requestedMode = asMode(body.mode);
+  const pipeline = runAgentPipeline(question, documents);
+  const config = getLlmConfig();
+
+  if (requestedMode === "mock") {
+    const response: AgentApiResponse = {
+      ...pipeline,
+      api: {
+        requestedMode,
+        responseMode: "mock",
+        provider: "mock",
+        model: "mock-agent",
+      },
+    };
+    return NextResponse.json(response);
+  }
+
+  if (!config.isConfigured) {
+    const response: AgentApiResponse = {
+      ...pipeline,
+      api: {
+        requestedMode,
+        responseMode: "fallback",
+        provider: config.provider,
+        model: config.model,
+        fallbackReason: "missing_api_key",
+      },
+    };
+    return NextResponse.json(response);
+  }
+
+  const llmResult = await callOpenAICompatibleChat(buildMessages(question, pipeline), {
+    temperature: 0.2,
+    maxTokens: 1200,
+    responseFormat: "json_object",
+  });
+
+  if (llmResult.parsedJson) {
+    const structuredOutput = normalizeStructuredOutput(llmResult.parsedJson, pipeline.structuredOutput);
+    const response: AgentApiResponse = {
+      ...pipeline,
+      finalAnswer: structuredOutput.answer,
+      structuredOutput,
+      steps: [
+        ...pipeline.steps,
+        makeLlmStep("success", llmResult.durationMs, { provider: llmResult.provider, model: llmResult.model }, { content: llmResult.content, parsedJson: llmResult.parsedJson }),
+      ],
+      api: {
+        requestedMode,
+        responseMode: "real",
+        provider: llmResult.provider,
+        model: llmResult.model,
+        llmDurationMs: llmResult.durationMs,
+        llmError: llmResult.error,
+      },
+    };
+    return NextResponse.json(response);
+  }
+
+  const fallbackReason = llmResult.content ? "json_parse_error" : "llm_error";
+  const response: AgentApiResponse = {
+    ...pipeline,
+    steps: [
+      ...pipeline.steps,
+      makeLlmStep("failed", llmResult.durationMs, { provider: llmResult.provider, model: llmResult.model }, { error: llmResult.error ?? "LLM did not return parseable JSON.", content: llmResult.content }),
+    ],
+    api: {
+      requestedMode,
+      responseMode: "fallback",
+      provider: llmResult.provider,
+      model: llmResult.model,
+      fallbackReason,
+      llmDurationMs: llmResult.durationMs,
+      llmError: llmResult.error ?? "LLM did not return parseable JSON.",
+    },
+  };
+  return NextResponse.json(response);
+}
