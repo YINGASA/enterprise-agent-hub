@@ -1,6 +1,8 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
 import type { LlmErrorType, LlmMessage } from "@/types";
+
+export const runtime = "nodejs";
 
 function configErrorReason(missing: Array<"missing_api_key" | "missing_base_url" | "missing_model">): LlmErrorType | undefined {
   return missing[0];
@@ -17,6 +19,12 @@ export async function GET() {
     hasApiKey: config.hasApiKey,
     maskedApiKey: config.maskedApiKey,
     apiKeyLength: config.apiKeyLength,
+    hasProxy: config.hasProxy,
+    proxyType: config.proxyType,
+    maskedProxyUrl: config.maskedProxyUrl,
+    timeoutMs: config.timeoutMs,
+    nodeEnv: process.env.NODE_ENV ?? "unknown",
+    runtime: "nodejs" as const,
   };
 
   if (!config.isConfigured) {

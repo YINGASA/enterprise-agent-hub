@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
@@ -169,6 +169,10 @@ export function AgentWorkspace() {
               <p>requestUrl：{result.api.requestUrl ?? "无"}</p>
               <p>hasApiKey：{String(result.api.hasApiKey ?? false)}</p>
               <p>maskedApiKey：{result.api.maskedApiKey ?? "missing"}</p>
+              <p>hasProxy：{String(result.api.hasProxy ?? false)}</p>
+              <p>proxyType：{result.api.proxyType ?? "none"}</p>
+              <p>maskedProxyUrl：{result.api.maskedProxyUrl ?? "none"}</p>
+              <p>timeoutMs：{result.api.timeoutMs ?? "默认"}</p>
               <p>fallbackReason：{result.api.fallbackReason ?? "无"}</p>
               <p>errorType：{result.api.errorType ?? "无"}</p>
               <p>LLM duration：{result.api.llmDurationMs ? `${result.api.llmDurationMs}ms` : "无"}</p>

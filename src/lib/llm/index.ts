@@ -1,4 +1,6 @@
-﻿import type { LlmClientConfig, LlmErrorType, LlmGenerateOptions, LlmGenerateResult, LlmMessage, LlmProvider } from "@/types";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
+import type { Dispatcher } from "undici";
+import type { LlmClientConfig, LlmErrorType, LlmGenerateOptions, LlmGenerateResult, LlmMessage, LlmProvider, LlmProxyType } from "@/types";
 
 type ChatCompletionResponse = {
   choices?: Array<{
@@ -16,8 +18,13 @@ type ErrorWithCause = Error & {
   };
 };
 
+type FetchInitWithDispatcher = RequestInit & {
+  dispatcher?: Dispatcher;
+};
+
 const defaultBaseUrl = "https://api.deepseek.com";
 const defaultModel = "deepseek-v4-flash";
+const defaultTimeoutMs = 10000;
 
 function normalizeProvider(value: string | undefined): LlmProvider {
   if (value === "deepseek" || value === "openai-compatible" || value === "mock") {
@@ -51,6 +58,46 @@ export function maskApiKey(apiKey: string | undefined) {
   return `${apiKey.slice(0, 3)}****${apiKey.slice(-4)}`;
 }
 
+export function maskProxyUrl(proxyUrl: string | undefined) {
+  if (!proxyUrl) {
+    return "none";
+  }
+
+  try {
+    const url = new URL(proxyUrl);
+    if (url.username || url.password) {
+      const username = url.username ? `${url.username}:****@` : "****@";
+      return `${url.protocol}//${username}${url.host}`;
+    }
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return "configured_invalid_url";
+  }
+}
+
+function readProxyConfig(): { proxyUrl?: string; proxyType: LlmProxyType } {
+  const candidates: Array<{ type: LlmProxyType; value?: string }> = [
+    { type: "HTTPS_PROXY", value: process.env.HTTPS_PROXY?.trim() },
+    { type: "HTTP_PROXY", value: process.env.HTTP_PROXY?.trim() },
+    { type: "ALL_PROXY", value: process.env.ALL_PROXY?.trim() },
+  ];
+
+  const selected = candidates.find((item) => item.value);
+  return selected?.value ? { proxyUrl: selected.value, proxyType: selected.type } : { proxyType: "none" };
+}
+
+function parseTimeoutMs(value: string | undefined) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.round(parsed);
+  }
+  return defaultTimeoutMs;
+}
+
+function createProxyAgent(proxyUrl: string | undefined) {
+  return proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
+}
+
 export function getLlmConfig(): LlmClientConfig {
   const apiKey = process.env.AI_API_KEY?.trim();
   const rawBaseUrl = process.env.AI_BASE_URL?.trim() || defaultBaseUrl;
@@ -58,6 +105,8 @@ export function getLlmConfig(): LlmClientConfig {
   const provider = normalizeProvider(process.env.AI_PROVIDER?.trim() || "deepseek");
   const normalizedBaseUrl = normalizeBaseUrl(rawBaseUrl);
   const requestUrl = getChatCompletionsUrl(normalizedBaseUrl);
+  const { proxyUrl, proxyType } = readProxyConfig();
+  const timeoutMs = parseTimeoutMs(process.env.AI_REQUEST_TIMEOUT_MS?.trim());
   const missing: LlmClientConfig["missing"] = [];
 
   if (!apiKey) missing.push("missing_api_key");
@@ -69,6 +118,10 @@ export function getLlmConfig(): LlmClientConfig {
     hasApiKey: Boolean(apiKey),
     maskedApiKey: maskApiKey(apiKey),
     apiKeyLength: apiKey?.length ?? 0,
+    hasProxy: Boolean(proxyUrl),
+    proxyType,
+    maskedProxyUrl: maskProxyUrl(proxyUrl),
+    timeoutMs,
     baseUrl: rawBaseUrl,
     normalizedBaseUrl,
     requestUrl,
@@ -117,6 +170,10 @@ function failedResult(params: {
     mode: "real",
     durationMs: Date.now() - params.startedAt,
     requestUrl: params.config.requestUrl,
+    hasProxy: params.config.hasProxy,
+    proxyType: params.config.proxyType,
+    maskedProxyUrl: params.config.maskedProxyUrl,
+    timeoutMs: params.config.timeoutMs,
     httpStatus: params.httpStatus,
     statusText: params.statusText,
     responseBodyPreview: params.responseBodyPreview,
@@ -146,8 +203,12 @@ export async function callOpenAICompatibleChat(
     });
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+
   try {
-    const response = await fetch(config.requestUrl, {
+    const proxyAgent = createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
+    const requestInit: FetchInitWithDispatcher = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -160,7 +221,13 @@ export async function callOpenAICompatibleChat(
         max_tokens: options.maxTokens ?? 800,
         stream: false,
       }),
-    });
+      signal: controller.signal,
+      ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
+    };
+
+    const response = proxyAgent
+      ? await undiciFetch(config.requestUrl, requestInit as Parameters<typeof undiciFetch>[1])
+      : await fetch(config.requestUrl, requestInit);
 
     const rawText = await response.text();
     const responseBodyPreview = rawText.slice(0, 500);
@@ -210,6 +277,10 @@ export async function callOpenAICompatibleChat(
       mode: "real",
       durationMs: Date.now() - startedAt,
       requestUrl: config.requestUrl,
+      hasProxy: config.hasProxy,
+      proxyType: config.proxyType,
+      maskedProxyUrl: config.maskedProxyUrl,
+      timeoutMs: config.timeoutMs,
       httpStatus: response.status,
       statusText: response.statusText,
       responseBodyPreview,
@@ -219,14 +290,17 @@ export async function callOpenAICompatibleChat(
     };
   } catch (error) {
     const typedError = error instanceof Error ? (error as ErrorWithCause) : null;
+    const isTimeout = controller.signal.aborted || typedError?.name === "AbortError";
     return failedResult({
       config,
       startedAt,
       errorType: "network_error",
       errorName: typedError?.name ?? "UnknownError",
-      errorMessage: typedError?.message ?? "Unknown network error.",
+      errorMessage: isTimeout ? `Request timed out after ${config.timeoutMs}ms.` : typedError?.message ?? "Unknown network error.",
       causeMessage: typedError?.cause?.message,
       causeCode: typedError?.cause?.code,
     });
+  } finally {
+    clearTimeout(timeout);
   }
 }

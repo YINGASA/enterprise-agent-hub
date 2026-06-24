@@ -1,8 +1,10 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { documents } from "@/data/mock";
 import { runAgentPipeline } from "@/lib/agent";
 import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
 import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStructuredOutput, LlmMessage, LlmMode, ToolName } from "@/types";
+
+export const runtime = "nodejs";
 
 type AgentRequestBody = {
   question?: unknown;
@@ -101,7 +103,7 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
   ];
 }
 
-function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey" | "maskedApiKey" | "apiKeyLength">): AgentApiMetadata {
+function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey" | "maskedApiKey" | "apiKeyLength" | "hasProxy" | "proxyType" | "maskedProxyUrl" | "timeoutMs">): AgentApiMetadata {
   const config = getLlmConfig();
   return {
     ...base,
@@ -109,6 +111,10 @@ function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey
     hasApiKey: config.hasApiKey,
     maskedApiKey: config.maskedApiKey,
     apiKeyLength: config.apiKeyLength,
+    hasProxy: config.hasProxy,
+    proxyType: config.proxyType,
+    maskedProxyUrl: config.maskedProxyUrl,
+    timeoutMs: config.timeoutMs,
   };
 }
 
@@ -172,7 +178,7 @@ export async function POST(request: Request) {
         makeLlmStep(
           "success",
           llmResult.durationMs,
-          { provider: llmResult.provider, model: llmResult.model, requestUrl: llmResult.requestUrl },
+          { provider: llmResult.provider, model: llmResult.model, requestUrl: llmResult.requestUrl, hasProxy: llmResult.hasProxy, proxyType: llmResult.proxyType, maskedProxyUrl: llmResult.maskedProxyUrl, timeoutMs: llmResult.timeoutMs },
           { content: llmResult.content, parsedJson: llmResult.parsedJson, httpStatus: llmResult.httpStatus },
         ),
       ],
@@ -197,7 +203,7 @@ export async function POST(request: Request) {
       makeLlmStep(
         "failed",
         llmResult.durationMs,
-        { provider: llmResult.provider, model: llmResult.model, requestUrl: llmResult.requestUrl },
+        { provider: llmResult.provider, model: llmResult.model, requestUrl: llmResult.requestUrl, hasProxy: llmResult.hasProxy, proxyType: llmResult.proxyType, maskedProxyUrl: llmResult.maskedProxyUrl, timeoutMs: llmResult.timeoutMs },
         {
           errorType: llmResult.errorType,
           errorName: llmResult.errorName,

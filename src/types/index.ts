@@ -234,6 +234,8 @@ export type LlmProvider = "mock" | "openai-compatible" | "deepseek";
 
 export type LlmMode = "mock" | "real";
 
+export type LlmProxyType = "HTTPS_PROXY" | "HTTP_PROXY" | "ALL_PROXY" | "none";
+
 export type LlmMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -243,6 +245,10 @@ export type LlmConfigDiagnostics = {
   hasApiKey: boolean;
   maskedApiKey: string;
   apiKeyLength: number;
+  hasProxy: boolean;
+  proxyType: LlmProxyType;
+  maskedProxyUrl: string;
+  timeoutMs: number;
   baseUrl: string;
   normalizedBaseUrl: string;
   requestUrl: string;
@@ -280,6 +286,10 @@ export type LlmGenerateResult = {
   mode: LlmMode;
   durationMs: number;
   requestUrl: string;
+  hasProxy: boolean;
+  proxyType: LlmProxyType;
+  maskedProxyUrl: string;
+  timeoutMs: number;
   httpStatus?: number;
   statusText?: string;
   responseBodyPreview?: string;
@@ -301,6 +311,10 @@ export type AgentApiMetadata = {
   hasApiKey?: boolean;
   maskedApiKey?: string;
   apiKeyLength?: number;
+  hasProxy?: boolean;
+  proxyType?: LlmProxyType;
+  maskedProxyUrl?: string;
+  timeoutMs?: number;
   errorType?: LlmErrorType;
   llmDurationMs?: number;
   llmError?: string;
