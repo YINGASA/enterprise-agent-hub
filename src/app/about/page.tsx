@@ -7,23 +7,27 @@ const sections = [
   },
   {
     title: "技术架构",
-    body: "V0.1 使用 Next.js App Router、TypeScript 和 Tailwind CSS 搭建前端原型。后续可在 API Route 或独立后端中接入模型服务、检索服务、工具执行层和评测流水线。",
+    body: "当前使用 Next.js App Router、TypeScript 和 Tailwind CSS 搭建前端原型。业务数据、工具调用和 RAG 流程均为本地 mock 实现，后续可在 API Route 或独立后端接入真实模型服务、检索服务和工具执行层。",
   },
   {
-    title: "RAG 流程",
-    body: "用户问题进入后，系统进行查询改写、文档召回、chunk 重排、上下文组装、模型回答和来源引用输出。当前页面使用 mock 文档、chunks 和 citations 展示该流程的产品形态。",
+    title: "V0.3 RAG 流程",
+    body: "已实现文档录入、文本切片、关键词提取、简单检索、TopK 召回、来源引用和 mock 回答。整个链路不依赖真实 AI API、数据库、向量库、Embedding、LangChain 或 LlamaIndex。",
+  },
+  {
+    title: "RAG 后续升级",
+    body: "当前是 mock RAG，后续可逐步升级为 Embedding、向量数据库、Rerank、真实 LLM 生成和 Agent Router。V0.3 的类型与函数边界已经为这些能力预留了接入点。",
   },
   {
     title: "Agent Router 流程",
-    body: "Router 先识别场景和意图，再选择企业知识库、客服售后或 JD 匹配等 Agent 模板，并决定需要执行的工具链。聊天工作台右侧展示了这一决策轨迹。",
+    body: "Router 将在 V0.4 中实现：先识别场景和意图，再选择企业知识库、客服售后或 JD 匹配等 Agent 模板，并决定是否调用 RAG 或业务工具链。",
   },
   {
     title: "Tool Calling 设计",
-    body: "每个工具都拥有稳定的名称、说明、输入参数和输出结构。Agent 只通过明确契约调用 queryOrder、searchPolicy、createTicket、analyzeJD 等工具，降低业务系统集成风险。",
+    body: "每个工具都拥有稳定的名称、说明、输入参数和输出结构。Agent 后续只通过明确契约调用 queryOrder、searchPolicy、createTicket、analyzeJD 等工具，降低业务系统集成风险。",
   },
   {
     title: "结构化输出设计",
-    body: "回答结果不仅包含自然语言，还包含 scenario、intent、tools、citations、confidence 等字段，方便前端渲染、工单写入、日志追踪和自动化评测。",
+    body: "回答结果不仅包含自然语言，还包含 scenario、intent、tools、citations、confidence、retrievedChunks、sources 等字段，方便前端渲染、日志追踪和自动化评测。",
   },
   {
     title: "岗位能力点",
@@ -37,7 +41,7 @@ export default function AboutPage() {
       <PageHeader
         eyebrow="About"
         title="项目说明"
-        description="面向面试展示的 AI 应用开发项目说明，突出架构思路、业务抽象和后续可扩展方向。"
+        description="面向面试展示的 AI 应用开发项目说明，突出架构思路、业务抽象、mock RAG 链路和后续可扩展方向。"
       />
       <div className="grid gap-5 lg:grid-cols-2">
         {sections.map((section) => (

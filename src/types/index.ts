@@ -32,15 +32,49 @@ export type ToolCallLog = {
 export type KnowledgeDocument = {
   id: string;
   title: string;
-  source: string;
-  owner: string;
+  category: string;
+  content: string;
+  createdAt: string;
   updatedAt: string;
-  chunks: Array<{
+  source?: string;
+  owner?: string;
+  chunks?: Array<{
     id: string;
     content: string;
     score: number;
   }>;
-  citations: string[];
+  citations?: string[];
+  isDefault?: boolean;
+};
+
+export type KnowledgeChunk = {
+  id: string;
+  documentId: string;
+  sourceTitle: string;
+  category: string;
+  chunkIndex: number;
+  content: string;
+  keywords: string[];
+};
+
+export type RetrievedChunk = {
+  chunk: KnowledgeChunk;
+  score: number;
+  matchedKeywords: string[];
+};
+
+export type RagAnswer = {
+  question: string;
+  answer: string;
+  retrievedChunks: RetrievedChunk[];
+  sources: Array<{
+    documentId: string;
+    title: string;
+    category: string;
+    chunkIndexes: number[];
+  }>;
+  mode: "mock-rag";
+  createdAt: string;
 };
 
 export type CompanyPolicy = {

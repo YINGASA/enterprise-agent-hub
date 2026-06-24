@@ -19,30 +19,12 @@ import type {
 } from "@/types";
 
 export const features: Feature[] = [
-  {
-    title: "RAG 知识库问答",
-    description: "基于企业文档、政策与 SOP 的检索增强回答，附带来源引用。",
-  },
-  {
-    title: "Agent Router",
-    description: "识别业务场景与用户意图，将请求路由到合适的 Agent 模板。",
-  },
-  {
-    title: "Tool Calling",
-    description: "通过结构化参数调用订单、商品、工单、JD 分析等业务工具。",
-  },
-  {
-    title: "结构化输出",
-    description: "面向前端展示、业务系统写入和评测分析输出稳定 JSON。",
-  },
-  {
-    title: "多场景插件",
-    description: "以模板方式扩展知识库、客服售后、招聘匹配等业务能力。",
-  },
-  {
-    title: "评测面板",
-    description: "用测试集追踪意图识别、工具命中、引用率和响应耗时。",
-  },
+  { title: "RAG 知识库问答", description: "基于企业文档、政策与 SOP 的检索增强回答，附带来源引用。" },
+  { title: "Agent Router", description: "识别业务场景与用户意图，将请求路由到合适的 Agent 模板。" },
+  { title: "Tool Calling", description: "通过结构化参数调用订单、商品、工单、JD 分析等业务工具。" },
+  { title: "结构化输出", description: "面向前端展示、业务系统写入和评测分析输出稳定 JSON。" },
+  { title: "多场景插件", description: "以模板方式扩展知识库、客服售后、招聘匹配等业务能力。" },
+  { title: "评测面板", description: "用测试集追踪意图识别、工具命中、引用率和响应耗时。" },
 ];
 
 export const scenarios: Scenario[] = [
@@ -78,7 +60,7 @@ export const companyPolicies: CompanyPolicy[] = [
     title: "员工报销制度",
     category: "expense",
     summary: "规范差旅、交通、餐补和客户拜访相关费用报销流程。",
-    rules: ["差旅申请需在出行前 3 个工作日提交。", "单次交通费用超过 2000 元需补充客户拜访记录。", "报销单据需在费用发生后 30 天内提交。"],
+    rules: ["差旅申请需在出行前 3 个工作日提交。", "报销材料包括电子发票、行程单、付款凭证和客户拜访记录。", "报销单据需在费用发生后 30 天内提交。"],
     updatedAt: "2026-06-01",
   },
   {
@@ -162,67 +144,16 @@ export const products: Product[] = [
 ];
 
 export const orders: Order[] = [
-  {
-    id: "EAH20260624001",
-    user: "张女士",
-    productId: "SKU-AGENT-PLUS",
-    productName: "Agent Plus 智能夹克",
-    status: "picking",
-    signedAt: null,
-    opened: false,
-    returnSupported: true,
-  },
-  {
-    id: "EAH20260618008",
-    user: "李先生",
-    productId: "SKU-RAG-BAG",
-    productName: "RAG Commuter 双肩包",
-    status: "signed",
-    signedAt: "2026-06-20T10:32:00+08:00",
-    opened: false,
-    returnSupported: true,
-  },
-  {
-    id: "EAH20260612003",
-    user: "王同学",
-    productId: "SKU-LLM-EARBUDS",
-    productName: "LLM Lite 降噪耳机",
-    status: "signed",
-    signedAt: "2026-06-14T16:20:00+08:00",
-    opened: true,
-    returnSupported: false,
-  },
+  { id: "EAH20260624001", user: "张女士", productId: "SKU-AGENT-PLUS", productName: "Agent Plus 智能夹克", status: "picking", signedAt: null, opened: false, returnSupported: true },
+  { id: "EAH20260618008", user: "李先生", productId: "SKU-RAG-BAG", productName: "RAG Commuter 双肩包", status: "signed", signedAt: "2026-06-20T10:32:00+08:00", opened: false, returnSupported: true },
+  { id: "EAH20260612003", user: "王同学", productId: "SKU-LLM-EARBUDS", productName: "LLM Lite 降噪耳机", status: "signed", signedAt: "2026-06-14T16:20:00+08:00", opened: true, returnSupported: false },
 ];
 
 export const afterSalePolicies: AfterSalePolicy[] = [
-  {
-    id: "ASP-RETURN-7D",
-    title: "7 天无理由退货",
-    category: "return",
-    rules: ["签收后 7 天内且不影响二次销售可申请无理由退货。", "服饰和箱包类商品需吊牌、包装完整。"],
-    updatedAt: "2026-06-05",
-  },
-  {
-    id: "ASP-QUALITY-001",
-    title: "质量问题售后",
-    category: "quality",
-    rules: ["质量问题需上传照片或视频凭证。", "确认质量问题后可优先换货，缺货时支持退款。"],
-    updatedAt: "2026-06-05",
-  },
-  {
-    id: "ASP-OPENED-001",
-    title: "已拆封限制",
-    category: "opened_limit",
-    rules: ["数码耳机、贴身用品拆封后非质量问题不支持退货。", "已拆封商品如存在质量问题仍可进入质量售后流程。"],
-    updatedAt: "2026-06-05",
-  },
-  {
-    id: "ASP-SPECIAL-001",
-    title: "特殊商品限制",
-    category: "special_goods",
-    rules: ["定制商品、临期清仓商品不支持无理由退货。", "特殊限制会在商品详情页明确展示。"],
-    updatedAt: "2026-06-05",
-  },
+  { id: "ASP-RETURN-7D", title: "7 天无理由退货", category: "return", rules: ["签收后 7 天内且不影响二次销售可申请无理由退货。", "服饰和箱包类商品需吊牌、包装完整。"], updatedAt: "2026-06-05" },
+  { id: "ASP-QUALITY-001", title: "质量问题售后", category: "quality", rules: ["质量问题需上传照片或视频凭证。", "确认质量问题后可优先换货，缺货时支持退款。"], updatedAt: "2026-06-05" },
+  { id: "ASP-OPENED-001", title: "已拆封限制", category: "opened_limit", rules: ["数码耳机、贴身用品拆封后非质量问题不支持退货。", "已拆封商品如存在质量问题仍可进入质量售后流程。"], updatedAt: "2026-06-05" },
+  { id: "ASP-SPECIAL-001", title: "特殊商品限制", category: "special_goods", rules: ["定制商品、临期清仓商品不支持无理由退货。", "特殊限制会在商品详情页明确展示。"], updatedAt: "2026-06-05" },
 ];
 
 export const jobDescriptions: JobDescription[] = [
@@ -265,81 +196,112 @@ export const sampleResume: ResumeProfile = {
 };
 
 export const interviewQuestions: InterviewQuestion[] = [
+  { id: "IQ-AI-001", jobId: "JD-AI-APP-ENG", question: "请说明你会如何设计一个支持多业务场景的 Agent Router？", focus: "场景识别、意图拆解、工具选择、结构化输出。" },
+  { id: "IQ-AI-002", jobId: "JD-AI-APP-ENG", question: "RAG 回答为什么需要来源引用？你会如何在前端展示 citation？", focus: "可信度、可追溯性、chunk 与文档映射。" },
+  { id: "IQ-LLM-001", jobId: "JD-LLM-INTERN", question: "如果模型回答命中率不稳定，你会如何构造测试集和评测指标？", focus: "测试样本、准确率、工具命中率、失败案例分析。" },
+  { id: "IQ-FE-001", jobId: "JD-FE-INTERN", question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？", focus: "组件拆分、状态管理、异常展示、JSON 可读性。" },
+];
+
+export const documents: KnowledgeDocument[] = [
   {
-    id: "IQ-AI-001",
-    jobId: "JD-AI-APP-ENG",
-    question: "请说明你会如何设计一个支持多业务场景的 Agent Router？",
-    focus: "场景识别、意图拆解、工具选择、结构化输出。",
+    id: "doc-001",
+    title: "员工报销与差旅制度",
+    category: "HR Policy",
+    content: "员工差旅申请需在出行前 3 个工作日提交，并由直属主管审批。报销材料包括电子发票、行程单、付款凭证和客户拜访记录。单次交通费用超过 2000 元时，需要补充出差目的和客户拜访记录。报销单据需在费用发生后 30 天内提交。",
+    createdAt: "2026-05-10",
+    updatedAt: "2026-06-01",
+    source: "HR-Policy-2026.pdf",
+    owner: "人力行政部",
+    isDefault: true,
+    chunks: [
+      { id: "chunk-001", content: "员工差旅申请需在出行前 3 个工作日提交，并由直属主管审批。", score: 0.91 },
+      { id: "chunk-002", content: "报销材料包括电子发票、行程单、付款凭证和客户拜访记录。", score: 0.88 },
+    ],
+    citations: ["第 2 章 差旅申请", "第 4 章 费用标准"],
   },
   {
-    id: "IQ-AI-002",
-    jobId: "JD-AI-APP-ENG",
-    question: "RAG 回答为什么需要来源引用？你会如何在前端展示 citation？",
-    focus: "可信度、可追溯性、chunk 与文档映射。",
+    id: "doc-002",
+    title: "年假与请假管理办法",
+    category: "HR Policy",
+    content: "入职满一年后可申请带薪年假。连续休假超过 5 天需提前 10 个工作日申请。病假需在返岗后 3 个工作日内补充正规医疗证明。紧急请假可先口头报备，24 小时内补交申请。",
+    createdAt: "2026-05-01",
+    updatedAt: "2026-05-20",
+    source: "Leave-Policy-2026.pdf",
+    owner: "人力行政部",
+    isDefault: true,
+    chunks: [
+      { id: "chunk-101", content: "入职满一年后可申请带薪年假。连续休假超过 5 天需提前 10 个工作日申请。", score: 0.9 },
+      { id: "chunk-102", content: "病假需在返岗后 3 个工作日内补充正规医疗证明。", score: 0.86 },
+    ],
+    citations: ["请假管理第 1 条", "病假规则第 3 条"],
   },
   {
-    id: "IQ-LLM-001",
-    jobId: "JD-LLM-INTERN",
-    question: "如果模型回答命中率不稳定，你会如何构造测试集和评测指标？",
-    focus: "测试样本、准确率、工具命中率、失败案例分析。",
+    id: "doc-003",
+    title: "信息安全与数据外发规范",
+    category: "Security",
+    content: "客户数据、合同报价和候选人资料均属于敏感信息。禁止将客户数据上传到未审批的第三方工具。外发合同、报价单和客户清单前需完成脱敏审查。离职或转岗需在 1 个工作日内回收系统权限。",
+    createdAt: "2026-05-25",
+    updatedAt: "2026-06-12",
+    source: "Security-Guide.md",
+    owner: "信息安全部",
+    isDefault: true,
+    chunks: [
+      { id: "chunk-201", content: "客户数据、合同报价和候选人资料均属于敏感信息。", score: 0.92 },
+      { id: "chunk-202", content: "外发合同、报价单和客户清单前需完成脱敏审查。", score: 0.87 },
+    ],
+    citations: ["数据安全第 2 条", "权限管理第 4 条"],
   },
   {
-    id: "IQ-FE-001",
-    jobId: "JD-FE-INTERN",
-    question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？",
-    focus: "组件拆分、状态管理、异常展示、JSON 可读性。",
+    id: "doc-004",
+    title: "电商售后与退货规则",
+    category: "After Sales",
+    content: "签收后 7 天内且不影响二次销售可申请无理由退货。服饰和箱包类商品需吊牌、包装完整。数码耳机、贴身用品拆封后非质量问题不支持退货。质量问题需上传照片或视频凭证，确认后可优先换货，缺货时支持退款。延迟发货超过 48 小时可发放 8 元优惠券，并同步创建售后跟进工单。",
+    createdAt: "2026-06-01",
+    updatedAt: "2026-06-10",
+    source: "Support-SOP.md",
+    owner: "客服运营部",
+    isDefault: true,
+    chunks: [
+      { id: "chunk-301", content: "签收后 7 天内且不影响二次销售可申请无理由退货。", score: 0.94 },
+      { id: "chunk-302", content: "数码耳机、贴身用品拆封后非质量问题不支持退货。", score: 0.9 },
+      { id: "chunk-303", content: "延迟发货超过 48 小时可发放 8 元优惠券。", score: 0.88 },
+    ],
+    citations: ["售后政策第 4.2 条", "退货规则第 1 条"],
+  },
+  {
+    id: "doc-005",
+    title: "AI 应用开发工程师岗位要求说明",
+    category: "Recruiting",
+    content: "AI 应用开发工程师需要熟悉 RAG、Agent Router、Tool Calling、结构化输出和前端产品化落地。候选人应能用 TypeScript、Next.js 和 Tailwind CSS 搭建 B 端 SaaS 原型，并理解评测集、工具调用命中率、来源引用率等质量指标。有企业知识库、客服自动化或招聘匹配项目经验者优先。",
+    createdAt: "2026-06-08",
+    updatedAt: "2026-06-15",
+    source: "JD-AI-App-Engineer.docx",
+    owner: "招聘团队",
+    isDefault: true,
+    chunks: [
+      { id: "chunk-401", content: "AI 应用开发工程师需要熟悉 RAG、Agent Router、Tool Calling、结构化输出和前端产品化落地。", score: 0.96 },
+      { id: "chunk-402", content: "候选人应能用 TypeScript、Next.js 和 Tailwind CSS 搭建 B 端 SaaS 原型。", score: 0.9 },
+    ],
+    citations: ["岗位要求第 1 条", "加分项第 2 条"],
   },
 ];
 
 export const chatMessages: ChatMessage[] = [
-  {
-    role: "user",
-    content: "客户说订单 EAH20260624001 已经 3 天没发货，请帮我查一下并生成回复。",
-  },
-  {
-    role: "assistant",
-    content: "已识别为电商客服与售后场景。我会先查询订单状态，再检查发货政策，最后生成客服回复。",
-  },
-  {
-    role: "assistant",
-    content: "订单当前处于仓库拣货中，预计 24 小时内发出。建议向客户说明原因并提供补偿券。",
-  },
+  { role: "user", content: "客户说订单 EAH20260624001 已经 3 天没发货，请帮我查一下并生成回复。" },
+  { role: "assistant", content: "已识别为电商客服与售后场景。我会先查询订单状态，再检查发货政策，最后生成客服回复。" },
+  { role: "assistant", content: "订单当前处于仓库拣货中，预计 24 小时内发出。建议向客户说明原因并提供补偿券。" },
 ];
 
 export const agentDecisions: AgentDecision[] = [
-  {
-    step: "场景识别",
-    detail: "命中电商客服与售后 Agent，置信度 0.94。",
-    status: "done",
-  },
-  {
-    step: "意图拆解",
-    detail: "用户需要订单查询、政策检索和客服回复生成。",
-    status: "done",
-  },
-  {
-    step: "工具编排",
-    detail: "按 queryOrder -> searchPolicy -> generateCustomerReply 顺序执行。",
-    status: "done",
-  },
+  { step: "场景识别", detail: "命中电商客服与售后 Agent，置信度 0.94。", status: "done" },
+  { step: "意图拆解", detail: "用户需要订单查询、政策检索和客服回复生成。", status: "done" },
+  { step: "工具编排", detail: "按 queryOrder -> searchPolicy -> generateCustomerReply 顺序执行。", status: "done" },
 ];
 
 export const toolCallLogs: ToolCallLog[] = [
-  {
-    tool: "queryOrder",
-    input: { orderId: "EAH20260624001" },
-    output: { status: "picking", etaHours: 24, warehouse: "华东一号仓" },
-  },
-  {
-    tool: "searchPolicy",
-    input: { keyword: "延迟发货补偿", scene: "after_sales" },
-    output: { policyId: "ASP-RETURN-7D", compensation: "8 元优惠券", citation: "售后政策第 4.2 条" },
-  },
-  {
-    tool: "generateCustomerReply",
-    input: { tone: "friendly", includeCoupon: true },
-    output: { reply: "很抱歉让您久等了，您的订单预计 24 小时内发出，我们将补发 8 元优惠券。" },
-  },
+  { tool: "queryOrder", input: { orderId: "EAH20260624001" }, output: { status: "picking", etaHours: 24, warehouse: "华东一号仓" } },
+  { tool: "searchPolicy", input: { keyword: "延迟发货补偿", scene: "after_sales" }, output: { policyId: "ASP-RETURN-7D", compensation: "8 元优惠券", citation: "售后政策第 4.2 条" } },
+  { tool: "generateCustomerReply", input: { tone: "friendly", includeCoupon: true }, output: { reply: "很抱歉让您久等了，您的订单预计 24 小时内发出，我们将补发 8 元优惠券。" } },
 ];
 
 export const structuredOutput = {
@@ -350,69 +312,6 @@ export const structuredOutput = {
   citations: ["售后政策第 4.2 条"],
   confidence: 0.92,
 };
-
-export const documents: KnowledgeDocument[] = [
-  {
-    id: "doc-001",
-    title: "员工报销与差旅制度",
-    source: "HR-Policy-2026.pdf",
-    owner: "人力行政部",
-    updatedAt: "2026-06-01",
-    chunks: [
-      {
-        id: "chunk-001",
-        content: "员工差旅申请需在出行前 3 个工作日提交，并由直属主管审批。",
-        score: 0.91,
-      },
-      {
-        id: "chunk-002",
-        content: "单次交通费用超过 2000 元时，需要补充出差目的和客户拜访记录。",
-        score: 0.86,
-      },
-    ],
-    citations: ["第 2 章 差旅申请", "第 4 章 费用标准"],
-  },
-  {
-    id: "doc-002",
-    title: "电商售后处理 SOP",
-    source: "Support-SOP.md",
-    owner: "客服运营部",
-    updatedAt: "2026-06-10",
-    chunks: [
-      {
-        id: "chunk-101",
-        content: "延迟发货超过 48 小时可发放 8 元优惠券，并同步创建售后跟进工单。",
-        score: 0.94,
-      },
-      {
-        id: "chunk-102",
-        content: "高价值客户投诉需要在 2 小时内升级到客服主管处理。",
-        score: 0.83,
-      },
-    ],
-    citations: ["售后政策第 4.2 条", "客服升级规则第 3 条"],
-  },
-  {
-    id: "doc-003",
-    title: "AI 应用开发工程师 JD 样例",
-    source: "JD-AI-App-Engineer.docx",
-    owner: "招聘团队",
-    updatedAt: "2026-06-15",
-    chunks: [
-      {
-        id: "chunk-201",
-        content: "候选人需要熟悉 RAG、Agent 编排、工具调用、结构化输出和前端产品化落地。",
-        score: 0.96,
-      },
-      {
-        id: "chunk-202",
-        content: "有企业知识库、客服自动化或招聘匹配项目经验者优先。",
-        score: 0.9,
-      },
-    ],
-    citations: ["岗位要求第 1 条", "加分项第 2 条"],
-  },
-];
 
 export const tools: ToolDefinition[] = [
   {
@@ -447,10 +346,7 @@ export const tools: ToolDefinition[] = [
     name: "analyzeJD",
     scenario: "招聘求职 JD 匹配 Agent",
     description: "用规则方式模拟 JD 与简历匹配分析，输出匹配分、匹配点、缺口和补强关键词。",
-    inputExample: {
-      jdText: "AI 应用开发工程师，需要 RAG、Agent、Tool Calling、Next.js、TypeScript、评测经验。",
-      resumeText: sampleResume.summary,
-    },
+    inputExample: { jdText: "AI 应用开发工程师，需要 RAG、Agent、Tool Calling、Next.js、TypeScript、评测经验。", resumeText: sampleResume.summary },
     outputExample: { matchScore: 86, matchedKeywords: ["RAG", "Agent", "Tool Calling"], gaps: ["线上 A/B 评测"] },
   },
   {
@@ -471,36 +367,8 @@ export const metrics: EvaluationMetric[] = [
 ];
 
 export const testCases: TestCase[] = [
-  {
-    id: "TC-001",
-    scenario: "企业知识库 Agent",
-    input: "差旅报销需要提前多久申请？",
-    expectedTool: "searchPolicy",
-    result: "pass",
-    latency: "1.4s",
-  },
-  {
-    id: "TC-002",
-    scenario: "电商客服与售后 Agent",
-    input: "订单三天未发货，帮我处理。",
-    expectedTool: "queryOrder + searchPolicy",
-    result: "pass",
-    latency: "1.9s",
-  },
-  {
-    id: "TC-003",
-    scenario: "招聘求职 JD 匹配 Agent",
-    input: "这个 AI 应用开发岗位和我的项目匹配吗？",
-    expectedTool: "analyzeJD",
-    result: "review",
-    latency: "2.2s",
-  },
-  {
-    id: "TC-004",
-    scenario: "电商客服与售后 Agent",
-    input: "帮客户创建一个退货工单。",
-    expectedTool: "createTicket",
-    result: "pass",
-    latency: "1.6s",
-  },
+  { id: "TC-001", scenario: "企业知识库 Agent", input: "差旅报销需要提前多久申请？", expectedTool: "searchPolicy", result: "pass", latency: "1.4s" },
+  { id: "TC-002", scenario: "电商客服与售后 Agent", input: "订单三天未发货，帮我处理。", expectedTool: "queryOrder + searchPolicy", result: "pass", latency: "1.9s" },
+  { id: "TC-003", scenario: "招聘求职 JD 匹配 Agent", input: "这个 AI 应用开发岗位和我的项目匹配吗？", expectedTool: "analyzeJD", result: "review", latency: "2.2s" },
+  { id: "TC-004", scenario: "电商客服与售后 Agent", input: "帮客户创建一个退货工单。", expectedTool: "createTicket", result: "pass", latency: "1.6s" },
 ];
