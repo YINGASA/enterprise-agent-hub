@@ -92,3 +92,14 @@ Fallback is part of the engineering design:
 - Full failure: `responseMode=fallback`.
 
 This lets the demo remain usable even when the model or network is unstable.
+
+## V0.9 Knowledge Packs
+
+V0.9 organizes mock documents into four Knowledge Packs:
+
+- enterprise-policy: reimbursement, travel, leave, security, procurement, contract, SLA, onboarding and offboarding.
+- ecommerce-support: return/refund policy, opened products, quality issues, size mismatch, logistics, complaints, scripts and inventory.
+- recruitment-career: AI application roles, JD matching, resume keywords, project packaging and interview preparation.
+- ai-engineering: Prompt, RAG quality, Agent tools, JSON output, fallback, API key security, evaluation and observability.
+
+The current RAG remains keyword/mock retrieval. The retriever now adds title, category, tags and preferred pack weighting, and each retrieved chunk exposes matched keywords and score reasons for UI inspection.

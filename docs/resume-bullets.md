@@ -2,10 +2,10 @@
 
 ## 最终简历推荐版
 
-- 基于 Next.js + TypeScript 构建 Enterprise Agent Hub 企业级 AI Agent 平台，覆盖企业知识库、电商客服售后、招聘 JD 匹配三个业务场景。
+- 基于 Next.js + TypeScript 构建 Enterprise Agent Hub 企业级 AI Agent 平台，覆盖企业制度、电商客服售后、招聘求职、AI 工程规范四类知识库场景。
 - 设计 RAG + Agent Router + Tool Calling 编排流程，实现意图识别、关键词知识库检索、本地业务工具调用、来源引用和结构化 JSON 输出。
 - 接入 OpenAI-compatible API / DeepSeek，支持 Mock / Real 双模式、服务端 Key 管理、JSON repair、文本兜底和网络 fallback，提升演示稳定性。
-- 构建 Agent Evaluation Dashboard，覆盖 15 条测试用例，统计场景识别、意图识别、工具命中、RAG 引用、关键词命中和 fallback 等指标，Mock 全量评测通过率 100%。
+- 构建 Agent Evaluation Dashboard，覆盖 50 条多场景测试用例，统计场景识别、意图识别、工具命中、RAG 引用、关键词命中和 fallback 等指标，Mock 完整评测通过率 100%。
 
 ## 精简版
 

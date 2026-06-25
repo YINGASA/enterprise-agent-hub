@@ -2,168 +2,827 @@ import type { EvaluationCase } from "@/types";
 
 export const evaluationCases: EvaluationCase[] = [
   {
-    id: "EVAL-ENT-001",
-    question: "公司报销需要什么材料？",
-    expectedScenario: "enterprise",
-    expectedIntent: "knowledge_qa",
-    expectedTools: [],
-    expectedNeedRag: true,
-    expectedKeywords: ["报销", "材料", "发票"],
-    category: "enterprise",
-    difficulty: "easy",
+    "id": "EVAL-ENT-001",
+    "question": "公司报销需要什么材料？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "报销",
+      "材料",
+      "发票"
+    ],
+    "category": "enterprise",
+    "difficulty": "easy",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ENT-002",
-    question: "年假制度是什么？",
-    expectedScenario: "enterprise",
-    expectedIntent: "knowledge_qa",
-    expectedTools: [],
-    expectedNeedRag: true,
-    expectedKeywords: ["年假", "申请", "工作日"],
-    category: "enterprise",
-    difficulty: "easy",
+    "id": "EVAL-ENT-002",
+    "question": "我出差回来想报销，应该准备哪些材料？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "报销",
+      "行程单",
+      "付款凭证"
+    ],
+    "category": "enterprise",
+    "difficulty": "easy",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ENT-003",
-    question: "请假需要提前多久申请？",
-    expectedScenario: "enterprise",
-    expectedIntent: "knowledge_qa",
-    expectedTools: [],
-    expectedNeedRag: true,
-    expectedKeywords: ["请假", "申请", "提前"],
-    category: "enterprise",
-    difficulty: "medium",
+    "id": "EVAL-ENT-003",
+    "question": "年假连续休 6 天需要提前多久申请？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "年假",
+      "提前",
+      "工作日"
+    ],
+    "category": "enterprise",
+    "difficulty": "easy",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ENT-004",
-    question: "信息安全规范里对客户数据有什么要求？",
-    expectedScenario: "enterprise",
-    expectedIntent: "knowledge_qa",
-    expectedTools: [],
-    expectedNeedRag: true,
-    expectedKeywords: ["客户数据", "信息安全", "脱敏"],
-    category: "enterprise",
-    difficulty: "medium",
+    "id": "EVAL-ENT-004",
+    "question": "请假需要提前多久申请，病假要补什么证明？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "请假",
+      "病假",
+      "证明"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ENT-005",
-    question: "公司制度里有没有出差审批要求？",
-    expectedScenario: "enterprise",
-    expectedIntent: "knowledge_qa",
-    expectedTools: [],
-    expectedNeedRag: true,
-    expectedKeywords: ["出差", "审批", "主管"],
-    category: "enterprise",
-    difficulty: "medium",
+    "id": "EVAL-ENT-005",
+    "question": "加班之后怎么申请调休？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "加班",
+      "调休",
+      "申请"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ECOM-001",
-    question: "订单10001能不能退？",
-    expectedScenario: "ecommerce",
-    expectedIntent: "policy_check",
-    expectedTools: ["queryOrder", "searchPolicy"],
-    expectedNeedRag: true,
-    expectedKeywords: ["订单", "退货", "售后"],
-    category: "ecommerce",
-    difficulty: "easy",
+    "id": "EVAL-ENT-006",
+    "question": "客户数据要外发给供应商，需要注意什么？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "客户数据",
+      "脱敏",
+      "权限"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ECOM-002",
-    question: "商品P001还有库存吗？",
-    expectedScenario: "ecommerce",
-    expectedIntent: "product_query",
-    expectedTools: ["queryProduct"],
-    expectedNeedRag: false,
-    expectedKeywords: ["商品", "库存"],
-    category: "ecommerce",
-    difficulty: "easy",
+    "id": "EVAL-ENT-007",
+    "question": "信息安全规范里账号和 Token 能不能共享？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "信息安全",
+      "账号",
+      "Token"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ECOM-003",
-    question: "客户说尺码不合适怎么回复？",
-    expectedScenario: "ecommerce",
-    expectedIntent: "after_sale_reply",
-    expectedTools: ["generateCustomerReply"],
-    expectedNeedRag: true,
-    expectedKeywords: ["尺码", "回复", "客户"],
-    category: "ecommerce",
-    difficulty: "medium",
+    "id": "EVAL-ENT-008",
+    "question": "合同盖章前需要哪些审批？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "合同",
+      "审批",
+      "法务"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ECOM-004",
-    question: "订单10002可以退款吗？",
-    expectedScenario: "ecommerce",
-    expectedIntent: "policy_check",
-    expectedTools: ["queryOrder", "searchPolicy"],
-    expectedNeedRag: true,
-    expectedKeywords: ["订单", "退款", "退货"],
-    category: "ecommerce",
-    difficulty: "medium",
+    "id": "EVAL-ENT-009",
+    "question": "采购一个 SaaS 工具要走什么流程？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "采购",
+      "供应商",
+      "预算"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-ECOM-005",
-    question: "帮我创建一个高优先级售后工单。",
-    expectedScenario: "ecommerce",
-    expectedIntent: "ticket_create",
-    expectedTools: ["createTicket"],
-    expectedNeedRag: false,
-    expectedKeywords: ["工单", "高优先级", "售后"],
-    category: "ecommerce",
-    difficulty: "easy",
+    "id": "EVAL-ENT-010",
+    "question": "项目立项评审要准备哪些内容？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "项目立项",
+      "里程碑",
+      "风险"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-REC-001",
-    question: "这个 AI 应用开发工程师岗位和我的简历匹配吗？",
-    expectedScenario: "recruitment",
-    expectedIntent: "jd_match",
-    expectedTools: ["analyzeJD"],
-    expectedNeedRag: false,
-    expectedKeywords: ["AI", "简历", "匹配"],
-    category: "recruitment",
-    difficulty: "easy",
+    "id": "EVAL-ENT-011",
+    "question": "P1 工单多久必须响应？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "工单",
+      "SLA",
+      "响应"
+    ],
+    "category": "enterprise",
+    "difficulty": "easy",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-REC-002",
-    question: "大模型应用开发实习生会问哪些问题？",
-    expectedScenario: "recruitment",
-    expectedIntent: "jd_match",
-    expectedTools: ["analyzeJD"],
-    expectedNeedRag: false,
-    expectedKeywords: ["大模型", "面试", "问题"],
-    category: "recruitment",
-    difficulty: "medium",
+    "id": "EVAL-ENT-012",
+    "question": "员工离职时账号权限要怎么处理？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "离职",
+      "账号",
+      "权限"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
   },
   {
-    id: "EVAL-REC-003",
-    question: "我的简历还缺哪些 AI 项目关键词？",
-    expectedScenario: "recruitment",
-    expectedIntent: "jd_match",
-    expectedTools: ["analyzeJD"],
-    expectedNeedRag: false,
-    expectedKeywords: ["简历", "AI", "关键词"],
-    category: "recruitment",
-    difficulty: "medium",
+    "id": "EVAL-ECOM-001",
+    "question": "订单10001能不能退？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "queryOrder",
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "订单",
+      "退货",
+      "售后"
+    ],
+    "category": "ecommerce",
+    "difficulty": "easy",
+    "packId": "ecommerce-support"
   },
   {
-    id: "EVAL-REC-004",
-    question: "前端开发实习生和我的项目匹配吗？",
-    expectedScenario: "recruitment",
-    expectedIntent: "jd_match",
-    expectedTools: ["analyzeJD"],
-    expectedNeedRag: false,
-    expectedKeywords: ["前端", "实习生", "匹配"],
-    category: "recruitment",
-    difficulty: "medium",
+    "id": "EVAL-ECOM-002",
+    "question": "客户买的衣服已经拆封了还能退吗？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "queryOrder",
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "拆封",
+      "退货",
+      "二次销售"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
   },
   {
-    id: "EVAL-REC-005",
-    question: "帮我分析这个 JD 的核心要求。",
-    expectedScenario: "recruitment",
-    expectedIntent: "jd_match",
-    expectedTools: ["analyzeJD"],
-    expectedNeedRag: false,
-    expectedKeywords: ["JD", "核心要求", "岗位"],
-    category: "recruitment",
-    difficulty: "easy",
+    "id": "EVAL-ECOM-003",
+    "question": "用户说尺码不合适但超过 7 天了，客服应该怎么回复？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "after_sale_reply",
+    "expectedTools": [
+      "generateCustomerReply"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "尺码",
+      "客服",
+      "回复"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
   },
+  {
+    "id": "EVAL-ECOM-004",
+    "question": "商品P001还有库存吗？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "product_query",
+    "expectedTools": [
+      "queryProduct"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "商品",
+      "库存"
+    ],
+    "category": "ecommerce",
+    "difficulty": "easy",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-005",
+    "question": "这个商品缺货了要怎么跟客户沟通？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "product_query",
+    "expectedTools": [
+      "queryProduct"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "商品",
+      "库存"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-006",
+    "question": "订单10002可以退款吗？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "queryOrder",
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "订单",
+      "退款",
+      "退货"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-007",
+    "question": "物流 48 小时没更新要怎么处理？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "order_query",
+    "expectedTools": [
+      "queryOrder"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "订单",
+      "状态"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-008",
+    "question": "用户反馈商品质量问题，需要走什么售后流程？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "queryOrder",
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "质量问题",
+      "售后",
+      "凭证"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-009",
+    "question": "客户投诉要求主管介入，应该怎么升级？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "ticket_create",
+    "expectedTools": [
+      "createTicket"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "工单",
+      "优先级",
+      "售后"
+    ],
+    "category": "ecommerce",
+    "difficulty": "hard",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-010",
+    "question": "帮我创建一个高优先级售后工单。",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "ticket_create",
+    "expectedTools": [
+      "createTicket"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "工单",
+      "高优先级",
+      "售后"
+    ],
+    "category": "ecommerce",
+    "difficulty": "easy",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-011",
+    "question": "换货流程里需要先确认库存吗？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "product_query",
+    "expectedTools": [
+      "queryProduct"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "商品",
+      "库存"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-012",
+    "question": "客服回复里能不能承诺退款马上到账？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "after_sale_reply",
+    "expectedTools": [
+      "generateCustomerReply"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "客服",
+      "回复",
+      "售后"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-REC-001",
+    "question": "这个 AI 应用开发工程师岗位和我的简历匹配吗？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "AI",
+      "简历",
+      "匹配"
+    ],
+    "category": "recruitment",
+    "difficulty": "easy",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-002",
+    "question": "这个项目如果面试 AI 应用开发岗，最应该讲哪些技术点？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "AI",
+      "RAG",
+      "Agent"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-003",
+    "question": "我的简历还缺哪些 AI 项目关键词？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "简历",
+      "AI",
+      "关键词"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-004",
+    "question": "大模型应用开发实习生会问哪些问题？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "大模型",
+      "面试",
+      "问题"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-005",
+    "question": "AI Agent 开发实习生需要准备什么项目？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "AI",
+      "Agent",
+      "项目"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-006",
+    "question": "RAG 知识库开发实习生会关注哪些能力？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "RAG",
+      "知识库",
+      "能力"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-007",
+    "question": "前端 AI 应用开发实习生和我的项目匹配吗？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "前端",
+      "AI",
+      "匹配"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-008",
+    "question": "Python AI 应用开发实习生需要补哪些后端能力？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "Python",
+      "AI",
+      "能力"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-009",
+    "question": "帮我分析这个 JD 的核心要求。",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "JD",
+      "核心要求",
+      "岗位"
+    ],
+    "category": "recruitment",
+    "difficulty": "easy",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-010",
+    "question": "如何把这个项目包装成一页简历 bullet？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "简历",
+      "项目",
+      "关键词"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-011",
+    "question": "面试官问这是不是只调 API，我该怎么回答？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "AI",
+      "项目",
+      "面试"
+    ],
+    "category": "recruitment",
+    "difficulty": "hard",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-REC-012",
+    "question": "岗位匹配评分应该看哪些维度？",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "岗位",
+      "匹配",
+      "评分"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-AI-001",
+    "question": "如果模型返回的 JSON 不合法，系统应该怎么处理？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "JSON",
+      "解析",
+      "repair"
+    ],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-002",
+    "question": "RAG 检索质量应该怎么评测？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "RAG",
+      "检索",
+      "引用"
+    ],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-003",
+    "question": "Agent 工具调用要注意哪些参数和幂等问题？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "Agent",
+      "工具调用",
+      "参数"
+    ],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-004",
+    "question": "API Key 为什么不能暴露在前端？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "API Key",
+      "前端",
+      "环境变量"
+    ],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-005",
+    "question": "fallback 机制在 AI 应用里有什么价值？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "fallback",
+      "异常",
+      "降级"
+    ],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-006",
+    "question": "Prompt 设计应该包含哪些约束？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "Prompt",
+      "输出",
+      "约束"
+    ],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-007",
+    "question": "评测集设计要覆盖哪些边界问题？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "评测",
+      "测试集",
+      "覆盖"
+    ],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-AI-008",
+    "question": "Agent Trace 应该展示哪些可观测性字段？",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "Trace",
+      "可观测性",
+      "耗时"
+    ],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-FALL-001",
+    "question": "火星基地怎么申请？",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-FALL-002",
+    "question": "今天北京天气怎么样？",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-FALL-003",
+    "question": "推荐一家附近好吃的火锅店。",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-FALL-004",
+    "question": "股票明天会涨吗？",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-FALL-005",
+    "question": "帮我写一首关于海边的诗。",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-FALL-006",
+    "question": "这份知识库里有没有宇宙移民政策？",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "fallback"
+  }
 ];

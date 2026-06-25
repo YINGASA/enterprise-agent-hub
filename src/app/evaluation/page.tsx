@@ -7,7 +7,7 @@ export default function EvaluationPage() {
       <PageHeader
         eyebrow="Evaluation"
         title="Agent 评测面板"
-        description="V0.6 Agent Evaluation Dashboard：用于验证 Agent Router、RAG、Tools、LLM 和 fallback 的稳定性，统计场景识别、意图识别、工具命中、来源引用和响应模式。"
+        description="V0.9 将评测集扩展到 50 条，支持快速 15 条、标准 30 条、完整 50 条和知识库包筛选，用于验证 Router、RAG、Tools、LLM fallback 与来源引用。"
       />
       <EvaluationDashboard />
     </div>

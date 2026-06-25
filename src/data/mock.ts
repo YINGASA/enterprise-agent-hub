@@ -18,6 +18,7 @@ import type {
   ToolCallLog,
   ToolDefinition,
 } from "@/types";
+import { knowledgePackDocuments } from "@/data/knowledgePacks";
 
 export const features: Feature[] = [
   { title: "RAG 知识库问答", description: "基于企业文档、政策与 SOP 的检索增强回答，附带来源引用。" },
@@ -203,89 +204,7 @@ export const interviewQuestions: InterviewQuestion[] = [
   { id: "IQ-FE-001", jobId: "JD-FE-INTERN", question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？", focus: "组件拆分、状态管理、异常展示、JSON 可读性。" },
 ];
 
-export const documents: KnowledgeDocument[] = [
-  {
-    id: "doc-001",
-    title: "员工报销与差旅制度",
-    category: "HR Policy",
-    content: "员工差旅申请需在出行前 3 个工作日提交，并由直属主管审批。报销材料包括电子发票、行程单、付款凭证和客户拜访记录。单次交通费用超过 2000 元时，需要补充出差目的和客户拜访记录。报销单据需在费用发生后 30 天内提交。",
-    createdAt: "2026-05-10",
-    updatedAt: "2026-06-01",
-    source: "HR-Policy-2026.pdf",
-    owner: "人力行政部",
-    isDefault: true,
-    chunks: [
-      { id: "chunk-001", content: "员工差旅申请需在出行前 3 个工作日提交，并由直属主管审批。", score: 0.91 },
-      { id: "chunk-002", content: "报销材料包括电子发票、行程单、付款凭证和客户拜访记录。", score: 0.88 },
-    ],
-    citations: ["第 2 章 差旅申请", "第 4 章 费用标准"],
-  },
-  {
-    id: "doc-002",
-    title: "年假与请假管理办法",
-    category: "HR Policy",
-    content: "入职满一年后可申请带薪年假。连续休假超过 5 天需提前 10 个工作日申请。病假需在返岗后 3 个工作日内补充正规医疗证明。紧急请假可先口头报备，24 小时内补交申请。",
-    createdAt: "2026-05-01",
-    updatedAt: "2026-05-20",
-    source: "Leave-Policy-2026.pdf",
-    owner: "人力行政部",
-    isDefault: true,
-    chunks: [
-      { id: "chunk-101", content: "入职满一年后可申请带薪年假。连续休假超过 5 天需提前 10 个工作日申请。", score: 0.9 },
-      { id: "chunk-102", content: "病假需在返岗后 3 个工作日内补充正规医疗证明。", score: 0.86 },
-    ],
-    citations: ["请假管理第 1 条", "病假规则第 3 条"],
-  },
-  {
-    id: "doc-003",
-    title: "信息安全与数据外发规范",
-    category: "Security",
-    content: "客户数据、合同报价和候选人资料均属于敏感信息。禁止将客户数据上传到未审批的第三方工具。外发合同、报价单和客户清单前需完成脱敏审查。离职或转岗需在 1 个工作日内回收系统权限。",
-    createdAt: "2026-05-25",
-    updatedAt: "2026-06-12",
-    source: "Security-Guide.md",
-    owner: "信息安全部",
-    isDefault: true,
-    chunks: [
-      { id: "chunk-201", content: "客户数据、合同报价和候选人资料均属于敏感信息。", score: 0.92 },
-      { id: "chunk-202", content: "外发合同、报价单和客户清单前需完成脱敏审查。", score: 0.87 },
-    ],
-    citations: ["数据安全第 2 条", "权限管理第 4 条"],
-  },
-  {
-    id: "doc-004",
-    title: "电商售后与退货规则",
-    category: "After Sales",
-    content: "签收后 7 天内且不影响二次销售可申请无理由退货。服饰和箱包类商品需吊牌、包装完整。数码耳机、贴身用品拆封后非质量问题不支持退货。质量问题需上传照片或视频凭证，确认后可优先换货，缺货时支持退款。延迟发货超过 48 小时可发放 8 元优惠券，并同步创建售后跟进工单。",
-    createdAt: "2026-06-01",
-    updatedAt: "2026-06-10",
-    source: "Support-SOP.md",
-    owner: "客服运营部",
-    isDefault: true,
-    chunks: [
-      { id: "chunk-301", content: "签收后 7 天内且不影响二次销售可申请无理由退货。", score: 0.94 },
-      { id: "chunk-302", content: "数码耳机、贴身用品拆封后非质量问题不支持退货。", score: 0.9 },
-      { id: "chunk-303", content: "延迟发货超过 48 小时可发放 8 元优惠券。", score: 0.88 },
-    ],
-    citations: ["售后政策第 4.2 条", "退货规则第 1 条"],
-  },
-  {
-    id: "doc-005",
-    title: "AI 应用开发工程师岗位要求说明",
-    category: "Recruiting",
-    content: "AI 应用开发工程师需要熟悉 RAG、Agent Router、Tool Calling、结构化输出和前端产品化落地。候选人应能用 TypeScript、Next.js 和 Tailwind CSS 搭建 B 端 SaaS 原型，并理解评测集、工具调用命中率、来源引用率等质量指标。有企业知识库、客服自动化或招聘匹配项目经验者优先。",
-    createdAt: "2026-06-08",
-    updatedAt: "2026-06-15",
-    source: "JD-AI-App-Engineer.docx",
-    owner: "招聘团队",
-    isDefault: true,
-    chunks: [
-      { id: "chunk-401", content: "AI 应用开发工程师需要熟悉 RAG、Agent Router、Tool Calling、结构化输出和前端产品化落地。", score: 0.96 },
-      { id: "chunk-402", content: "候选人应能用 TypeScript、Next.js 和 Tailwind CSS 搭建 B 端 SaaS 原型。", score: 0.9 },
-    ],
-    citations: ["岗位要求第 1 条", "加分项第 2 条"],
-  },
-];
+export const documents: KnowledgeDocument[] = knowledgePackDocuments;
 
 export const chatMessages: ChatMessage[] = [
   { role: "user", content: "客户说订单 EAH20260624001 已经 3 天没发货，请帮我查一下并生成回复。" },

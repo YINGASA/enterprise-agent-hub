@@ -31,8 +31,11 @@ export type ToolCallLog = {
 
 export type KnowledgeDocument = {
   id: string;
+  packId?: string;
   title: string;
   category: string;
+  tags?: string[];
+  summary?: string;
   content: string;
   createdAt: string;
   updatedAt: string;
@@ -50,8 +53,10 @@ export type KnowledgeDocument = {
 export type KnowledgeChunk = {
   id: string;
   documentId: string;
+  packId?: string;
   sourceTitle: string;
   category: string;
+  tags?: string[];
   chunkIndex: number;
   content: string;
   keywords: string[];
@@ -61,6 +66,7 @@ export type RetrievedChunk = {
   chunk: KnowledgeChunk;
   score: number;
   matchedKeywords: string[];
+  scoreReason?: string[];
 };
 
 export type RagAnswer = {
@@ -75,6 +81,15 @@ export type RagAnswer = {
   }>;
   mode: "mock-rag";
   createdAt: string;
+};
+
+export type KnowledgePackId = "enterprise-policy" | "ecommerce-support" | "recruitment-career" | "ai-engineering";
+
+export type KnowledgePack = {
+  id: KnowledgePackId;
+  name: string;
+  description: string;
+  scenario: AgentScenario | "ai-engineering";
 };
 
 export type CompanyPolicy = {
@@ -348,6 +363,7 @@ export type EvaluationCase = {
   expectedKeywords: string[];
   category: AgentScenario;
   difficulty: "easy" | "medium" | "hard";
+  packId?: KnowledgePackId | "fallback";
 };
 
 export type EvaluationFailureReason =
@@ -369,6 +385,7 @@ export type EvaluationCaseResult = {
   ragUsedMatched: boolean;
   keywordHit: boolean;
   citationHit: boolean;
+  ragScore: number;
   responseMode: AgentResponseMode;
   durationMs: number;
   route: AgentRoute;
@@ -382,6 +399,8 @@ export type EvaluationCaseResult = {
 
 export type EvaluationSummary = {
   total: number;
+  caseCount: number;
+  selectedSuite: "quick" | "standard" | "full" | "custom";
   passed: number;
   passRate: number;
   scenarioAccuracy: number;
@@ -394,6 +413,9 @@ export type EvaluationSummary = {
   jsonParseSuccessRate: number;
   fallbackRate: number;
   averageDurationMs: number;
+  averageRagScore: number;
+  fallbackCaseCount: number;
+  packCoverage: Record<string, number>;
   failureBuckets: Record<EvaluationFailureReason, number>;
 };
 
@@ -404,6 +426,7 @@ export type EvaluationRunResponse = {
   finishedAt: string;
   durationMs: number;
   mode: LlmMode;
+  selectedSuite: "quick" | "standard" | "full" | "custom";
 };
 export type EvaluationMetric = {
   label: string;

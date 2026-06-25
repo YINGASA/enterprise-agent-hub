@@ -94,6 +94,7 @@ export function evaluateAgentResult(caseItem: EvaluationCase, pipelineResult: Ag
   ].join(" ");
   const keywordHit = includesKeyword(keywordCorpus, caseItem.expectedKeywords);
   const citationHit = caseItem.expectedNeedRag ? sources.length > 0 : true;
+  const ragScore = pipelineResult.ragAnswer?.retrievedChunks.length ? Math.round(pipelineResult.ragAnswer.retrievedChunks.reduce((sum, item) => sum + item.score, 0) / pipelineResult.ragAnswer.retrievedChunks.length) : 0;
   const error = pipelineResult.api.llmError ?? pipelineResult.api.parseError;
   const failureReasons = collectFailureReasons({ scenarioMatched, intentMatched, toolsMatched, ragUsedMatched, keywordHit, citationHit, error });
   const passed = failureReasons.length === 0;
@@ -108,6 +109,7 @@ export function evaluateAgentResult(caseItem: EvaluationCase, pipelineResult: Ag
     ragUsedMatched,
     keywordHit,
     citationHit,
+    ragScore,
     responseMode: pipelineResult.api.responseMode,
     durationMs,
     route: pipelineResult.route,
@@ -132,7 +134,7 @@ function emptyFailureBuckets(): Record<EvaluationFailureReason, number> {
   };
 }
 
-export function summarizeEvaluation(results: EvaluationCaseResult[]): EvaluationSummary {
+export function summarizeEvaluation(results: EvaluationCaseResult[], cases: EvaluationCase[] = [], selectedSuite: "quick" | "standard" | "full" | "custom" = "custom"): EvaluationSummary {
   const total = results.length;
   const count = (predicate: (item: EvaluationCaseResult) => boolean) => results.filter(predicate).length;
   const passed = count((item) => item.passed);
@@ -141,6 +143,11 @@ export function summarizeEvaluation(results: EvaluationCaseResult[]): Evaluation
   const jsonParseSuccess = count((item) => item.responseMode === "mock" || item.responseMode === "real" || item.responseMode === "real_repaired");
   const fallback = count((item) => item.responseMode === "fallback" || item.responseMode === "real_text_fallback");
   const averageDurationMs = total ? Math.round(results.reduce((sum, item) => sum + item.durationMs, 0) / total) : 0;
+  const caseById = new Map(cases.map((item) => [item.id, item]));
+  const packCoverage = results.reduce<Record<string, number>>((acc, item) => { const packId = caseById.get(item.caseId)?.packId ?? "unknown"; acc[packId] = (acc[packId] ?? 0) + 1; return acc; }, {});
+  const ragScores = results.map((item) => item.ragScore).filter((score) => score > 0);
+  const averageRagScore = ragScores.length ? Math.round(ragScores.reduce((sum, score) => sum + score, 0) / ragScores.length) : 0;
+  const fallbackCaseCount = results.filter((item) => (caseById.get(item.caseId)?.packId ?? "") === "fallback" || item.route.intent === "general_chat").length;
   const failureBuckets = emptyFailureBuckets();
   for (const result of results) {
     for (const reason of result.failureReasons) {
@@ -150,6 +157,8 @@ export function summarizeEvaluation(results: EvaluationCaseResult[]): Evaluation
 
   return {
     total,
+    caseCount: total,
+    selectedSuite,
     passed,
     passRate: pct(total ? passed / total : 0),
     scenarioAccuracy: pct(total ? count((item) => item.scenarioMatched) / total : 0),
@@ -162,6 +171,9 @@ export function summarizeEvaluation(results: EvaluationCaseResult[]): Evaluation
     jsonParseSuccessRate: pct(total ? jsonParseSuccess / total : 0),
     fallbackRate: pct(total ? fallback / total : 0),
     averageDurationMs,
+    averageRagScore,
+    fallbackCaseCount,
+    packCoverage,
     failureBuckets,
   };
 }
@@ -177,6 +189,7 @@ function failedCaseResult(caseItem: EvaluationCase, durationMs: number, error: s
     ragUsedMatched: false,
     keywordHit: false,
     citationHit: false,
+    ragScore: 0,
     responseMode: "fallback",
     durationMs,
     route: {
@@ -196,7 +209,7 @@ function failedCaseResult(caseItem: EvaluationCase, durationMs: number, error: s
   };
 }
 
-export async function runEvaluationSuite(cases: EvaluationCase[] = evaluationCases, mode: LlmMode = "mock"): Promise<EvaluationRunResponse> {
+export async function runEvaluationSuite(cases: EvaluationCase[] = evaluationCases, mode: LlmMode = "mock", selectedSuite: "quick" | "standard" | "full" | "custom" = "custom"): Promise<EvaluationRunResponse> {
   const startedAt = new Date();
   const results: EvaluationCaseResult[] = [];
 
@@ -212,11 +225,12 @@ export async function runEvaluationSuite(cases: EvaluationCase[] = evaluationCas
 
   const finishedAt = new Date();
   return {
-    summary: summarizeEvaluation(results),
+    summary: summarizeEvaluation(results, cases, selectedSuite),
     results,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
     durationMs: finishedAt.getTime() - startedAt.getTime(),
     mode,
+    selectedSuite,
   };
 }

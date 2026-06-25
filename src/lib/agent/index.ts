@@ -94,6 +94,28 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
+  if (hasAny(q, ["Prompt", "提示词", "RAG", "检索质量", "Agent", "工具调用", "结构化输出", "JSON", "fallback", "API Key", "评测集", "可观测性", "日志", "Schema", "模型返回"]) && !hasAny(q, ["JD", "岗位", "岗", "简历", "匹配", "面试", "求职", "招聘", "实习生"])) {
+    return {
+      scenario: "general",
+      intent: "knowledge_qa",
+      needRag: true,
+      toolsNeeded: [],
+      confidence: 0.82,
+      reason: "命中 AI 应用工程规范关键词，需要检索 ai-engineering 知识库包。",
+    };
+  }
+
+  if (hasAny(q, ["客户数据", "信息安全", "脱敏", "权限", "合同", "采购", "项目立项", "SLA", "入职", "离职", "差旅", "加班", "调休", "P0 工单", "P1 工单", "P2 工单", "P3 工单", "必须响应", "多久响应"])) {
+    return {
+      scenario: "enterprise",
+      intent: "knowledge_qa",
+      needRag: true,
+      toolsNeeded: [],
+      confidence: 0.86,
+      reason: "命中企业制度、流程或安全关键词，需要优先检索企业制度知识库。",
+    };
+  }
+
   if (hasAny(q, ["创建工单", "转人工", "投诉", "优先级", "工单"])) {
     const scenario: AgentScenario = hasAny(q, ["售后", "订单", "退货", "客服", "客户"]) ? "ecommerce" : "enterprise";
     return {
@@ -106,7 +128,29 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["商品", "库存", "尺码", "价格", "推荐码数", "码数"])) {
+  if (hasAny(q, ["客服回复", "怎么回复", "回复里", "话术"])) {
+    return {
+      scenario: "ecommerce",
+      intent: "after_sale_reply",
+      needRag: true,
+      toolsNeeded: ["generateCustomerReply"],
+      confidence: 0.87,
+      reason: "命中客服回复或话术关键词，需要结合售后规则生成回复。",
+    };
+  }
+
+  if (hasAny(q, ["质量问题", "售后流程", "举证", "凭证"])) {
+    return {
+      scenario: "ecommerce",
+      intent: "policy_check",
+      needRag: true,
+      toolsNeeded: ["queryOrder", "searchPolicy"],
+      confidence: 0.88,
+      reason: "命中质量问题或售后流程关键词，需要结合订单和售后政策判断。",
+    };
+  }
+
+  if (hasAny(q, ["商品", "库存", "尺码", "价格", "推荐码数", "码数", "缺货", "换货"])) {
     const intent: AgentIntent = hasAny(q, ["怎么回复", "客户说", "回复"]) ? "after_sale_reply" : "product_query";
     return {
       scenario: "ecommerce",
@@ -118,7 +162,7 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["订单", "退货", "退款", "售后", "签收", "拆封", "能不能退"])) {
+  if (hasAny(q, ["订单", "退货", "退款", "售后", "签收", "拆封", "能不能退", "物流", "七天", "7 天", "7天", "质量问题", "客服", "客户"])) {
     const intent: AgentIntent = hasAny(q, ["什么时候", "状态", "物流", "发货"]) ? "order_query" : "policy_check";
     return {
       scenario: "ecommerce",
@@ -141,7 +185,7 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["报销", "年假", "请假", "制度", "信息安全", "公司", "材料"])) {
+  if (hasAny(q, ["报销", "年假", "请假", "制度", "信息安全", "公司", "材料", "差旅", "合同", "采购", "项目立项", "SLA", "入职", "离职", "客户数据", "审批"])) {
     return {
       scenario: "enterprise",
       intent: "knowledge_qa",
@@ -170,6 +214,17 @@ function selectToolsForIntent(intent: AgentIntent): ToolName[] {
   if (intent === "ticket_create") return ["createTicket"];
   if (intent === "after_sale_reply") return ["generateCustomerReply"];
   return [];
+}
+
+function inferRagPackId(question: string, route: AgentRoute) {
+  if (hasAny(question, ["Prompt", "提示词", "RAG", "检索质量", "Agent", "工具调用", "结构化输出", "JSON", "fallback", "API Key", "评测集", "可观测性", "日志", "Schema", "模型返回"])) {
+    return "ai-engineering" as const;
+  }
+
+  if (route.scenario === "enterprise") return "enterprise-policy" as const;
+  if (route.scenario === "ecommerce") return "ecommerce-support" as const;
+  if (route.scenario === "recruitment") return "recruitment-career" as const;
+  return undefined;
 }
 
 function extractOrderId(question: string): ParsedToolInput {
@@ -351,7 +406,7 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
   const ragStart = Date.now();
   if (route.needRag) {
     const ragQuestion = route.intent === "policy_check" ? `${question} 退货 售后 签收 拆封 7天无理由 质量问题` : question;
-    ragAnswer = runMockRagPipeline(ragQuestion, documents);
+    ragAnswer = runMockRagPipeline(ragQuestion, documents, { topK: 4, packId: inferRagPackId(question, route), scenario: route.scenario });
     steps.push(
       makeStep({
         id: "step-rag",
