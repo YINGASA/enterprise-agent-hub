@@ -37,6 +37,7 @@ export function AgentWorkspace() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [clientError, setClientError] = useState("");
+  const [examplesPanelOpen, setExamplesPanelOpen] = useState(true);
   const [openGroups, setOpenGroups] = useState<string[]>(exampleGroups.filter((group) => group.defaultOpen).map((group) => group.title));
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const answerRef = useRef<HTMLDivElement | null>(null);
@@ -52,16 +53,17 @@ export function AgentWorkspace() {
   const loadingMessage = mode === "real" ? "正在执行 Router / RAG / Tools / LLM" : "正在执行 Mock Agent Pipeline";
 
   useEffect(() => {
-    if (!result && !clientError) return;
+    if (!result && !clientError && !isLoading) return;
     const element = answerRef.current;
-    if (!element) return;
-    const distance = Math.abs(element.getBoundingClientRect().top);
-    if (distance > 160) element.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [result, clientError]);
+    if (!element || typeof window === "undefined") return;
+    const targetTop = Math.max(0, element.getBoundingClientRect().top + window.scrollY - 80);
+    if (Math.abs(window.scrollY - targetTop) > 120) window.scrollTo({ top: targetTop, behavior: "smooth" });
+  }, [result, clientError, isLoading]);
 
   async function handleRun() {
     setIsLoading(true);
     setClientError("");
+    setExamplesPanelOpen(false);
     try {
       const response = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, mode }) });
       if (!response.ok) throw new Error("API request failed: " + response.status);
@@ -92,52 +94,58 @@ export function AgentWorkspace() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5 overflow-x-hidden">
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="min-w-0 space-y-4">
-            <div>
-              <h2 className="font-semibold text-ink-900">自由提问区</h2>
-              <p className="mt-1 rounded-md bg-brand-50 p-3 text-sm leading-6 text-brand-700">你可以自由输入问题，不限于示例；系统会通过 Agent Router 判断场景，并决定是否调用 RAG、业务工具和 Real API / Mock 模式。</p>
-            </div>
-            <div className="grid max-w-sm grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1 text-sm">
-              {(["mock", "real"] as LlmMode[]).map((item) => <button key={item} type="button" onClick={() => setMode(item)} className={modeButtonClass(mode === item)}><span className="block truncate">{item === "mock" ? "Mock 模式" : "Real API 模式"}</span></button>)}
-            </div>
-            <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button type="button" onClick={handleRun} disabled={isLoading} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? "运行中..." : "运行 Agent Pipeline"}</button>
-              <button type="button" onClick={handleHealthCheck} disabled={isCheckingHealth} className="min-h-10 rounded-md border border-brand-200 bg-brand-50 px-5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-ink-500">{isCheckingHealth ? "检查中..." : "检查 LLM 连接"}</button>
-            </div>
-            {isLoading ? <p className="rounded-md bg-slate-50 p-3 text-sm text-ink-600">{loadingMessage}</p> : null}
+        <div className="min-w-0 space-y-4">
+          <div>
+            <h2 className="font-semibold text-ink-900">自由提问区</h2>
+            <p className="mt-1 rounded-md bg-brand-50 p-3 text-sm leading-6 text-brand-700">你可以自由输入问题，不限于示例；系统会通过 Agent Router 判断场景，并决定是否调用 RAG、业务工具和 Real API / Mock 模式。</p>
           </div>
-          <div className="min-w-0 space-y-3">
-            <h3 className="text-sm font-semibold text-ink-900">示例问题分组</h3>
-            {exampleGroups.map((group) => {
-              const open = openGroups.includes(group.title);
-              const expanded = expandedGroups.includes(group.title);
-              const visibleQuestions = expanded ? group.questions : group.questions.slice(0, 4);
-              return (
-                <div key={group.title} className="rounded-md border border-slate-200 bg-slate-50">
-                  <button type="button" onClick={() => toggleGroup(group.title)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-semibold text-ink-700">
-                    <span>{group.title}</span><span>{open ? "收起" : "展开"}</span>
-                  </button>
-                  {open ? <div className="space-y-2 border-t border-slate-200 p-3">{visibleQuestions.map((item) => <button key={item} type="button" onClick={() => setQuestion(item)} className={exampleButtonClass(selectedExample === item)}><span className="block break-words">{item}</span></button>)}{group.questions.length > 4 ? <button type="button" onClick={() => toggleMore(group.title)} className="text-xs font-semibold text-brand-700">{expanded ? "收起更多" : "显示更多"}</button> : null}</div> : null}
-                </div>
-              );
-            })}
+          <div className="grid max-w-sm grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1 text-sm">
+            {(["mock", "real"] as LlmMode[]).map((item) => <button key={item} type="button" onClick={() => setMode(item)} className={modeButtonClass(mode === item)}><span className="block truncate">{item === "mock" ? "Mock 模式" : "Real API 模式"}</span></button>)}
           </div>
+          <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button type="button" onClick={handleRun} disabled={isLoading} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? "运行中..." : "运行 Agent Pipeline"}</button>
+            <button type="button" onClick={handleHealthCheck} disabled={isCheckingHealth} className="min-h-10 rounded-md border border-brand-200 bg-brand-50 px-5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-ink-500">{isCheckingHealth ? "检查中..." : "检查 LLM 连接"}</button>
+          </div>
+          {isLoading ? <p className="rounded-md bg-slate-50 p-3 text-sm text-ink-600">{loadingMessage}</p> : null}
         </div>
       </section>
 
-      <section ref={answerRef} className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section ref={answerRef} className="scroll-mt-20 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0"><h2 className="text-lg font-semibold text-ink-900">最终回答</h2><p className="mt-1 break-words text-sm text-ink-500">问题：{result?.question ?? question}</p></div>
           <span className="shrink-0 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{responseModeLabel(result?.api.responseMode ?? mode)}</span>
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
-        {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-sm leading-7 text-ink-700">{result?.finalAnswer ?? "请输入问题并运行 Agent Pipeline，最终回答会优先显示在这里。"}</p>}
+        {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
+        {result && usedFallback ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">当前回答为边界兜底：系统会说明不确定性，不会编造知识库或业务工具之外的信息。</p> : null}
         {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">scenario / intent</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{result.route.scenario} / {result.route.intent}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">confidence / risk</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {result.structuredOutput.riskLevel}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">fallback / sources</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">toolsUsed</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
       </section>
 
       {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">知识库与 RAG</h3><p className="mt-2 break-words text-sm text-ink-600">命中知识库包：{hitPacks.length ? hitPacks.map(packLabel).join("、") : "无"}</p><p className="mt-2 text-sm text-ink-600">最高分：{maxRagScore} · 平均分：{averageRagScore}</p><p className="mt-2 text-sm text-ink-500">回答边界：当前为 mock/keyword RAG，无来源时应补充知识库或业务工具。</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">Top 来源 / 工具</h3><div className="mt-3 space-y-2 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words">{source.title} · chunks {source.chunkIndexes.join(", ")}</p>) : <p>暂无来源</p>}{topTools.length ? topTools.map((tool) => <p key={tool.executedAt + tool.tool} className="break-words">{tool.tool}: {tool.status}</p>) : <p>暂无工具调用</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">LLM 状态摘要</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>requestMode：{result.api.requestedMode}</p><p>responseMode：{result.api.responseMode}</p><p>provider/model：{result.api.provider} / {result.api.model}</p><p>duration：{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "无"}</p><p className="break-words">errorType：{result.api.errorType ?? "无"}</p></div></article></section> : null}
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-ink-900">示例问题分组</h3>
+            <p className="mt-1 text-sm text-ink-500">点击示例只会填入输入框，不会自动运行。首次运行后这里会默认折叠，避免挡住回答区域。</p>
+          </div>
+          <button type="button" onClick={() => setExamplesPanelOpen((open) => !open)} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-brand-50 hover:text-brand-700">{examplesPanelOpen ? "收起" : "展开"}</button>
+        </div>
+        {examplesPanelOpen ? <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{exampleGroups.map((group) => {
+          const open = openGroups.includes(group.title);
+          const expanded = expandedGroups.includes(group.title);
+          const visibleQuestions = expanded ? group.questions : group.questions.slice(0, 4);
+          return (
+            <div key={group.title} className="min-w-0 rounded-md border border-slate-200 bg-slate-50">
+              <button type="button" onClick={() => toggleGroup(group.title)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-xs font-semibold text-ink-700">
+                <span>{group.title}</span><span>{open ? "收起" : "展开"}</span>
+              </button>
+              {open ? <div className="space-y-2 border-t border-slate-200 p-3">{visibleQuestions.map((item) => <button key={item} type="button" onClick={() => setQuestion(item)} className={exampleButtonClass(selectedExample === item)}><span className="block break-words">{item}</span></button>)}{group.questions.length > 4 ? <button type="button" onClick={() => toggleMore(group.title)} className="text-xs font-semibold text-brand-700">{expanded ? "收起更多" : "显示更多"}</button> : null}</div> : null}
+            </div>
+          );
+        })}</div> : null}
+      </section>
 
       <section className="space-y-4">
         <CollapsibleSection title="详细调试信息" description="默认折叠，面试讲解时可展开查看完整 Agent Trace。" defaultOpen={false}><AgentTracePanel result={result} /></CollapsibleSection>
