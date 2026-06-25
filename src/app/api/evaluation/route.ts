@@ -11,7 +11,7 @@ type EvaluationRequestBody = { mode?: unknown; caseIds?: unknown; suite?: unknow
 function asMode(value: unknown): LlmMode { return value === "real" ? "real" : "mock"; }
 function asCaseIds(value: unknown) { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
 function asSuite(value: unknown): EvaluationSuite { return value === "quick" || value === "standard" || value === "full" ? value : "full"; }
-function suiteLimit(suite: EvaluationSuite) { if (suite === "quick") return 15; if (suite === "standard") return 30; if (suite === "full") return 50; return Number.POSITIVE_INFINITY; }
+function suiteLimit(suite: EvaluationSuite) { if (suite === "quick") return 15; if (suite === "standard") return 30; return Number.POSITIVE_INFINITY; }
 function asPackId(value: unknown) { return typeof value === "string" && value !== "all" ? value : undefined; }
 
 export async function POST(request: Request) {

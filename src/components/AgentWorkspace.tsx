@@ -50,6 +50,8 @@ export function AgentWorkspace() {
   const averageRagScore = ragScores.length ? Math.round(ragScores.reduce((sum, score) => sum + score, 0) / ragScores.length) : 0;
   const usedFallback = result ? result.api.responseMode === "fallback" || result.api.responseMode === "real_text_fallback" || result.route.intent === "general_chat" : false;
   const loadingMessage = mode === "real" ? "正在执行 Router / RAG / Tools / LLM" : "正在执行 Mock Agent Pipeline";
+  const missingFields = result?.structuredOutput.missingFields ?? [];
+  const needsClarification = Boolean(result?.structuredOutput.needsClarification);
 
 
   async function handleRun() {
@@ -110,7 +112,9 @@ export function AgentWorkspace() {
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
         {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}...</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
-        {result && usedFallback ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">当前回答为边界兜底：系统会说明不确定性，不会编造知识库或业务工具之外的信息。</p> : null}
+        {needsClarification ? <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-900"><p className="font-semibold">{"\u9700\u8981\u8865\u5145\u4fe1\u606f"}</p>{missingFields.length ? <p className="mt-1 break-words">{"\u7f3a\u5931\u5b57\u6bb5\uff1a"}{missingFields.join("\u3001")}</p> : null}{result?.structuredOutput.clarificationQuestion ? <p className="mt-1 break-words">{result.structuredOutput.clarificationQuestion}</p> : null}{result?.structuredOutput.dataBoundaryNote ? <p className="mt-1 break-words text-amber-800">{result.structuredOutput.dataBoundaryNote}</p> : null}</div> : null}
+        {result?.structuredOutput.usedDemoData ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-sm leading-6 text-ink-700">{"\u5f53\u524d\u4f7f\u7528\u6f14\u793a\u6570\u636e\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba2\u5355\u3002"}</p> : null}
+        {result && usedFallback && !needsClarification ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">{"\u5f53\u524d\u56de\u7b54\u4e3a\u8fb9\u754c\u515c\u5e95\uff1a\u7cfb\u7edf\u4f1a\u8bf4\u660e\u4e0d\u786e\u5b9a\u6027\uff0c\u4e0d\u4f1a\u7f16\u9020\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u4e4b\u5916\u7684\u4fe1\u606f\u3002"}</p> : null}
         {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">scenario / intent</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{result.route.scenario} / {result.route.intent}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">confidence / risk</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {result.structuredOutput.riskLevel}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">fallback / sources</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">toolsUsed</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
       </section>
 

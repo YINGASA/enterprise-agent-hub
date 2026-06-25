@@ -54,6 +54,11 @@ function normalizeStructuredOutput(value: Record<string, unknown>, fallback: Age
     confidence: clampConfidence(value.confidence, fallback.confidence),
     riskLevel: value.riskLevel === "low" || value.riskLevel === "medium" || value.riskLevel === "high" ? value.riskLevel : fallback.riskLevel,
     nextAction: truncate(typeof value.nextAction === "string" ? value.nextAction : fallback.nextAction, 80),
+    needsClarification: fallback.needsClarification ? (typeof value.needsClarification === "boolean" ? value.needsClarification : true) : false,
+    missingFields: fallback.needsClarification ? (stringArray(value.missingFields, 8).length ? stringArray(value.missingFields, 8) : fallback.missingFields) : undefined,
+    clarificationQuestion: fallback.needsClarification ? (typeof value.clarificationQuestion === "string" ? truncate(value.clarificationQuestion, 160) : fallback.clarificationQuestion) : undefined,
+    usedDemoData: typeof value.usedDemoData === "boolean" ? value.usedDemoData : fallback.usedDemoData,
+    dataBoundaryNote: fallback.needsClarification ? (typeof value.dataBoundaryNote === "string" ? truncate(value.dataBoundaryNote, 180) : fallback.dataBoundaryNote) : fallback.dataBoundaryNote,
   };
 }
 
@@ -109,6 +114,9 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
         "字段必须完整：scenario, intent, answer, evidence, toolsUsed, sources, confidence, riskLevel, nextAction。",
         "evidence、toolsUsed、sources 必须是字符串数组；confidence 必须是 0 到 1 的数字；riskLevel 只能是 low、medium 或 high。",
         "answer 控制在 200 字以内；evidence 最多 5 条；sources 最多 5 条；nextAction 控制在 80 字以内。",
+        "If fallbackStructuredOutput.needsClarification is true, ask for missing information and never invent order/product facts.",
+        "For clarification cases, preserve needsClarification, missingFields, clarificationQuestion, usedDemoData, and dataBoundaryNote in JSON.",
+        "Do not say a specific order is refundable unless queryOrder returned an order from an explicit user-provided order id.",
       ].join("\n"),
     },
     {
@@ -131,6 +139,9 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
             : null,
           toolResults: pipeline.toolResults,
           fallbackStructuredOutput: pipeline.structuredOutput,
+          clarificationPolicy: pipeline.structuredOutput.needsClarification
+            ? "Missing key business parameters: clarify first, do not use or invent demo order/product facts, and do not make a deterministic refund judgment."
+            : "If any tool input is marked as demo data, explicitly state that demo data does not represent a real order.",
         },
         null,
         2,

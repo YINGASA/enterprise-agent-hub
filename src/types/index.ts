@@ -230,6 +230,11 @@ export type AgentStructuredOutput = {
   confidence: number;
   riskLevel: "low" | "medium" | "high";
   nextAction: string;
+  needsClarification?: boolean;
+  missingFields?: string[];
+  clarificationQuestion?: string;
+  usedDemoData?: boolean;
+  dataBoundaryNote?: string;
 };
 
 export type AgentPipelineResult = {

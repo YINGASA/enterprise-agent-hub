@@ -271,9 +271,7 @@ export const evaluationCases: EvaluationCase[] = [
     "question": "这个商品缺货了要怎么跟客户沟通？",
     "expectedScenario": "ecommerce",
     "expectedIntent": "product_query",
-    "expectedTools": [
-      "queryProduct"
-    ],
+    "expectedTools": [],
     "expectedNeedRag": false,
     "expectedKeywords": [
       "商品",
@@ -324,10 +322,7 @@ export const evaluationCases: EvaluationCase[] = [
     "question": "用户反馈商品质量问题，需要走什么售后流程？",
     "expectedScenario": "ecommerce",
     "expectedIntent": "policy_check",
-    "expectedTools": [
-      "queryOrder",
-      "searchPolicy"
-    ],
+    "expectedTools": ["searchPolicy"],
     "expectedNeedRag": true,
     "expectedKeywords": [
       "质量问题",
@@ -379,9 +374,7 @@ export const evaluationCases: EvaluationCase[] = [
     "question": "换货流程里需要先确认库存吗？",
     "expectedScenario": "ecommerce",
     "expectedIntent": "product_query",
-    "expectedTools": [
-      "queryProduct"
-    ],
+    "expectedTools": [],
     "expectedNeedRag": false,
     "expectedKeywords": [
       "商品",
@@ -396,9 +389,7 @@ export const evaluationCases: EvaluationCase[] = [
     "question": "客服回复里能不能承诺退款马上到账？",
     "expectedScenario": "ecommerce",
     "expectedIntent": "after_sale_reply",
-    "expectedTools": [
-      "generateCustomerReply"
-    ],
+    "expectedTools": [],
     "expectedNeedRag": true,
     "expectedKeywords": [
       "客服",
@@ -824,5 +815,76 @@ export const evaluationCases: EvaluationCase[] = [
     "category": "general",
     "difficulty": "medium",
     "packId": "fallback"
+  },
+  {
+    "id": "EVAL-ECOM-013",
+    "question": "我买了个东西，然后实物不太喜欢，想退款，怎么退",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "订单号",
+      "签收时间",
+      "是否拆封",
+      "7 天无理由",
+      "申请售后"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-014",
+    "question": "想退货，但是我不知道订单号怎么办",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "订单号",
+      "签收时间",
+      "退货"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-015",
+    "question": "这个商品还有货吗",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "product_query",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "商品编号",
+      "商品名称",
+      "库存"
+    ],
+    "category": "ecommerce",
+    "difficulty": "easy",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-ECOM-016",
+    "question": "客户说不喜欢想退，客服怎么回复",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "after_sale_reply",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "订单号",
+      "签收时间",
+      "是否拆封",
+      "通用回复"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
   }
 ];
