@@ -1,66 +1,54 @@
 # Evaluation Dashboard
 
-The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as expected across enterprise knowledge QA, ecommerce after-sales support, and recruitment/JD matching scenarios.
+The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as expected across enterprise knowledge QA, ecommerce after-sales support, recruitment/JD matching, AI engineering knowledge, and fallback scenarios.
 
-## Evaluation Dataset
+## V0.9 Dataset
 
-The built-in dataset contains 15 cases:
+The built-in dataset now contains 50 cases:
 
-- 5 enterprise knowledge base cases
-- 5 ecommerce customer support and after-sales cases
-- 5 recruitment and JD matching cases
+- 12 enterprise policy cases
+- 12 ecommerce support cases
+- 12 recruitment and career cases
+- 8 AI engineering cases
+- 6 fallback / out-of-scope cases
 
-Each case includes:
+The UI supports three suite sizes:
 
-- question
-- expectedScenario
-- expectedIntent
-- expectedTools
-- expectedNeedRag
-- expectedKeywords
-- category
-- difficulty
+- Quick: 15 cases
+- Standard: 30 cases
+- Full: 50 cases
+
+Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId.
 
 ## Metrics
 
-- `passRate`: percentage of cases that pass all checks.
-- `scenarioAccuracy`: whether Router selected the expected scenario.
-- `intentAccuracy`: whether Router selected the expected intent.
-- `toolHitRate`: whether actual tools include expected tools.
-- `ragUsageAccuracy`: whether RAG usage matches expectation.
-- `citationRate`: whether RAG-required cases include sources.
-- `keywordHitRate`: whether answer/evidence/sources/tools contain expected keywords.
-- `realSuccessRate`: Real API cases that return `real` or `real_repaired`.
-- `jsonParseSuccessRate`: cases with valid structured output.
-- `fallbackRate`: cases that fall back to mock or text fallback.
-- `averageDurationMs`: average case execution time.
+- passRate: percentage of cases that pass all checks.
+- scenarioAccuracy: whether Router selected the expected scenario.
+- intentAccuracy: whether Router selected the expected intent.
+- toolHitRate: whether actual tools include expected tools.
+- ragUsageAccuracy: whether RAG usage matches expectation.
+- citationRate: whether RAG-required cases include sources.
+- keywordHitRate: whether answer/evidence/sources/tools contain expected keywords.
+- averageRagScore: average score of retrieved RAG chunks.
+- fallbackCaseCount: number of fallback / general chat cases.
+- fallbackRate: cases that use mock fallback or real text fallback.
+- packCoverage: case distribution by knowledge pack.
 
 ## Failure Buckets
 
-V0.6.1 adds failure bucket analysis:
+- scenario_mismatch
+- intent_mismatch
+- tool_mismatch
+- rag_usage_mismatch
+- keyword_miss
+- citation_miss
+- pipeline_error
 
-- `scenario_mismatch`
-- `intent_mismatch`
-- `tool_mismatch`
-- `rag_usage_mismatch`
-- `keyword_miss`
-- `citation_miss`
-- `pipeline_error`
+## V0.9 Mock Full Evaluation Result
 
-Each failed case includes `failureReasons` and `failureSummary`, so the issue can be traced back to Router, RAG, Tool, keyword coverage, citation, or pipeline execution.
+- quick: 15/15, passRate 100%
+- standard: 30/30, passRate 100%
+- full: 50/50, passRate 100%
+- full averageRagScore: 21
 
-## V0.6.1 Mock Evaluation Result
-
-- total: 15
-- passed: 15
-- passRate: 100%
-- scenarioAccuracy: 100%
-- intentAccuracy: 100%
-- toolHitRate: 100%
-- ragUsageAccuracy: 100%
-- citationRate: 100%
-- keywordHitRate: 100%
-
-## Real Mode
-
-Real mode is optional because it consumes API quota. It is useful for checking whether the real LLM can produce stable structured output. If real JSON fails, the system attempts repair and then falls back gracefully.
+Real mode remains optional because it consumes API quota. It is useful for checking whether the real LLM can produce stable structured output.

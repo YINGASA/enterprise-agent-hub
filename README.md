@@ -4,7 +4,7 @@
 
 Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
 
-> Current status: V0.7 documentation and deployment preparation. The project uses local mock data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+> Current status: V0.9 knowledge packs, pack-aware mock RAG, and 50-case evaluation suite. The project uses local mock data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
 
 ## Project Positioning
 
@@ -22,6 +22,9 @@ The goal is to show the engineering loop of an AI application, not only a single
 
 ## Core Features
 
+- Knowledge Packs: 4 built-in mock knowledge bases with 42 documents
+- Pack-aware keyword RAG with title/category/tag/pack weighting
+- 50-case Agent Evaluation Suite with quick / standard / full modes
 - Multi-scenario Agent workspace
 - Enterprise knowledge base Q&A
 - E-commerce customer support and after-sales handling
@@ -132,10 +135,10 @@ Do not commit `.env.local`.
 
 ## Evaluation Results
 
-Current V0.6.1 Mock full-suite evaluation:
+Current V0.9 Mock full-suite evaluation:
 
-- total: 15
-- passed: 15
+- total: 50
+- passed: 50
 - passRate: 100%
 - scenarioAccuracy: 100%
 - intentAccuracy: 100%
@@ -166,7 +169,7 @@ This project is ready for Vercel-style deployment:
 
 ## Current Limitations
 
-- RAG is currently keyword-based mock retrieval, not vector search.
+- RAG is currently pack-aware keyword-based mock retrieval, not vector search.
 - Tool Calling is local tool orchestration, not model-native `tool_calls`.
 - Data is local mock data, not a real database.
 - Uploaded files, permissions, audit logs, and persistent evaluation history are planned future work.

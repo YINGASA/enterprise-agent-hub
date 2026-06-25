@@ -7,7 +7,7 @@ export default function ChatPage() {
       <PageHeader
         eyebrow="Agent Workspace"
         title="聊天工作台"
-        description="V0.5.3 支持 Mock / Real API 双模式，Real 模式通过服务端 API Route 调用 OpenAI-compatible 模型，并保留 RAG、工具调用、结构化输出和 fallback 机制。"
+        description="支持自由提问的企业 Agent 工作台。系统会通过 Agent Router 判断业务场景，结合 RAG 知识库、业务工具和 Real API / Mock 模式生成可追溯回答。"
       />
       <AgentWorkspace />
     </div>

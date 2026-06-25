@@ -24,6 +24,11 @@ type ParsedToolInput = {
   note?: string;
 };
 
+type ClarificationState = Pick<
+  AgentStructuredOutput,
+  "needsClarification" | "missingFields" | "clarificationQuestion" | "usedDemoData" | "dataBoundaryNote"
+>;
+
 const demoOrderId = "EAH20260618008";
 const demoProductId = "SKU-AGENT-PLUS";
 
@@ -34,6 +39,52 @@ function hasAny(text: string, keywords: string[]) {
 
 function uniqueTools(tools: ToolName[]) {
   return Array.from(new Set(tools));
+}
+
+function getExplicitOrderId(question: string) {
+  return question.match(/(?:\u8ba2\u5355|order)\s*([A-Za-z0-9-]+)/i)?.[1] ?? null;
+}
+
+function getExplicitProductId(question: string) {
+  return question.match(/(?:\u5546\u54c1|sku|product)\s*([A-Za-z0-9-]+)/i)?.[1] ?? null;
+}
+
+function hasRefundIntent(question: string) {
+  return hasAny(question, ["\u9000\u8d27", "\u9000\u6b3e", "\u552e\u540e", "\u600e\u4e48\u9000", "\u60f3\u9000", "\u4e0d\u559c\u6b22", "7\u5929\u65e0\u7406\u7531", "\u4e03\u5929\u65e0\u7406\u7531"]);
+}
+
+function buildClarificationState(route: AgentRoute, question: string): ClarificationState {
+  if ((route.intent === "policy_check" || route.intent === "order_query") && hasRefundIntent(question) && !getExplicitOrderId(question)) {
+    return {
+      needsClarification: true,
+      missingFields: ["orderId", "signedAt", "isOpened"],
+      clarificationQuestion: "\u8bf7\u63d0\u4f9b\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u548c\u5546\u54c1\u662f\u5426\u62c6\u5c01\uff0c\u6211\u53ef\u4ee5\u7ee7\u7eed\u5e2e\u4f60\u5224\u65ad\u662f\u5426\u53ef\u9000\u3002",
+      usedDemoData: false,
+      dataBoundaryNote: "\u5f53\u524d\u672a\u83b7\u53d6\u5230\u8ba2\u5355\u53f7\u548c\u7b7e\u6536\u65f6\u95f4\uff0c\u56e0\u6b64\u53ea\u80fd\u63d0\u4f9b\u901a\u7528\u9000\u8d27\u6d41\u7a0b\uff0c\u4e0d\u80fd\u5224\u65ad\u8be5\u8ba2\u5355\u4e00\u5b9a\u53ef\u9000\u3002",
+    };
+  }
+
+  if (route.intent === "product_query" && !getExplicitProductId(question)) {
+    return {
+      needsClarification: true,
+      missingFields: ["productId", "productName"],
+      clarificationQuestion: "\u8bf7\u63d0\u4f9b\u5546\u54c1\u7f16\u53f7\u6216\u5546\u54c1\u540d\u79f0\uff0c\u6211\u53ef\u4ee5\u7ee7\u7eed\u5e2e\u4f60\u67e5\u8be2\u5e93\u5b58\u3001\u5c3a\u7801\u5efa\u8bae\u6216\u4ef7\u683c\u4fe1\u606f\u3002",
+      usedDemoData: false,
+      dataBoundaryNote: "\u5f53\u524d\u672a\u83b7\u53d6\u5230\u5546\u54c1\u7f16\u53f7\u6216\u5546\u54c1\u540d\u79f0\uff0c\u56e0\u6b64\u4e0d\u80fd\u5224\u65ad\u5177\u4f53\u5546\u54c1\u5e93\u5b58\u6216\u5c3a\u7801\u5efa\u8bae\u3002",
+    };
+  }
+
+  if (route.intent === "after_sale_reply" && hasRefundIntent(question) && !getExplicitOrderId(question)) {
+    return {
+      needsClarification: true,
+      missingFields: ["orderId", "signedAt", "isOpened"],
+      clarificationQuestion: "\u8bf7\u8865\u5145\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u548c\u5546\u54c1\u662f\u5426\u62c6\u5c01\uff1b\u5728\u6b64\u4e4b\u524d\u53ea\u80fd\u751f\u6210\u901a\u7528\u5ba2\u670d\u56de\u590d\u3002",
+      usedDemoData: false,
+      dataBoundaryNote: "\u5f53\u524d\u7f3a\u5c11\u8ba2\u5355\u72b6\u6001\u4fe1\u606f\uff0c\u53ea\u80fd\u63d0\u4f9b\u901a\u7528\u552e\u540e\u8bdd\u672f\uff0c\u4e0d\u80fd\u627f\u8bfa\u8be5\u8ba2\u5355\u4e00\u5b9a\u53ef\u9000\u3002",
+    };
+  }
+
+  return { needsClarification: false, usedDemoData: false };
 }
 
 function nowDuration(start: number) {
@@ -52,17 +103,19 @@ function makeStep(params: Omit<AgentStep, "durationMs"> & { startedAt: number })
   };
 }
 
-export function selectTools(route: AgentRoute, _question: string): ToolName[] {
+export function selectTools(route: AgentRoute, question: string): ToolName[] {
+  const clarification = buildClarificationState(route, question);
+
   if (route.intent === "order_query") {
-    return ["queryOrder"];
+    return clarification.needsClarification ? [] : ["queryOrder"];
   }
 
   if (route.intent === "product_query") {
-    return ["queryProduct"];
+    return clarification.needsClarification ? [] : ["queryProduct"];
   }
 
   if (route.intent === "policy_check") {
-    return ["queryOrder", "searchPolicy"];
+    return clarification.needsClarification ? ["searchPolicy"] : ["queryOrder", "searchPolicy"];
   }
 
   if (route.intent === "jd_match") {
@@ -74,7 +127,7 @@ export function selectTools(route: AgentRoute, _question: string): ToolName[] {
   }
 
   if (route.intent === "after_sale_reply") {
-    return ["generateCustomerReply"];
+    return clarification.needsClarification ? [] : ["generateCustomerReply"];
   }
 
   return route.toolsNeeded;
@@ -94,6 +147,28 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
+  if (hasAny(q, ["Prompt", "提示词", "RAG", "检索质量", "Agent", "工具调用", "结构化输出", "JSON", "fallback", "API Key", "评测集", "可观测性", "日志", "Schema", "模型返回"]) && !hasAny(q, ["JD", "岗位", "岗", "简历", "匹配", "面试", "求职", "招聘", "实习生"])) {
+    return {
+      scenario: "general",
+      intent: "knowledge_qa",
+      needRag: true,
+      toolsNeeded: [],
+      confidence: 0.82,
+      reason: "命中 AI 应用工程规范关键词，需要检索 ai-engineering 知识库包。",
+    };
+  }
+
+  if (hasAny(q, ["客户数据", "信息安全", "脱敏", "权限", "合同", "采购", "项目立项", "SLA", "入职", "离职", "差旅", "加班", "调休", "P0 工单", "P1 工单", "P2 工单", "P3 工单", "必须响应", "多久响应"])) {
+    return {
+      scenario: "enterprise",
+      intent: "knowledge_qa",
+      needRag: true,
+      toolsNeeded: [],
+      confidence: 0.86,
+      reason: "命中企业制度、流程或安全关键词，需要优先检索企业制度知识库。",
+    };
+  }
+
   if (hasAny(q, ["创建工单", "转人工", "投诉", "优先级", "工单"])) {
     const scenario: AgentScenario = hasAny(q, ["售后", "订单", "退货", "客服", "客户"]) ? "ecommerce" : "enterprise";
     return {
@@ -106,7 +181,29 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["商品", "库存", "尺码", "价格", "推荐码数", "码数"])) {
+  if (hasAny(q, ["客服回复", "怎么回复", "回复里", "话术"])) {
+    return {
+      scenario: "ecommerce",
+      intent: "after_sale_reply",
+      needRag: true,
+      toolsNeeded: ["generateCustomerReply"],
+      confidence: 0.87,
+      reason: "命中客服回复或话术关键词，需要结合售后规则生成回复。",
+    };
+  }
+
+  if (hasAny(q, ["质量问题", "售后流程", "举证", "凭证"])) {
+    return {
+      scenario: "ecommerce",
+      intent: "policy_check",
+      needRag: true,
+      toolsNeeded: ["queryOrder", "searchPolicy"],
+      confidence: 0.88,
+      reason: "命中质量问题或售后流程关键词，需要结合订单和售后政策判断。",
+    };
+  }
+
+  if (hasAny(q, ["商品", "库存", "尺码", "价格", "推荐码数", "码数", "缺货", "换货"])) {
     const intent: AgentIntent = hasAny(q, ["怎么回复", "客户说", "回复"]) ? "after_sale_reply" : "product_query";
     return {
       scenario: "ecommerce",
@@ -118,7 +215,7 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["订单", "退货", "退款", "售后", "签收", "拆封", "能不能退"])) {
+  if (hasAny(q, ["订单", "退货", "退款", "售后", "签收", "拆封", "能不能退", "物流", "七天", "7 天", "7天", "质量问题", "客服", "客户"])) {
     const intent: AgentIntent = hasAny(q, ["什么时候", "状态", "物流", "发货"]) ? "order_query" : "policy_check";
     return {
       scenario: "ecommerce",
@@ -141,7 +238,7 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["报销", "年假", "请假", "制度", "信息安全", "公司", "材料"])) {
+  if (hasAny(q, ["报销", "年假", "请假", "制度", "信息安全", "公司", "材料", "差旅", "合同", "采购", "项目立项", "SLA", "入职", "离职", "客户数据", "审批"])) {
     return {
       scenario: "enterprise",
       intent: "knowledge_qa",
@@ -172,8 +269,19 @@ function selectToolsForIntent(intent: AgentIntent): ToolName[] {
   return [];
 }
 
+function inferRagPackId(question: string, route: AgentRoute) {
+  if (hasAny(question, ["Prompt", "提示词", "RAG", "检索质量", "Agent", "工具调用", "结构化输出", "JSON", "fallback", "API Key", "评测集", "可观测性", "日志", "Schema", "模型返回"])) {
+    return "ai-engineering" as const;
+  }
+
+  if (route.scenario === "enterprise") return "enterprise-policy" as const;
+  if (route.scenario === "ecommerce") return "ecommerce-support" as const;
+  if (route.scenario === "recruitment") return "recruitment-career" as const;
+  return undefined;
+}
+
 function extractOrderId(question: string): ParsedToolInput {
-  const explicit = question.match(/(?:订单|order)\s*([A-Za-z0-9-]+)/i)?.[1];
+  const explicit = getExplicitOrderId(question);
   if (explicit?.includes("EAH")) {
     return { input: { orderId: explicit } };
   }
@@ -181,18 +289,18 @@ function extractOrderId(question: string): ParsedToolInput {
   if (explicit) {
     return {
       input: { orderId: demoOrderId },
-      note: `从问题中提取到订单号 ${explicit}，当前 mock 数据中映射为 demo 订单 ${demoOrderId}。`,
+      note: `\u7528\u6237\u63d0\u4f9b\u4e86\u8ba2\u5355\u53f7 ${explicit}\uff0c\u5f53\u524d mock \u6570\u636e\u6620\u5c04\u4e3a\u6f14\u793a\u8ba2\u5355 ${demoOrderId}\u3002`,
     };
   }
 
   return {
-    input: { orderId: demoOrderId },
-    note: `未提取到订单号，使用 fallback demo input: ${demoOrderId}。`,
+    input: {},
+    note: "\u7f3a\u5c11\u8ba2\u5355\u53f7\uff0c\u5df2\u8df3\u8fc7\u8ba2\u5355\u67e5\u8be2\u5de5\u5177\uff0c\u907f\u514d\u628a demo \u8ba2\u5355\u5f53\u4f5c\u771f\u5b9e\u4e1a\u52a1\u4e8b\u5b9e\u3002",
   };
 }
 
 function extractProductId(question: string): ParsedToolInput {
-  const explicit = question.match(/(?:商品|sku|product)\s*([A-Za-z0-9-]+)/i)?.[1];
+  const explicit = getExplicitProductId(question);
   if (explicit?.startsWith("SKU-")) {
     return { input: { productId: explicit } };
   }
@@ -200,13 +308,13 @@ function extractProductId(question: string): ParsedToolInput {
   if (explicit) {
     return {
       input: { productId: demoProductId },
-      note: `从问题中提取到商品号 ${explicit}，当前 mock 数据中映射为 demo 商品 ${demoProductId}。`,
+      note: `\u7528\u6237\u63d0\u4f9b\u4e86\u5546\u54c1\u53f7 ${explicit}\uff0c\u5f53\u524d mock \u6570\u636e\u6620\u5c04\u4e3a\u6f14\u793a\u5546\u54c1 ${demoProductId}\u3002`,
     };
   }
 
   return {
-    input: { productId: demoProductId },
-    note: `未提取到商品号，使用 fallback demo input: ${demoProductId}。`,
+    input: {},
+    note: "\u7f3a\u5c11\u5546\u54c1\u7f16\u53f7\u6216\u5546\u54c1\u540d\u79f0\uff0c\u5df2\u8df3\u8fc7\u5546\u54c1\u67e5\u8be2\u5de5\u5177\uff0c\u907f\u514d\u628a demo \u5546\u54c1\u5f53\u4f5c\u771f\u5b9e\u4e1a\u52a1\u4e8b\u5b9e\u3002",
   };
 }
 
@@ -220,7 +328,7 @@ function parseToolInput(tool: ToolName, question: string): ParsedToolInput {
   }
 
   if (tool === "searchPolicy") {
-    const keyword = hasAny(question, ["退货", "退款", "签收", "拆封"]) ? "退货" : question;
+    const keyword = hasRefundIntent(question) ? "\u9000\u8d27 \u9000\u6b3e \u552e\u540e 7\u5929\u65e0\u7406\u7531 \u7b7e\u6536 \u62c6\u5c01" : question;
     return { input: { keyword } };
   }
 
@@ -245,9 +353,9 @@ function parseToolInput(tool: ToolName, question: string): ParsedToolInput {
   const productInput = extractProductId(question);
   return {
     input: {
-      type: hasAny(question, ["尺码", "码数"]) ? "size_advice" : hasAny(question, ["质量"]) ? "quality_issue" : "return",
-      productId: String(productInput.input.productId ?? demoProductId),
-      customerName: "客户",
+      type: hasAny(question, ["\u5c3a\u7801", "\u7801\u6570"]) ? "size_advice" : hasAny(question, ["\u8d28\u91cf"]) ? "quality_issue" : "return",
+      productId: typeof productInput.input.productId === "string" ? productInput.input.productId : undefined,
+      customerName: "\u5ba2\u6237",
     },
     note: productInput.note,
   };
@@ -287,10 +395,19 @@ export function generateMockAgentFinalAnswer(
     ...toolResults.map(summarizeToolResult),
   ];
   const sources = ragAnswer?.sources.map((source) => source.title) ?? [];
+  const clarification = buildClarificationState(route, question);
 
   let finalAnswer = "当前问题没有命中明确业务流程。根据现有 mock-agent 规则，我还不能确定答案，需要补充资料或改写问题。";
 
-  if (route.intent === "knowledge_qa") {
+  if (clarification.needsClarification) {
+    if (route.intent === "product_query") {
+      finalAnswer = "\u6211\u73b0\u5728\u8fd8\u4e0d\u80fd\u67e5\u8be2\u5177\u4f53\u5546\u54c1\u5e93\u5b58\u6216\u5c3a\u7801\u5efa\u8bae\uff0c\u56e0\u4e3a\u95ee\u9898\u91cc\u6ca1\u6709\u5546\u54c1\u7f16\u53f7\u6216\u5546\u54c1\u540d\u79f0\u3002\u8bf7\u8865\u5145\u5546\u54c1\u7f16\u53f7\u6216\u540d\u79f0\u540e\uff0c\u6211\u53ef\u4ee5\u7ee7\u7eed\u67e5\u8be2\u3002\u5f53\u524d\u53ea\u80fd\u7ed9\u51fa\u901a\u7528\u5efa\u8bae\uff1a\u5148\u786e\u8ba4\u5546\u54c1\u6b3e\u5f0f\u3001\u89c4\u683c\u3001\u989c\u8272\u548c\u5c3a\u7801\uff0c\u518d\u6838\u5bf9\u5e93\u5b58\u72b6\u6001\u3002";
+    } else if (route.intent === "after_sale_reply") {
+      finalAnswer = "\u53ef\u4ee5\u5148\u7ed9\u5ba2\u6237\u4e00\u6bb5\u901a\u7528\u56de\u590d\uff0c\u4f46\u73b0\u5728\u7f3a\u5c11\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u548c\u5546\u54c1\u662f\u5426\u62c6\u5c01\uff0c\u4e0d\u80fd\u627f\u8bfa\u4e00\u5b9a\u53ef\u9000\u3002\u5efa\u8bae\u56de\u590d\uff1a\u6211\u4eec\u53ef\u4ee5\u5148\u5e2e\u60a8\u6838\u5bf9\u552e\u540e\u89c4\u5219\uff0c\u8bf7\u63d0\u4f9b\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u4ee5\u53ca\u5546\u54c1\u662f\u5426\u5df2\u62c6\u5c01\uff1b\u5982\u679c\u7b26\u5408 7 \u5929\u65e0\u7406\u7531\u6216\u8d28\u91cf\u95ee\u9898\u89c4\u5219\uff0c\u53ef\u5728\u8ba2\u5355\u8be6\u60c5\u4e2d\u7533\u8bf7\u552e\u540e/\u9000\u6b3e\u3002";
+    } else {
+      finalAnswer = "\u5982\u679c\u662f\u56e0\u4e3a\u4e0d\u559c\u6b22\u60f3\u9000\u6b3e\uff0c\u901a\u5e38\u9700\u8981\u5148\u786e\u8ba4\u662f\u5426\u7b26\u5408 7 \u5929\u65e0\u7406\u7531\u9000\u8d27\u89c4\u5219\u3002\u5f53\u524d\u4f60\u6ca1\u6709\u63d0\u4f9b\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u548c\u5546\u54c1\u662f\u5426\u62c6\u5c01\uff0c\u6240\u4ee5\u6211\u4e0d\u80fd\u76f4\u63a5\u5224\u65ad\u8be5\u8ba2\u5355\u4e00\u5b9a\u53ef\u9000\u3002\u4e00\u822c\u6d41\u7a0b\u662f\uff1a\u8fdb\u5165\u8ba2\u5355\u8be6\u60c5\uff0c\u9009\u62e9\u7533\u8bf7\u552e\u540e/\u9000\u6b3e\uff0c\u586b\u5199\u9000\u8d27\u539f\u56e0\uff0c\u7b49\u5f85\u5546\u5bb6\u5ba1\u6838\uff0c\u901a\u8fc7\u540e\u6309\u8981\u6c42\u5bc4\u56de\u5546\u54c1\u3002\u8bf7\u8865\u5145\u8ba2\u5355\u53f7\u548c\u5546\u54c1\u72b6\u6001\uff0c\u6211\u53ef\u4ee5\u7ee7\u7eed\u5e2e\u4f60\u5224\u65ad\u3002";
+    }
+  } else if (route.intent === "knowledge_qa") {
     finalAnswer = ragAnswer?.answer ?? "根据当前知识库资料，我还不能确定答案，需要补充相关企业制度文档。";
   } else if (route.intent === "policy_check") {
     finalAnswer = "该订单需要结合订单状态、签收时间、是否拆封以及售后规则判断。mock-agent 已调用订单查询和政策检索，请参考右侧工具结果与来源引用。";
@@ -320,7 +437,12 @@ export function generateMockAgentFinalAnswer(
       sources,
       confidence: route.confidence,
       riskLevel,
-      nextAction,
+      nextAction: clarification.needsClarification ? clarification.clarificationQuestion ?? nextAction : nextAction,
+      needsClarification: clarification.needsClarification,
+      missingFields: clarification.missingFields,
+      clarificationQuestion: clarification.clarificationQuestion,
+      usedDemoData: clarification.usedDemoData,
+      dataBoundaryNote: clarification.dataBoundaryNote,
     },
   };
 }
@@ -351,7 +473,7 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
   const ragStart = Date.now();
   if (route.needRag) {
     const ragQuestion = route.intent === "policy_check" ? `${question} 退货 售后 签收 拆封 7天无理由 质量问题` : question;
-    ragAnswer = runMockRagPipeline(ragQuestion, documents);
+    ragAnswer = runMockRagPipeline(ragQuestion, documents, { topK: 4, packId: inferRagPackId(question, route), scenario: route.scenario });
     steps.push(
       makeStep({
         id: "step-rag",
