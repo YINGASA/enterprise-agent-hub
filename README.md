@@ -1,0 +1,170 @@
+# Enterprise Agent Hub
+
+企业知识库与业务流程自动化 Agent 平台
+
+Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
+
+> Current status: V0.7 documentation and deployment preparation. The project uses local mock data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+
+## Project Positioning
+
+Enterprise Agent Hub is a lightweight enterprise AI application platform based on:
+
+- RAG knowledge retrieval
+- Agent Router
+- Tool Calling
+- OpenAI-compatible API
+- JSON structured output
+- JSON repair and fallback
+- Agent Evaluation Dashboard
+
+The goal is to show the engineering loop of an AI application, not only a single model call.
+
+## Core Features
+
+- Multi-scenario Agent workspace
+- Enterprise knowledge base Q&A
+- E-commerce customer support and after-sales handling
+- Recruitment and JD matching Agent
+- RAG retrieval with source citations
+- Rule-based Agent Router
+- Local Tool Calling orchestration
+- DeepSeek / OpenAI-compatible Real API mode
+- Mock / Real dual mode
+- JSON structured output
+- JSON parse, repair, and text fallback
+- LLM connectivity diagnostics with optional proxy support
+- Agent Evaluation Dashboard with pass rate, routing accuracy, tool hit rate, citation rate, and fallback rate
+
+## Tech Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- OpenAI-compatible Chat Completions API
+- DeepSeek-compatible configuration
+- undici ProxyAgent for optional server-side proxy support
+- Local mock data
+- Vercel-ready deployment shape
+
+## Architecture
+
+```mermaid
+flowchart TD
+  User[User Input] --> Router[Agent Router]
+  Router --> NeedRag{Need RAG?}
+  NeedRag -->|Yes| RAG[Keyword RAG Retrieval]
+  NeedRag -->|No| SkipRag[Skip RAG]
+  Router --> Tools[Tool Selection]
+  Tools --> ToolRun[Local Tool Calling]
+  RAG --> LLM[LLM Structured Generation]
+  SkipRag --> LLM
+  ToolRun --> LLM
+  LLM --> Parse[JSON Parse]
+  Parse -->|Success| UI[Frontend Agent Trace]
+  Parse -->|Failed| Repair[JSON Repair Retry]
+  Repair -->|Success| UI
+  Repair -->|Failed| TextFallback[Real Text Fallback]
+  TextFallback --> UI
+  UI --> Eval[Evaluation Dashboard]
+```
+
+## Pages
+
+- `/` - Project overview and core capabilities
+- `/chat` - Agent workspace with Mock / Real API mode, Router, RAG, Tools, LLM step, and structured output
+- `/knowledge` - Knowledge base documents, chunks, and citations using local state/mock data
+- `/tools` - Tool center with runnable local tool examples
+- `/scenarios` - Scenario templates aligned with Agent Router intents and tools
+- `/evaluation` - Agent Evaluation Dashboard for batch evaluation and failure analysis
+- `/about` - Project showcase, architecture, version roadmap, metrics, and resume highlights
+
+## Local Development
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Environment Variables
+
+Mock mode does not require an API key. Real API mode reads environment variables only from server-side API routes.
+
+Create `.env.local` locally based on `.env.example`:
+
+```env
+AI_API_KEY=your_api_key_here
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-v4-flash
+AI_PROVIDER=deepseek
+
+HTTPS_PROXY=
+HTTP_PROXY=
+ALL_PROXY=
+AI_REQUEST_TIMEOUT_MS=20000
+```
+
+Do not commit `.env.local`.
+
+## Mock / Real Mode
+
+- Mock mode: no API key required, deterministic local rules and mock data.
+- Real mode: calls OpenAI-compatible Chat Completions through `src/app/api/agent/route.ts`.
+- API keys are never exposed in browser-side code.
+- If the model response is not valid JSON, the system tries one JSON repair call.
+- If repair still fails, the UI uses the real text response and fallback structured output.
+- If network, HTTP, or config fails, the system falls back to mock-agent output.
+
+## Evaluation Results
+
+Current V0.6.1 Mock full-suite evaluation:
+
+- total: 15
+- passed: 15
+- passRate: 100%
+- scenarioAccuracy: 100%
+- intentAccuracy: 100%
+- toolHitRate: 100%
+- ragUsageAccuracy: 100%
+- citationRate: 100%
+- keywordHitRate: 100%
+
+The evaluation dashboard also reports failure buckets such as scenario mismatch, intent mismatch, tool mismatch, RAG usage mismatch, keyword miss, citation miss, and pipeline error.
+
+## Security Notes
+
+- `.env.local` is ignored and must not be committed.
+- API keys are read only on the server.
+- Browser pages only display masked key diagnostics.
+- Proxy variables are intended for local development and should be configured in the runtime environment when needed.
+- Mock data is synthetic and does not contain real enterprise or personal data.
+
+## Vercel Deployment
+
+This project is ready for Vercel-style deployment:
+
+1. Push the repository after review.
+2. Import the project in Vercel.
+3. Configure environment variables in Vercel Project Settings.
+4. Run the default build command: `npm run build`.
+5. Keep Mock mode available for demos even when Real API credentials are not configured.
+
+## Current Limitations
+
+- RAG is currently keyword-based mock retrieval, not vector search.
+- Tool Calling is local tool orchestration, not model-native `tool_calls`.
+- Data is local mock data, not a real database.
+- Uploaded files, permissions, audit logs, and persistent evaluation history are planned future work.
+
+## Roadmap
+
+- Real file upload and document parsing
+- Embeddings and vector database integration
+- pgvector / Qdrant support
+- Rerank and citation quality scoring
+- Real model-native Tool Calls
+- Evaluation history and trend comparison
+- User permissions and audit logs
+- Production observability and tracing

@@ -1,4 +1,4 @@
-﻿import { PageHeader } from "@/components/PageHeader";
+import { PageHeader } from "@/components/PageHeader";
 
 const routerScenarios = [
   {
@@ -11,13 +11,13 @@ const routerScenarios = [
   {
     name: "电商客服与售后 Agent",
     description: "处理订单、退货、退款、售后、商品库存、尺码建议和客服回复生成。",
-    intents: ["policy_check", "order_query", "product_query", "after_sale_reply"],
+    intents: ["policy_check", "order_query", "product_query", "after_sale_reply", "ticket_create"],
     tools: ["queryOrder", "queryProduct", "searchPolicy", "generateCustomerReply", "createTicket"],
     rag: "true",
   },
   {
     name: "招聘求职 Agent",
-    description: "分析 AI 应用开发岗位、JD 与 mock 简历的匹配度，输出能力差距和建议。",
+    description: "分析 AI 应用开发岗位、JD 与 mock 简历的匹配度，输出能力差距、关键词和面试准备建议。",
     intents: ["jd_match"],
     tools: ["analyzeJD"],
     rag: "optional",
@@ -30,7 +30,7 @@ export default function ScenariosPage() {
       <PageHeader
         eyebrow="Scenario Templates"
         title="场景模板"
-        description="V0.4 将场景模板和 Agent Router 对齐，每个场景都明确 intents、tools 和是否使用 RAG。"
+        description="当前场景模板已和 Agent Router、Tool Calling、RAG 使用策略及 Evaluation Dashboard 对齐，便于展示多场景 Agent 编排能力。"
       />
       <div className="grid gap-5 lg:grid-cols-3">
         {routerScenarios.map((scenario) => (
