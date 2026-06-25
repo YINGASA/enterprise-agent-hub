@@ -7,7 +7,7 @@ export default function ChatPage() {
       <PageHeader
         eyebrow="Agent Workspace"
         title="聊天工作台"
-        description="V0.9 优化自由提问体验：示例问题按企业制度、电商客服、招聘求职、AI 工程规范和兜底测试分组，Agent 会展示命中的知识库包、RAG 评分原因、fallback 状态和回答边界。"
+        description="支持自由提问的企业 Agent 工作台。系统会通过 Agent Router 判断业务场景，结合 RAG 知识库、业务工具和 Real API / Mock 模式生成可追溯回答。"
       />
       <AgentWorkspace />
     </div>
