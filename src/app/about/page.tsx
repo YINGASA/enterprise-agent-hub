@@ -17,6 +17,7 @@ const versions = [
   { version: "V0.5", title: "Real API", body: "接入 OpenAI-compatible API，支持 DeepSeek、代理诊断、JSON repair 和 fallback。" },
   { version: "V0.6", title: "Evaluation Dashboard", body: "内置 15 条评测集，统计路由、意图、工具、RAG、引用、关键词和 fallback 指标。" },
   { version: "V0.7", title: "项目包装", body: "完善 README、架构文档、评测文档、简历 bullet 和面试讲解稿，准备 GitHub 与 Vercel 展示。" },
+  { version: "V0.8", title: "发布准备", body: "补充截图清单、发布检查清单和最终简历推荐版，完成 GitHub / Vercel 上线前收口。" },
 ];
 
 const resumeHighlights = [

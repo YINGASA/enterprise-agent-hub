@@ -79,6 +79,19 @@ flowchart TD
 - `/evaluation` - Agent Evaluation Dashboard for batch evaluation and failure analysis
 - `/about` - Project showcase, architecture, version roadmap, metrics, and resume highlights
 
+## Screenshots / 项目截图
+
+Screenshots are intentionally not embedded yet, so the README does not contain broken image links before release assets are captured.
+
+Recommended screenshots:
+
+- Chat Agent Pipeline: show Router, RAG, Tools, LLM step, structured output, and Real API response.
+- Knowledge Base: show default documents, added documents, chunks, keywords, and source citations.
+- Tool Center: show runnable tool cards and formatted JSON results.
+- Evaluation Dashboard: show 15/15 mock evaluation result, metrics, and failure analysis area.
+
+Suggested capture plan is documented in `docs/screenshots.md`. When images are ready, place them under `public/screenshots/`.
+
 ## Local Development
 
 ```bash
