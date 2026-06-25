@@ -4,7 +4,7 @@
 
 Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
 
-> Current status: V0.9 knowledge packs, pack-aware mock RAG, and 50-case evaluation suite. The project uses local mock data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+> Current status: V1.0 adds local knowledge import on top of V0.9 knowledge packs, pack-aware mock RAG, and the 50-case evaluation suite. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
 
 ## Project Positioning
 
@@ -76,7 +76,7 @@ flowchart TD
 
 - `/` - Project overview and core capabilities
 - `/chat` - Agent workspace with Mock / Real API mode, Router, RAG, Tools, LLM step, and structured output
-- `/knowledge` - Knowledge base documents, chunks, and citations using local state/mock data
+- `/knowledge` - Hybrid knowledge library with default packs, local paste/file import, generated chunks, and source citations
 - `/tools` - Tool center with runnable local tool examples
 - `/scenarios` - Scenario templates aligned with Agent Router intents and tools
 - `/evaluation` - Agent Evaluation Dashboard for batch evaluation and failure analysis
@@ -89,7 +89,7 @@ Screenshots are intentionally not embedded yet, so the README does not contain b
 Recommended screenshots:
 
 - Chat Agent Pipeline: show Router, RAG, Tools, LLM step, structured output, and Real API response.
-- Knowledge Base: show default documents, added documents, chunks, keywords, and source citations.
+- Knowledge Base: show default documents, imported local documents, chunks, keywords, source types, and citations.
 - Tool Center: show runnable tool cards and formatted JSON results.
 - Evaluation Dashboard: show 15/15 mock evaluation result, metrics, and failure analysis area.
 

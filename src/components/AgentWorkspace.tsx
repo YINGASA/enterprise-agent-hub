@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { SourceList } from "@/components/SourceList";
-import type { AgentApiResponse, LlmMode, ToolName } from "@/types";
+import { readUserKnowledgeDocuments } from "@/lib/knowledge/storage";
+import type { AgentApiResponse, KnowledgeSourceType, LlmMode, ToolName } from "@/types";
 
 const exampleGroups = [
   { title: "企业制度", defaultOpen: true, questions: ["我出差回来想报销，应该准备哪些材料？", "年假连续休 6 天需要提前多久申请？", "客户数据要外发给供应商，需要注意什么？", "采购一个 SaaS 工具要走什么流程？", "合同盖章前需要哪些审批？", "P1 工单多久必须响应？"] },
@@ -41,6 +42,14 @@ function fieldLabel(field: string) {
   return labels[field] ?? field;
 }
 function unique(values: string[]) { return Array.from(new Set(values.filter(Boolean))); }
+function sourceTypeLabel(sourceType?: KnowledgeSourceType) {
+  const labels: Record<KnowledgeSourceType, string> = {
+    default: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93",
+    user_upload: "\u7528\u6237\u4e0a\u4f20",
+    user_paste: "\u7528\u6237\u7c98\u8d34",
+  };
+  return sourceType ? labels[sourceType] ?? sourceType : "\u9ed8\u8ba4\u77e5\u8bc6\u5e93";
+}
 function packLabel(packId?: string) {
   const labels: Record<string, string> = { "enterprise-policy": "企业制度", "ecommerce-support": "电商客服与售后", "recruitment-career": "招聘求职", "ai-engineering": "AI 应用工程规范" };
   return packId ? labels[packId] ?? packId : "无";
@@ -65,7 +74,12 @@ export function AgentWorkspace() {
   const hitPacks = useMemo(() => unique(result?.ragAnswer?.retrievedChunks.map((item) => item.chunk.packId ?? "") ?? []), [result]);
   const topSources = result?.ragAnswer?.sources.slice(0, 3) ?? [];
   const topTools = result?.toolResults.slice(0, 3) ?? [];
-  const ragScores = result?.ragAnswer?.retrievedChunks.map((item) => item.score) ?? [];
+  const retrievedChunks = result?.ragAnswer?.retrievedChunks ?? [];
+  const ragScores = retrievedChunks.map((item) => item.score);
+  const defaultHitCount = unique(retrievedChunks.filter((item) => (item.chunk.sourceType ?? "default") === "default").map((item) => item.chunk.documentId)).length;
+  const userHitCount = unique(retrievedChunks.filter((item) => item.chunk.sourceType === "user_upload" || item.chunk.sourceType === "user_paste").map((item) => item.chunk.documentId)).length;
+  const topSourceTypes = unique(retrievedChunks.slice(0, 5).map((item) => sourceTypeLabel(item.chunk.sourceType)));
+  const scoreReasons = unique(retrievedChunks.flatMap((item) => item.scoreReason ?? []).slice(0, 6));
   const maxRagScore = ragScores.length ? Math.max(...ragScores) : 0;
   const averageRagScore = ragScores.length ? Math.round(ragScores.reduce((sum, score) => sum + score, 0) / ragScores.length) : 0;
   const usedFallback = result ? result.api.responseMode === "fallback" || result.api.responseMode === "real_text_fallback" || result.route.intent === "general_chat" : false;
@@ -79,7 +93,8 @@ export function AgentWorkspace() {
     setClientError("");
     setExamplesPanelOpen(false);
     try {
-      const response = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, mode }) });
+      const userDocuments = readUserKnowledgeDocuments();
+      const response = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, mode, userDocuments }) });
       if (!response.ok) throw new Error("API request failed: " + response.status);
       setResult((await response.json()) as AgentApiResponse);
     } catch (error) {
@@ -138,7 +153,7 @@ export function AgentWorkspace() {
         {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">业务场景 / 任务意图</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{scenarioLabel(result.route.scenario)} / {intentLabel(result.route.intent)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">置信度 / 风险等级</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {riskLabel(result.structuredOutput.riskLevel)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">兜底回答 / 来源引用</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0} 条</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">调用工具</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
       </section>
 
-      {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">知识库与 RAG</h3><p className="mt-2 break-words text-sm text-ink-600">命中知识库包：{hitPacks.length ? hitPacks.map(packLabel).join("、") : "无"}</p><p className="mt-2 text-sm text-ink-600">最高分：{maxRagScore} · 平均分：{averageRagScore}</p><p className="mt-2 text-sm text-ink-500">回答边界：当前为 mock/keyword RAG，无来源时应补充知识库或业务工具。</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">Top 来源 / 工具</h3><div className="mt-3 space-y-2 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words">{source.title} · chunks {source.chunkIndexes.join(", ")}</p>) : <p>暂无来源</p>}{topTools.length ? topTools.map((tool) => <p key={tool.executedAt + tool.tool} className="break-words">{tool.tool}: {tool.status}</p>) : <p>暂无工具调用</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">LLM 状态摘要</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>requestMode：{result.api.requestedMode}</p><p>responseMode：{result.api.responseMode}</p><p>provider/model：{result.api.provider} / {result.api.model}</p><p>duration：{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "无"}</p><p className="break-words">errorType：{result.api.errorType ?? "无"}</p></div></article></section> : null}
+      {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"\u77e5\u8bc6\u5e93\u4e0e RAG"}</h3><p className="mt-2 break-words text-sm text-ink-600">{"\u547d\u4e2d\u77e5\u8bc6\u5e93\u5305\uff1a"}{hitPacks.length ? hitPacks.map(packLabel).join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u547d\u4e2d\uff1a"}{defaultHitCount}{" \u7bc7 \u00b7 \u7528\u6237\u6587\u6863\u547d\u4e2d\uff1a"}{userHitCount}{" \u7bc7"}</p><p className="mt-2 break-words text-sm text-ink-600">{"Top \u6765\u6e90\u7c7b\u578b\uff1a"}{topSourceTypes.length ? topSourceTypes.join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u6700\u9ad8\u5206\uff1a"}{maxRagScore}{" \u00b7 \u5e73\u5747\u5206\uff1a"}{averageRagScore}</p><p className="mt-2 break-words text-sm text-ink-500">{"\u8bc4\u5206\u539f\u56e0\uff1a"}{scoreReasons.length ? scoreReasons.join(" / ") : "\u6682\u65e0"}</p><p className="mt-2 text-sm text-ink-500">{"\u56de\u7b54\u8fb9\u754c\uff1a\u5f53\u524d\u4e3a mock/keyword RAG\uff0c\u65e0\u6765\u6e90\u65f6\u5e94\u8865\u5145\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u3002"}</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"Top \u6765\u6e90 / \u5de5\u5177"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words">{source.title}{" \u00b7 "}{sourceTypeLabel(source.sourceType)}{" \u00b7 chunks "}{source.chunkIndexes.join(", ")}</p>) : <p>{"\u6682\u65e0\u6765\u6e90"}</p>}{topTools.length ? topTools.map((tool) => <p key={tool.executedAt + tool.tool} className="break-words">{tool.tool}: {tool.status}</p>) : <p>{"\u6682\u65e0\u5de5\u5177\u8c03\u7528"}</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"LLM \u72b6\u6001\u6458\u8981"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>{"\u8bf7\u6c42\u6a21\u5f0f\uff1a"}{result.api.requestedMode}</p><p>{"\u54cd\u5e94\u6a21\u5f0f\uff1a"}{responseModeLabel(result.api.responseMode)}</p><p>provider/model: {result.api.provider} / {result.api.model}</p><p>{"\u8017\u65f6\uff1a"}{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "\u65e0"}</p><p className="break-words">{"\u9519\u8bef\u7c7b\u578b\uff1a"}{result.api.errorType ?? "\u65e0"}</p></div></article></section> : null}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">

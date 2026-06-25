@@ -31,7 +31,7 @@ flowchart TD
 
 Current RAG is intentionally lightweight:
 
-1. Load mock knowledge documents.
+1. Load default Knowledge Packs and optional user-imported local documents.
 2. Split documents into chunks.
 3. Extract simple keywords.
 4. Score chunks by keyword overlap, title hits, and category hits.
@@ -103,3 +103,15 @@ V0.9 organizes mock documents into four Knowledge Packs:
 - ai-engineering: Prompt, RAG quality, Agent tools, JSON output, fallback, API key security, evaluation and observability.
 
 The current RAG remains keyword/mock retrieval. The retriever now adds title, category, tags and preferred pack weighting, and each retrieved chunk exposes matched keywords and score reasons for UI inspection.
+
+## V1.0 Local Knowledge Import
+
+V1.0 adds a hybrid knowledge library:
+
+- Default Knowledge Packs remain bundled in source code and are read-only in the UI.
+- User documents can be pasted or imported from `.txt`, `.md`, `.json`, and `.csv` files.
+- Imported content is parsed in the browser and stored in `localStorage`; files are not uploaded to a server.
+- The browser sends sanitized user documents to `/api/agent` when running chat, so the server-side Agent pipeline can retrieve across both default and user knowledge for that request.
+- `/api/evaluation` intentionally ignores browser `localStorage` and uses only default documents for stable evaluation results.
+
+The retriever remains keyword-based. User-imported chunks receive a small source boost when relevant, but default Knowledge Pack chunks are still retained in TopK results. Future upgrades can replace this with embeddings, vector DB, rerank, and real document parsing for PDF/DOCX.

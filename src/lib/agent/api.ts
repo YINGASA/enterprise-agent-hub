@@ -1,7 +1,7 @@
 import { documents } from "@/data/mock";
 import { runAgentPipeline } from "@/lib/agent";
 import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
-import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStructuredOutput, LlmGenerateResult, LlmMessage, LlmMode, ToolName } from "@/types";
+import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStructuredOutput, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName } from "@/types";
 
 const validTools: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "analyzeJD", "generateCustomerReply"];
 
@@ -193,8 +193,9 @@ function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey
   };
 }
 
-export async function runAgentApiPipeline(question: string, requestedMode: LlmMode): Promise<AgentApiResponse> {
-  const pipeline = runAgentPipeline(question, documents);
+export async function runAgentApiPipeline(question: string, requestedMode: LlmMode, userDocuments: ImportedKnowledgeDocument[] = []): Promise<AgentApiResponse> {
+  const pipelineDocuments = [...documents, ...userDocuments];
+  const pipeline = runAgentPipeline(question, pipelineDocuments);
   const config = getLlmConfig();
 
   if (requestedMode === "mock") {
