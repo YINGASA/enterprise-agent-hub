@@ -99,7 +99,7 @@ export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3
     const packBoost = preferredPackId && chunk.packId === preferredPackId ? 3 : 0;
     const userSourceBoost = chunk.sourceType === "user_upload" || chunk.sourceType === "user_paste" ? 4 : 0;
     const score = matchedKeywords.length * 2 + titleHits * 3 + categoryHits * 2 + tagHits * 2 + packBoost + userSourceBoost;
-    const scoreReason = [matchedKeywords.length ? "keyword hits " + matchedKeywords.length : "no keyword hit", titleHits ? "title hits " + titleHits : "no title hit", categoryHits ? "category hits " + categoryHits : "no category hit", tagHits ? "tag hits " + tagHits : "no tag hit", packBoost ? "pack boost " + preferredPackId : "no pack boost", userSourceBoost ? "user imported document boost" : "default knowledge base"];
+    const scoreReason = [matchedKeywords.length ? "keyword hits " + matchedKeywords.length : "no keyword hit", titleHits ? "title hits " + titleHits : "no title hit", categoryHits ? "category hits " + categoryHits : "no category hit", tagHits ? "tag hits " + tagHits : "no tag hit", packBoost ? "pack boost " + preferredPackId : "no pack boost", userSourceBoost ? "user document boost" : "default knowledge base"];
     return { chunk, score, matchedKeywords: unique(matchedKeywords), scoreReason } satisfies RetrievedChunk;
   }).filter((item) => item.score >= 2).sort((left, right) => right.score - left.score).slice(0, topK);
 }
@@ -108,8 +108,8 @@ function buildSources(retrievedChunks: RetrievedChunk[]): RagAnswer["sources"] {
   const sourceMap = new Map<string, RagAnswer["sources"][number]>();
   for (const item of retrievedChunks) {
     const existing = sourceMap.get(item.chunk.documentId);
-    if (existing) { existing.chunkIndexes = unique([...existing.chunkIndexes.map(String), String(item.chunk.chunkIndex)]).map(Number); continue; }
-    sourceMap.set(item.chunk.documentId, { documentId: item.chunk.documentId, title: item.chunk.sourceTitle, category: item.chunk.category, packId: item.chunk.packId, sourceType: item.chunk.sourceType, chunkIndexes: [item.chunk.chunkIndex] });
+    if (existing) { existing.chunkIndexes = unique([...existing.chunkIndexes.map(String), String(item.chunk.chunkIndex)]).map(Number); existing.score = Math.max(existing.score ?? 0, item.score); existing.scoreReason = unique([...(existing.scoreReason ?? []), ...(item.scoreReason ?? [])]); existing.matchedKeywords = unique([...(existing.matchedKeywords ?? []), ...item.matchedKeywords]); continue; }
+    sourceMap.set(item.chunk.documentId, { documentId: item.chunk.documentId, title: item.chunk.sourceTitle, category: item.chunk.category, packId: item.chunk.packId, sourceType: item.chunk.sourceType, tags: item.chunk.tags, score: item.score, scoreReason: item.scoreReason, matchedKeywords: item.matchedKeywords, contentPreview: item.chunk.content.slice(0, 260), chunkIndexes: [item.chunk.chunkIndex] });
   }
   return Array.from(sourceMap.values());
 }

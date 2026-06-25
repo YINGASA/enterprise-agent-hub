@@ -4,7 +4,7 @@ The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as e
 
 ## V0.9 Dataset
 
-The built-in dataset now contains 50 cases:
+The built-in dataset now contains 58 cases after V1.1 demo scenario expansion:
 
 - 12 enterprise policy cases
 - 12 ecommerce support cases
@@ -16,9 +16,9 @@ The UI supports three suite sizes:
 
 - Quick: 15 cases
 - Standard: 30 cases
-- Full: 50 cases
+- Full: all current cases
 
-Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId.
+Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. V1.1 adds cases for IT/admin operations, ecommerce edge policies, recruitment matching, and AI engineering explainability.
 
 ## Metrics
 
@@ -44,11 +44,11 @@ Each case includes question, expectedScenario, expectedIntent, expectedTools, ex
 - citation_miss
 - pipeline_error
 
-## V0.9 Mock Full Evaluation Result
+## V1.1 Mock Full Evaluation Result
 
 - quick: 15/15, passRate 100%
 - standard: 30/30, passRate 100%
-- full: 50/50, passRate 100%
+- full: validated locally in Mock mode during V1.1 acceptance; target passRate >= 90%
 - full averageRagScore: 21
 
 Real mode remains optional because it consumes API quota. It is useful for checking whether the real LLM can produce stable structured output.
@@ -56,3 +56,14 @@ Real mode remains optional because it consumes API quota. It is useful for check
 ## V1.0 Compatibility Note
 
 The evaluation API remains deterministic and server-side. It does not read browser `localStorage`, so user-imported knowledge documents do not change the built-in evaluation suite. V1.0 manual testing covers local import and chat retrieval separately, while `/api/evaluation` continues to validate the default Agent Router, keyword RAG, tools, fallback, and LLM response modes against the 50-case dataset.
+
+## V1.1 Source Explainability Checks
+
+V1.1 keeps evaluation deterministic and server-side. The API does not read browser localStorage, so user-uploaded and pasted documents are validated manually in /knowledge and /chat. Evaluation cases focus on Router, RAG, tools, fallback, and keyword coverage. Manual checks verify that Top sources display sourceType and scoreReason for default, user_upload, and user_paste sources.
+
+Manual V1.1 checks:
+
+- Confirm default knowledge categories are read-only and have no one-click demo import controls.
+- Import user documents by paste and file upload, then verify localStorage persistence.
+- Confirm Top sources show source type, category, tags, score, scoreReason, and chunk summary.
+- Confirm Mock full evaluation remains above 90% passRate.

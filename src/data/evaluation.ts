@@ -886,5 +886,102 @@ export const evaluationCases: EvaluationCase[] = [
     "category": "ecommerce",
     "difficulty": "medium",
     "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-V11-IT-001",
+    "question": "\u516c\u53f8\u7535\u8111\u600e\u4e48\u7533\u8bf7\uff1f",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["\u7535\u8111", "\u7533\u8bf7", "\u5ba1\u6279"],
+    "category": "enterprise",
+    "difficulty": "easy",
+    "packId": "enterprise-policy"
+  },
+  {
+    "id": "EVAL-V11-IT-002",
+    "question": "VPN \u6743\u9650\u7533\u8bf7\u5931\u8d25\u600e\u4e48\u529e\uff1f",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["VPN", "\u6743\u9650", "\u7533\u8bf7"],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
+  },
+  {
+    "id": "EVAL-V11-EC-001",
+    "question": "\u5546\u54c1\u53d1\u9519\u4e86\u600e\u4e48\u529e\uff1f",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["\u53d1\u9519\u8d27", "\u6362\u8d27", "\u552e\u540e"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-V11-EC-002",
+    "question": "\u4f18\u60e0\u5238\u8fc7\u671f\u80fd\u8865\u53d1\u5417\uff1f",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["\u4f18\u60e0\u5238", "\u5931\u6548", "\u8865\u53d1"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-V11-REC-001",
+    "question": "\u5019\u9009\u4eba\u6709 Next.js \u548c RAG \u9879\u76ee\uff0c\u9002\u5408\u4ec0\u4e48\u5c97\u4f4d\uff1f",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": ["analyzeJD"],
+    "expectedNeedRag": false,
+    "expectedKeywords": ["AI", "RAG", "\u5c97\u4f4d"],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-V11-REC-002",
+    "question": "AI \u4ea7\u54c1\u7ecf\u7406 JD \u770b\u91cd\u4ec0\u4e48\uff1f",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": ["analyzeJD"],
+    "expectedNeedRag": false,
+    "expectedKeywords": ["AI", "JD", "\u4ea7\u54c1"],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-V11-AI-001",
+    "question": "Real API \u5931\u8d25\u65f6\u7cfb\u7edf\u5982\u4f55 fallback\uff1f",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["fallback", "Real API", "\u9519\u8bef"],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V11-AI-002",
+    "question": "RAG \u547d\u4e2d\u7528\u6237\u6587\u6863\u548c\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u65f6\u600e\u4e48\u89e3\u91ca\uff1f",
+    "expectedScenario": "general",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["RAG", "\u6765\u6e90", "scoreReason"],
+    "category": "general",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
   }
+
 ];

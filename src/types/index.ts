@@ -93,6 +93,11 @@ export type RagAnswer = {
     category: string;
     packId?: string;
     sourceType?: KnowledgeSourceType;
+    tags?: string[];
+    score?: number;
+    scoreReason?: string[];
+    matchedKeywords?: string[];
+    contentPreview?: string;
     chunkIndexes: number[];
   }>;
   mode: "mock-rag";
@@ -478,3 +483,5 @@ export type TestCase = {
   result: "pass" | "review";
   latency: string;
 };
+
+

@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { createImportedKnowledgeDocument, readKnowledgeFile, SUPPORTED_IMPORT_EXTENSIONS } from "@/lib/knowledge/import";
-import type { ImportedKnowledgeDocument } from "@/types";
+import type { ImportedKnowledgeDocument, KnowledgeSourceType } from "@/types";
 
 type DocumentFormProps = {
   onAdd: (document: ImportedKnowledgeDocument) => void;
@@ -42,7 +42,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
 
     try {
       let parsedContent = content.trim();
-      let sourceType: ImportedKnowledgeDocument["sourceType"] = "user_paste";
+      let sourceType: Extract<KnowledgeSourceType, "user_upload" | "user_paste"> = "user_paste";
       let originalFileName: string | undefined;
 
       if (file) {

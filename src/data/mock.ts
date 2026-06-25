@@ -19,6 +19,7 @@ import type {
   ToolDefinition,
 } from "@/types";
 import { knowledgePackDocuments } from "@/data/knowledgePacks";
+import { enterpriseKnowledgePackDocuments } from "@/data/enterpriseKnowledgePacks";
 
 export const features: Feature[] = [
   { title: "RAG 知识库问答", description: "基于企业文档、政策与 SOP 的检索增强回答，附带来源引用。" },
@@ -204,7 +205,7 @@ export const interviewQuestions: InterviewQuestion[] = [
   { id: "IQ-FE-001", jobId: "JD-FE-INTERN", question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？", focus: "组件拆分、状态管理、异常展示、JSON 可读性。" },
 ];
 
-export const documents: KnowledgeDocument[] = knowledgePackDocuments.map((document) => ({
+export const documents: KnowledgeDocument[] = [...knowledgePackDocuments, ...enterpriseKnowledgePackDocuments].map((document) => ({
   ...document,
   sourceType: "default",
   source: document.source ?? "default knowledge pack",

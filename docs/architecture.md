@@ -115,3 +115,15 @@ V1.0 adds a hybrid knowledge library:
 - `/api/evaluation` intentionally ignores browser `localStorage` and uses only default documents for stable evaluation results.
 
 The retriever remains keyword-based. User-imported chunks receive a small source boost when relevant, but default Knowledge Pack chunks are still retained in TopK results. Future upgrades can replace this with embeddings, vector DB, rerank, and real document parsing for PDF/DOCX.
+
+## V1.1 Built-in Knowledge Packs
+
+V1.1 improves product readiness without adding a database or crawler. Four self-generated enterprise knowledge categories are bundled as read-only default packs and participate in RAG immediately:
+
+- default: shipped with the application and always available.
+- user_upload: imported from local txt / md / json / csv files.
+- user_paste: pasted text from the Knowledge page.
+
+The RAG flow remains keyword-based. During retrieval, chunks carry sourceType, packId, category, tags, matchedKeywords, and scoreReason. User-side sources receive a small boost when relevant, while default sources remain eligible so answers can cite both user documents and built-in knowledge.
+
+No third-party webpage content is committed to the repository. URL import and license/source metadata management are intentionally deferred to a later version.

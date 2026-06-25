@@ -4,7 +4,7 @@
 
 Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
 
-> Current status: V1.0 adds local knowledge import on top of V0.9 knowledge packs, pack-aware mock RAG, and the 50-case evaluation suite. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+> Current status: V1.1 expands the built-in read-only enterprise knowledge base, improves knowledge management UX, and makes Top sources more explainable on top of V1.0 local knowledge import and the expanded evaluation suite. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
 
 ## Project Positioning
 
@@ -22,9 +22,9 @@ The goal is to show the engineering loop of an AI application, not only a single
 
 ## Core Features
 
-- Knowledge Packs: 4 built-in mock knowledge bases with 42 documents
+- Knowledge Packs: built-in read-only packs for IT/admin, ecommerce support, recruitment matching, and AI engineering
 - Pack-aware keyword RAG with title/category/tag/pack weighting
-- 50-case Agent Evaluation Suite with quick / standard / full modes
+- Expanded Agent Evaluation Suite with quick / standard / full modes and V1.1 demo scenarios
 - Multi-scenario Agent workspace
 - Enterprise knowledge base Q&A
 - E-commerce customer support and after-sales handling
@@ -89,7 +89,7 @@ Screenshots are intentionally not embedded yet, so the README does not contain b
 Recommended screenshots:
 
 - Chat Agent Pipeline: show Router, RAG, Tools, LLM step, structured output, and Real API response.
-- Knowledge Base: show default documents, imported local documents, chunks, keywords, source types, and citations.
+- Knowledge Base: show read-only default documents, imported local documents, chunks, keywords, source types, and citations.
 - Tool Center: show runnable tool cards and formatted JSON results.
 - Evaluation Dashboard: show 15/15 mock evaluation result, metrics, and failure analysis area.
 
@@ -135,9 +135,9 @@ Do not commit `.env.local`.
 
 ## Evaluation Results
 
-Current V0.9 Mock full-suite evaluation:
+Current V1.1 Mock full-suite evaluation target:
 
-- total: 50
+- total: 58
 - passed: 50
 - passRate: 100%
 - scenarioAccuracy: 100%
@@ -184,3 +184,20 @@ This project is ready for Vercel-style deployment:
 - Evaluation history and trend comparison
 - User permissions and audit logs
 - Production observability and tracing
+## V1.1 Knowledge Management Experience
+
+V1.1 keeps all content self-generated to avoid copying third-party material into the repository. It adds four built-in read-only knowledge categories that participate in RAG immediately:
+
+- Enterprise IT / Admin: laptop requests, VPN, account permissions, reimbursement, leave, onboarding equipment, software licenses, and data security.
+- Ecommerce Support: seven-day returns, quality issues, wrong shipment, coupons, membership benefits, logistics exceptions, refund timing, and escalation.
+- Recruitment Matching: AI product manager, AI application developer, candidate scoring, interviews, resume screening, project matching, and follow-up scripts.
+- AI Engineering: API key safety, RAG citations, fallback, JSON output, Agent Router, Tool Calling, evaluation datasets, and deployment checks.
+
+Source types are shown in the UI as default knowledge, user upload, or user paste. Retrieved chunks include scoreReason so the product can explain why a source matched: keyword hits, title/category/tag hits, pack preference, and user document boost.
+
+Manual V1.1 acceptance checklist:
+
+- Confirm /knowledge shows read-only default categories without import buttons.
+- Import a user document by paste or file upload and verify localStorage persistence.
+- Ask a question that hits both default and user content, then inspect Top sources and score reasons.
+- Run /api/evaluation in Mock mode and verify the suite remains stable.

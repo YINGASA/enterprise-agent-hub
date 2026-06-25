@@ -5,162 +5,173 @@ import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { documents as defaultDocuments } from "@/data/mock";
+import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { readUserKnowledgeDocuments, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import { splitDocument } from "@/lib/rag";
 import type { ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
 
-type PackFilter = "all" | string;
+const allPackOption = "all";
+const allCategoryOption = "all";
+const allSourceOption = "all";
 
-function packName(packId?: string) {
-  return knowledgePacks.find((pack) => pack.id === packId)?.name ?? "未归类";
-}
+type SourceFilter = typeof allSourceOption | KnowledgeSourceType;
+
+const ui = {
+  defaultSource: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93",
+  userUpload: "\u7528\u6237\u4e0a\u4f20",
+  userPaste: "\u7528\u6237\u7c98\u8d34",
+  title: "\u771f\u5b9e\u77e5\u8bc6\u5e93\u7ba1\u7406",
+  intro: "\u7cfb\u7edf\u5185\u7f6e\u9ed8\u8ba4 Knowledge Packs \u53ea\u8bfb\u53ef\u68c0\u7d22\uff0c\u7528\u6237\u4e0a\u4f20\u548c\u7c98\u8d34\u6587\u6863\u4fdd\u5b58\u5728\u6d4f\u89c8\u5668 localStorage\uff0c\u5e76\u4e0e\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u4e00\u8d77\u53c2\u4e0e RAG\u3002",
+  clearUserDocs: "\u6e05\u7a7a\u7528\u6237\u6587\u6863",
+  defaultDocCount: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u6587\u6863",
+  userDocCount: "\u7528\u6237\u5bfc\u5165\u6587\u6863",
+  totalChunks: "\u603b chunks",
+  activeSources: "\u53c2\u4e0e\u68c0\u7d22\u6765\u6e90",
+  docUnit: "\u7bc7",
+  chunkUnit: "\u4e2a",
+  allPacks: "\u5168\u90e8\u77e5\u8bc6\u5e93\u5305",
+  allCategories: "\u5168\u90e8\u5206\u7c7b",
+  allSources: "\u5168\u90e8\u6765\u6e90",
+  searchPlaceholder: "\u641c\u7d22\u6807\u9898\u3001\u6458\u8981\u3001\u6807\u7b7e\u6216\u6b63\u6587\uff0c\u4f8b\u5982\uff1a\u7535\u8111\u7533\u8bf7\u3001VPN\u3001\u9000\u6b3e\u3001JSON\u3001\u5019\u9009\u4eba\u8bc4\u5206",
+  builtinSection: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u5206\u7c7b",
+  builtinDesc: "\u7cfb\u7edf\u5185\u7f6e / \u53ea\u8bfb\uff0c\u4e0d\u9700\u8981\u5bfc\u5165\uff0c\u542f\u52a8\u540e\u5929\u7136\u53c2\u4e0e RAG \u68c0\u7d22\u3002",
+  readonly: "\u7cfb\u7edf\u5185\u7f6e / \u53ea\u8bfb",
+  readonlyShort: "\u53ea\u8bfb",
+  userImportTitle: "\u7528\u6237\u6587\u6863\u5bfc\u5165",
+  userImportDesc: "\u652f\u6301\u7c98\u8d34\u6587\u672c\u548c\u672c\u5730 .txt / .md / .json / .csv \u6587\u4ef6\u5bfc\u5165\uff0c\u5185\u5bb9\u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668 localStorage\u3002",
+  docList: "\u6587\u6863\u5217\u8868",
+  currentFilterPrefix: "\u5f53\u524d\u7b5b\u9009 ",
+  currentFilterSuffix: " \u7bc7\u3002\u9ed8\u8ba4\u6587\u6863\u4e0d\u53ef\u5220\u9664\uff0c\u7528\u6237\u6587\u6863\u53ef\u5220\u9664\u3002",
+  noTags: "\u65e0\u6807\u7b7e",
+  delete: "\u5220\u9664",
+  emptyDocs: "\u6ca1\u6709\u5339\u914d\u7684\u6587\u6863\u3002\u53ef\u4ee5\u8c03\u6574\u641c\u7d22\u6761\u4ef6\uff0c\u6216\u5bfc\u5165\u81ea\u5df1\u7684\u4e1a\u52a1\u6587\u6863\u3002",
+  docDetail: "Document Detail",
+  noDocument: "\u672a\u9009\u62e9\u6587\u6863",
+  category: "\u5206\u7c7b\uff1a",
+  updatedAt: "\u66f4\u65b0\u65f6\u95f4\uff1a",
+  chunks: "chunks\uff1a",
+  source: "\u6765\u6e90\uff1a",
+  tags: "\u6807\u7b7e\uff1a",
+  none: "\u65e0",
+  deleteThisDoc: "\u5220\u9664\u8be5\u7528\u6237\u6587\u6863",
+  readonlyNote: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u4e3a\u7cfb\u7edf\u5185\u7f6e\u53ea\u8bfb\u8d44\u6599\uff0c\u4e0d\u652f\u6301\u5220\u9664\u3002",
+  chunksTitle: "\u6587\u6863\u5207\u7247 chunks",
+  chunksDesc: "\u5207\u7247\u4f1a\u53c2\u4e0e keyword RAG \u68c0\u7d22\uff0c\u5e76\u4fdd\u7559\u6765\u6e90\u7c7b\u578b\u3001\u5206\u7c7b\u3001\u6807\u7b7e\u548c\u5173\u952e\u8bcd\u3002",
+  citationExample: "\u6765\u6e90\u5f15\u7528\u793a\u4f8b",
+  confirmClear: "\u786e\u8ba4\u6e05\u7a7a\u6240\u6709\u7528\u6237\u5bfc\u5165\u6587\u6863\u5417\uff1f\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u4e0d\u4f1a\u88ab\u5220\u9664\u3002",
+  imported: "\u5df2\u5bfc\u5165\u7528\u6237\u6587\u6863\uff1a",
+  deleted: "\u5df2\u5220\u9664\u7528\u6237\u6587\u6863\uff1a",
+  cleared: "\u5df2\u6e05\u7a7a\u7528\u6237\u6587\u6863\u3002\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u4fdd\u6301\u53ef\u7528\u3002",
+};
 
 function sourceTypeLabel(sourceType?: KnowledgeSourceType) {
   const labels: Record<KnowledgeSourceType, string> = {
-    default: "默认知识库",
-    user_upload: "用户上传",
-    user_paste: "用户粘贴",
+    default: ui.defaultSource,
+    user_upload: ui.userUpload,
+    user_paste: ui.userPaste,
   };
-  return sourceType ? labels[sourceType] ?? sourceType : "默认知识库";
+  return sourceType ? labels[sourceType] ?? sourceType : ui.defaultSource;
 }
 
 function sourceBadgeClass(sourceType?: KnowledgeSourceType) {
   if (sourceType === "user_upload") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
   if (sourceType === "user_paste") return "bg-amber-50 text-amber-700 ring-amber-100";
-  return "bg-slate-100 text-ink-500 ring-slate-200";
+  return "bg-slate-100 text-ink-600 ring-slate-200";
 }
 
-function matchesSearch(document: KnowledgeDocument, keyword: string) {
+function includesText(document: KnowledgeDocument, keyword: string) {
   if (!keyword.trim()) return true;
-  const normalized = keyword.trim().toLowerCase();
-  return [document.title, document.category, document.summary ?? "", document.content, ...(document.tags ?? []), packName(document.packId), sourceTypeLabel(document.sourceType)]
-    .join(" ")
-    .toLowerCase()
-    .includes(normalized);
+  const target = [document.title, document.category, document.summary, document.content, document.source, document.owner, ...(document.tags ?? [])].join(" ").toLowerCase();
+  return target.includes(keyword.trim().toLowerCase());
+}
+
+function categoryIntro(packId: string) {
+  const intros: Record<string, string> = {
+    "enterprise-policy": "\u4f01\u4e1a\u5236\u5ea6\u3001IT \u884c\u653f\u3001\u6743\u9650\u3001\u5b89\u5168\u3001\u62a5\u9500\u3001\u8bf7\u5047\u7b49\u5185\u90e8\u77e5\u8bc6\u3002",
+    "ecommerce-support": "\u552e\u540e\u653f\u7b56\u3001\u9000\u6b3e\u6362\u8d27\u3001\u7269\u6d41\u5f02\u5e38\u3001\u4f1a\u5458\u6743\u76ca\u4e0e\u6295\u8bc9\u5347\u7ea7\u89c4\u5219\u3002",
+    "recruitment-career": "\u5c97\u4f4d JD\u3001\u5019\u9009\u4eba\u8bc4\u5206\u3001\u7b80\u5386\u7b5b\u9009\u3001\u9762\u8bd5\u6d41\u7a0b\u4e0e\u9879\u76ee\u5339\u914d\u89c4\u5219\u3002",
+    "ai-engineering": "RAG\u3001Agent Router\u3001Tool Calling\u3001JSON \u8f93\u51fa\u3001fallback\u3001\u90e8\u7f72\u4e0e\u8bc4\u6d4b\u89c4\u8303\u3002",
+  };
+  return intros[packId] ?? "\u7cfb\u7edf\u5185\u7f6e\u4e1a\u52a1\u77e5\u8bc6\u3002";
 }
 
 export function KnowledgeWorkspace() {
   const [userDocuments, setUserDocuments] = useState<ImportedKnowledgeDocument[]>([]);
-  const [storageReady, setStorageReady] = useState(false);
-  const [selectedPack, setSelectedPack] = useState<PackFilter>("all");
+  const [selectedPack, setSelectedPack] = useState(allPackOption);
+  const [selectedCategory, setSelectedCategory] = useState(allCategoryOption);
+  const [selectedSourceType, setSelectedSourceType] = useState<SourceFilter>(allSourceOption);
   const [search, setSearch] = useState("");
   const [selectedDocumentId, setSelectedDocumentId] = useState(defaultDocuments[0]?.id ?? "");
+  const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    setUserDocuments(readUserKnowledgeDocuments());
-    setStorageReady(true);
-  }, []);
+  useEffect(() => { setUserDocuments(readUserKnowledgeDocuments()); }, []);
+  useEffect(() => { writeUserKnowledgeDocuments(userDocuments); }, [userDocuments]);
 
-  useEffect(() => {
-    if (storageReady) writeUserKnowledgeDocuments(userDocuments);
-  }, [storageReady, userDocuments]);
+  const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
+  const categories = useMemo(() => Array.from(new Set(allDocuments.map((document) => document.category).filter(Boolean))).sort(), [allDocuments]);
+  const defaultChunkCount = useMemo(() => defaultDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), []);
+  const userChunkCount = useMemo(() => userDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), [userDocuments]);
+  const activeSourceTypes = useMemo(() => Array.from(new Set(allDocuments.map((document) => document.sourceType ?? "default"))).map((sourceType) => sourceTypeLabel(sourceType as KnowledgeSourceType)), [allDocuments]);
 
-  const allDocuments = useMemo(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
-  const filteredDocuments = useMemo(
-    () => allDocuments.filter((document) => (selectedPack === "all" || document.packId === selectedPack) && matchesSearch(document, search)),
-    [allDocuments, selectedPack, search],
-  );
+  const filteredDocuments = allDocuments.filter((document) => {
+    const packMatched = selectedPack === allPackOption || document.packId === selectedPack;
+    const categoryMatched = selectedCategory === allCategoryOption || document.category === selectedCategory;
+    const sourceMatched = selectedSourceType === allSourceOption || (document.sourceType ?? "default") === selectedSourceType;
+    return packMatched && categoryMatched && sourceMatched && includesText(document, search);
+  });
+
   const selectedDocument = allDocuments.find((document) => document.id === selectedDocumentId) ?? filteredDocuments[0] ?? allDocuments[0];
   const chunks = selectedDocument ? splitDocument(selectedDocument) : [];
+  const isSelectedUserDocument = Boolean(selectedDocument && selectedDocument.sourceType !== "default");
 
   function handleAdd(document: ImportedKnowledgeDocument) {
     setUserDocuments((current) => [document, ...current]);
-    setSelectedPack(document.packId ?? "all");
     setSelectedDocumentId(document.id);
+    setSelectedPack(document.packId ?? allPackOption);
+    setSelectedCategory(allCategoryOption);
+    setSelectedSourceType(document.sourceType);
+    setNotice(ui.imported + document.title);
   }
 
   function handleDelete(documentId: string) {
+    const target = userDocuments.find((document) => document.id === documentId);
+    if (!target) return;
     setUserDocuments((current) => current.filter((document) => document.id !== documentId));
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
+    setNotice(ui.deleted + target.title);
   }
 
   function handleClearUserDocuments() {
     if (!userDocuments.length) return;
-    const confirmed = window.confirm("确认清空所有用户导入文档吗？默认知识库不会被删除。");
+    const confirmed = window.confirm(ui.confirmClear);
     if (!confirmed) return;
     setUserDocuments([]);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
+    setSelectedSourceType(allSourceOption);
+    setNotice(ui.cleared);
   }
 
   return (
-    <div className="grid gap-5 overflow-x-hidden xl:grid-cols-[minmax(0,1fr)_460px]">
-      <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="space-y-4 border-b border-slate-200 px-5 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="font-semibold text-ink-900">混合知识库管理</h2>
-              <p className="mt-1 text-sm leading-6 text-ink-500">
-                V1.0 支持默认 Knowledge Packs 与用户本地导入文档混合检索。用户内容保存在浏览器 localStorage，不上传服务器。
-              </p>
-            </div>
-            <button type="button" onClick={handleClearUserDocuments} disabled={!userDocuments.length} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">
-              清空用户文档
-            </button>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+      <section className="space-y-5 min-w-0">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">Knowledge Library</p><h2 className="mt-1 font-semibold text-ink-900">{ui.title}</h2><p className="mt-1 text-sm leading-6 text-ink-500">{ui.intro}</p></div>
+            <button type="button" onClick={handleClearUserDocuments} disabled={!userDocuments.length} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{ui.clearUserDocs}</button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setSelectedPack("all")} className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${selectedPack === "all" ? "bg-brand-600 text-white" : "bg-slate-100 text-ink-600 hover:bg-slate-200"}`}>全部</button>
-            {knowledgePacks.map((pack) => (
-              <button key={pack.id} type="button" onClick={() => setSelectedPack(pack.id)} className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${selectedPack === pack.id ? "bg-brand-600 text-white" : "bg-slate-100 text-ink-600 hover:bg-slate-200"}`}>{pack.name}</button>
-            ))}
-          </div>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="搜索标题、摘要、标签、正文或来源类型，例如：报销、电脑申请、JSON、用户上传" />
-          <div className="grid gap-3 text-sm sm:grid-cols-3">
-            <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">默认文档</p><p className="mt-1 font-semibold text-ink-900">{defaultDocuments.length} 篇</p></div>
-            <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">用户文档</p><p className="mt-1 font-semibold text-ink-900">{userDocuments.length} 篇</p></div>
-            <div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">当前筛选</p><p className="mt-1 font-semibold text-ink-900">{filteredDocuments.length} 篇</p></div>
-          </div>
+          <div className="mt-5 grid gap-3 text-sm sm:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.defaultDocCount}</p><p className="mt-1 font-semibold text-ink-900">{defaultDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.userDocCount}</p><p className="mt-1 font-semibold text-ink-900">{userDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.totalChunks}</p><p className="mt-1 font-semibold text-ink-900">{defaultChunkCount + userChunkCount} {ui.chunkUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.activeSources}</p><p className="mt-1 break-words font-semibold text-ink-900">{activeSourceTypes.join(" / ")}</p></div></div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3"><select value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allPackOption}>{ui.allPacks}</option>{knowledgePacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select><select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allCategoryOption}>{ui.allCategories}</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><select value={selectedSourceType} onChange={(event) => setSelectedSourceType(event.target.value as SourceFilter)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allSourceOption}>{ui.allSources}</option><option value="default">{ui.defaultSource}</option><option value="user_upload">{ui.userUpload}</option><option value="user_paste">{ui.userPaste}</option></select></div>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder={ui.searchPlaceholder} />
+          {notice ? <p className="mt-3 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{notice}</p> : null}
         </div>
-        <div className="divide-y divide-slate-200">
-          {filteredDocuments.map((document) => (
-            <article key={document.id} className={`p-5 transition ${selectedDocument?.id === document.id ? "bg-brand-50/60" : "bg-white"}`}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <button type="button" onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="break-words font-semibold text-ink-900">{document.title}</h3>
-                    <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-ink-500">{packName(document.packId)}</span>
-                    <span className={`rounded-md px-2 py-1 text-xs font-medium ring-1 ${sourceBadgeClass(document.sourceType)}`}>{sourceTypeLabel(document.sourceType)}</span>
-                  </div>
-                  <p className="mt-1 text-sm text-ink-500">{document.category} · 更新于 {document.updatedAt}</p>
-                  {document.originalFileName ? <p className="mt-1 break-all text-xs text-ink-500">原始文件：{document.originalFileName}</p> : null}
-                  <p className="mt-2 text-sm leading-6 text-ink-600">{document.summary ?? document.content.slice(0, 120)}</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {(document.tags ?? []).map((tag) => <span key={tag} className="rounded-md bg-white px-2 py-1 text-xs text-ink-500 ring-1 ring-slate-200">{tag}</span>)}
-                  </div>
-                </button>
-                <div className="flex shrink-0 items-center gap-2">
-                  {!document.isDefault ? <button type="button" onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50">删除</button> : <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-ink-500">不可删除</span>}
-                </div>
-              </div>
-            </article>
-          ))}
-          {filteredDocuments.length === 0 ? <p className="p-5 text-sm text-ink-500">没有匹配的文档，请调整知识库包或搜索关键词。</p> : null}
-        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h3 className="font-semibold text-ink-900">{ui.builtinSection}</h3><p className="mt-1 text-sm text-ink-500">{ui.builtinDesc}</p></div><div className="grid gap-3 md:grid-cols-2">{enterpriseKnowledgePacks.map((pack) => (<article key={pack.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-ink-900">{pack.title}</h4><span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-500 ring-1 ring-slate-200">{ui.readonly}</span></div><p className="mt-2 text-sm leading-6 text-ink-600">{categoryIntro(pack.packId)}</p><p className="mt-2 text-xs text-ink-500">{pack.documents.length} {ui.docUnit} ? {pack.suitableQuestions.slice(0, 2).join(" / ")}</p></article>))}</div></div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p></div><DocumentForm onAdd={handleAdd} /></div>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-4"><h3 className="font-semibold text-ink-900">{ui.docList}</h3><p className="mt-1 text-sm text-ink-500">{ui.currentFilterPrefix}{filteredDocuments.length}{ui.currentFilterSuffix}</p></div>{filteredDocuments.map((document) => (<article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0"><div className="flex flex-wrap items-start justify-between gap-3"><button type="button" onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center gap-2"><h4 className="break-words font-semibold text-ink-900">{document.title}</h4><span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span>{document.sourceType === "default" ? <span className="rounded bg-slate-50 px-2 py-0.5 text-xs text-ink-500 ring-1 ring-slate-200">{ui.readonlyShort}</span> : null}</div><p className="mt-1 break-words text-sm text-ink-500">{document.summary ?? document.content.slice(0, 90)}</p><p className="mt-2 text-xs text-ink-400">{document.category} ? {document.updatedAt} ? {(document.tags ?? []).join(" / ") || ui.noTags}</p></button>{document.sourceType !== "default" ? <button type="button" onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.delete}</button> : null}</div></article>))}{filteredDocuments.length === 0 ? <p className="p-5 text-sm text-ink-500">{ui.emptyDocs}</p> : null}</div>
       </section>
 
-      <aside className="min-w-0 space-y-5">
-        <DocumentForm onAdd={handleAdd} />
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="font-semibold text-ink-900">文档详情与 chunks</h2>
-            <p className="mt-1 break-words text-sm text-ink-500">当前文档：{selectedDocument?.title ?? "未选择"}</p>
-          </div>
-          {selectedDocument ? (
-            <div className="mb-4 space-y-3 rounded-md bg-slate-50 p-4 text-sm leading-6 text-ink-600">
-              <div className="grid gap-2 text-xs sm:grid-cols-2">
-                <p><span className="font-semibold text-ink-800">来源：</span>{sourceTypeLabel(selectedDocument.sourceType)}</p>
-                <p><span className="font-semibold text-ink-800">知识库包：</span>{packName(selectedDocument.packId)}</p>
-                <p><span className="font-semibold text-ink-800">分类：</span>{selectedDocument.category}</p>
-                <p><span className="font-semibold text-ink-800">更新时间：</span>{selectedDocument.updatedAt}</p>
-              </div>
-              <p className="font-semibold text-ink-900">{selectedDocument.summary}</p>
-              <p className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-white p-3 ring-1 ring-slate-200">{selectedDocument.content}</p>
-            </div>
-          ) : null}
-          <ChunkList chunks={chunks} />
-        </section>
-        <MockJsonPanel title="来源引用示例" data={chunks.slice(0, 4).map((chunk) => ({ documentId: chunk.documentId, packId: chunk.packId, sourceTitle: chunk.sourceTitle, sourceType: chunk.sourceType, category: chunk.category, chunkIndex: chunk.chunkIndex, keywords: chunk.keywords.slice(0, 8) }))} />
-      </aside>
+      <aside className="space-y-5 min-w-0"><section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">{ui.docDetail}</p><h3 className="mt-1 break-words font-semibold text-ink-900">{selectedDocument?.title ?? ui.noDocument}</h3></div>{selectedDocument ? <span className={"rounded px-2 py-1 text-xs font-semibold ring-1 " + sourceBadgeClass(selectedDocument.sourceType)}>{sourceTypeLabel(selectedDocument.sourceType)}</span> : null}</div>{selectedDocument ? (<div className="mt-4 space-y-3 text-sm leading-6 text-ink-600"><p className="break-words">{selectedDocument.summary ?? selectedDocument.content.slice(0, 180)}</p><div className="grid gap-2 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2"><p><span className="text-ink-400">{ui.category}</span>{selectedDocument.category}</p><p><span className="text-ink-400">{ui.updatedAt}</span>{selectedDocument.updatedAt}</p><p><span className="text-ink-400">{ui.chunks}</span>{chunks.length}</p><p><span className="text-ink-400">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p><p className="sm:col-span-2 break-words"><span className="text-ink-400">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p></div>{isSelectedUserDocument ? <button type="button" onClick={() => handleDelete(selectedDocument.id)} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.deleteThisDoc}</button> : <p className="rounded-md bg-slate-50 p-3 text-xs text-ink-500">{ui.readonlyNote}</p>}</div>) : null}</section><section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{ui.chunksTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.chunksDesc}</p><ChunkList chunks={chunks} /></section><MockJsonPanel title={ui.citationExample} data={chunks.slice(0, 4).map((chunk) => ({ documentId: chunk.documentId, packId: chunk.packId, sourceTitle: chunk.sourceTitle, sourceType: chunk.sourceType, category: chunk.category, tags: chunk.tags, chunkIndex: chunk.chunkIndex, keywords: chunk.keywords.slice(0, 8) }))} /></aside>
     </div>
   );
 }
