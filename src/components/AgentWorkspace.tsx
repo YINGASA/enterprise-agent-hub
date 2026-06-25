@@ -17,8 +17,28 @@ const exampleGroups = [
 const fallbackQuestion = exampleGroups[0].questions[0];
 
 function responseModeLabel(mode: AgentApiResponse["api"]["responseMode"] | LlmMode) {
-  const labels: Record<string, string> = { mock: "Mock", real: "Real JSON", real_repaired: "Real Repaired", real_text_fallback: "Real Text Fallback", fallback: "Mock Fallback" };
+  const labels: Record<string, string> = { mock: "Mock 模式", real: "Real API", real_repaired: "Real API · JSON 修复", real_text_fallback: "Real API · 文本兜底", fallback: "兜底模式" };
   return labels[mode] ?? mode;
+}
+function scenarioLabel(scenario?: string) {
+  const labels: Record<string, string> = { enterprise: "企业知识库", ecommerce: "电商售后", recruitment: "招聘求职", "ai-engineering": "AI 工程规范", ai_engineering: "AI 工程规范", general: "通用兜底" };
+  return scenario ? labels[scenario] ?? scenario : "未识别";
+}
+function intentLabel(intent?: string) {
+  const labels: Record<string, string> = { knowledge_qa: "知识库问答", policy_check: "规则判断", order_query: "订单查询", product_query: "商品查询", after_sale_reply: "售后回复", jd_match: "JD 匹配", ticket_create: "工单创建", general_chat: "通用对话" };
+  return intent ? labels[intent] ?? intent : "未识别";
+}
+function riskLabel(risk?: string) {
+  const labels: Record<string, string> = { low: "低风险", medium: "中风险", high: "高风险" };
+  return risk ? labels[risk] ?? risk : "未评估";
+}
+function toolLabel(tool: ToolName) {
+  const labels: Record<ToolName, string> = { queryOrder: "订单查询", queryProduct: "商品查询", searchPolicy: "规则检索", createTicket: "工单创建", analyzeJD: "JD 匹配分析", generateCustomerReply: "客服回复生成" };
+  return labels[tool] ?? tool;
+}
+function fieldLabel(field: string) {
+  const labels: Record<string, string> = { orderId: "订单号", productId: "商品编号", productName: "商品名称", signedAt: "签收时间", isOpened: "是否拆封", returnReason: "退货原因", priority: "优先级" };
+  return labels[field] ?? field;
 }
 function unique(values: string[]) { return Array.from(new Set(values.filter(Boolean))); }
 function packLabel(packId?: string) {
@@ -27,7 +47,7 @@ function packLabel(packId?: string) {
 }
 function modeButtonClass(active: boolean) { return "min-h-10 rounded-md px-3 py-2 text-center text-sm font-semibold transition " + (active ? "bg-white text-brand-700 shadow-sm" : "text-ink-600 hover:bg-white/70 hover:text-ink-900"); }
 function exampleButtonClass(active: boolean) { return "rounded-md border px-3 py-2 text-left text-xs leading-5 transition " + (active ? "border-brand-200 bg-brand-50 text-brand-700" : "border-slate-200 bg-slate-50 text-ink-600 hover:bg-brand-50"); }
-function formatTools(tools: ToolName[]) { return tools.length ? tools.join(" + ") : "无"; }
+function formatTools(tools: ToolName[]) { return tools.length ? tools.map(toolLabel).join(" + ") : "未调用工具"; }
 
 export function AgentWorkspace() {
   const [question, setQuestion] = useState(fallbackQuestion);
@@ -112,10 +132,10 @@ export function AgentWorkspace() {
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
         {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}...</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
-        {needsClarification ? <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-900"><p className="font-semibold">{"\u9700\u8981\u8865\u5145\u4fe1\u606f"}</p>{missingFields.length ? <p className="mt-1 break-words">{"\u7f3a\u5931\u5b57\u6bb5\uff1a"}{missingFields.join("\u3001")}</p> : null}{result?.structuredOutput.clarificationQuestion ? <p className="mt-1 break-words">{result.structuredOutput.clarificationQuestion}</p> : null}{result?.structuredOutput.dataBoundaryNote ? <p className="mt-1 break-words text-amber-800">{result.structuredOutput.dataBoundaryNote}</p> : null}</div> : null}
+        {needsClarification ? <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-900"><p className="font-semibold">{"\u9700\u8981\u8865\u5145\u4fe1\u606f"}</p>{missingFields.length ? <p className="mt-1 break-words">{"还需要你补充："}{missingFields.map(fieldLabel).join("、")}</p> : null}{result?.structuredOutput.clarificationQuestion ? <p className="mt-2 break-words"><span className="font-semibold">{"下一步请补充："}</span>{result.structuredOutput.clarificationQuestion}</p> : null}{result?.structuredOutput.dataBoundaryNote ? <p className="mt-1 break-words text-amber-800"><span className="font-semibold">{"回答边界："}</span>{result.structuredOutput.dataBoundaryNote}</p> : null}</div> : null}
         {result?.structuredOutput.usedDemoData ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-sm leading-6 text-ink-700">{"\u5f53\u524d\u4f7f\u7528\u6f14\u793a\u6570\u636e\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba2\u5355\u3002"}</p> : null}
         {result && usedFallback && !needsClarification ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">{"\u5f53\u524d\u56de\u7b54\u4e3a\u8fb9\u754c\u515c\u5e95\uff1a\u7cfb\u7edf\u4f1a\u8bf4\u660e\u4e0d\u786e\u5b9a\u6027\uff0c\u4e0d\u4f1a\u7f16\u9020\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u4e4b\u5916\u7684\u4fe1\u606f\u3002"}</p> : null}
-        {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">scenario / intent</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{result.route.scenario} / {result.route.intent}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">confidence / risk</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {result.structuredOutput.riskLevel}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">fallback / sources</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">toolsUsed</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
+        {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">业务场景 / 任务意图</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{scenarioLabel(result.route.scenario)} / {intentLabel(result.route.intent)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">置信度 / 风险等级</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {riskLabel(result.structuredOutput.riskLevel)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">兜底回答 / 来源引用</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0} 条</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">调用工具</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
       </section>
 
       {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">知识库与 RAG</h3><p className="mt-2 break-words text-sm text-ink-600">命中知识库包：{hitPacks.length ? hitPacks.map(packLabel).join("、") : "无"}</p><p className="mt-2 text-sm text-ink-600">最高分：{maxRagScore} · 平均分：{averageRagScore}</p><p className="mt-2 text-sm text-ink-500">回答边界：当前为 mock/keyword RAG，无来源时应补充知识库或业务工具。</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">Top 来源 / 工具</h3><div className="mt-3 space-y-2 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words">{source.title} · chunks {source.chunkIndexes.join(", ")}</p>) : <p>暂无来源</p>}{topTools.length ? topTools.map((tool) => <p key={tool.executedAt + tool.tool} className="break-words">{tool.tool}: {tool.status}</p>) : <p>暂无工具调用</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">LLM 状态摘要</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>requestMode：{result.api.requestedMode}</p><p>responseMode：{result.api.responseMode}</p><p>provider/model：{result.api.provider} / {result.api.model}</p><p>duration：{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "无"}</p><p className="break-words">errorType：{result.api.errorType ?? "无"}</p></div></article></section> : null}
