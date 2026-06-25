@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { SourceList } from "@/components/SourceList";
@@ -40,7 +40,6 @@ export function AgentWorkspace() {
   const [examplesPanelOpen, setExamplesPanelOpen] = useState(true);
   const [openGroups, setOpenGroups] = useState<string[]>(exampleGroups.filter((group) => group.defaultOpen).map((group) => group.title));
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-  const answerRef = useRef<HTMLDivElement | null>(null);
 
   const selectedExample = useMemo(() => exampleGroups.flatMap((group) => group.questions).find((item) => item === question), [question]);
   const hitPacks = useMemo(() => unique(result?.ragAnswer?.retrievedChunks.map((item) => item.chunk.packId ?? "") ?? []), [result]);
@@ -52,13 +51,6 @@ export function AgentWorkspace() {
   const usedFallback = result ? result.api.responseMode === "fallback" || result.api.responseMode === "real_text_fallback" || result.route.intent === "general_chat" : false;
   const loadingMessage = mode === "real" ? "正在执行 Router / RAG / Tools / LLM" : "正在执行 Mock Agent Pipeline";
 
-  useEffect(() => {
-    if (!result && !clientError && !isLoading) return;
-    const element = answerRef.current;
-    if (!element || typeof window === "undefined") return;
-    const targetTop = Math.max(0, element.getBoundingClientRect().top + window.scrollY - 80);
-    if (Math.abs(window.scrollY - targetTop) > 120) window.scrollTo({ top: targetTop, behavior: "smooth" });
-  }, [result, clientError, isLoading]);
 
   async function handleRun() {
     setIsLoading(true);
@@ -104,20 +96,20 @@ export function AgentWorkspace() {
           </div>
           <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
           <div className="flex flex-col gap-3 sm:flex-row">
-            <button type="button" onClick={handleRun} disabled={isLoading} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? "运行中..." : "运行 Agent Pipeline"}</button>
+            <button type="button" onClick={handleRun} disabled={isLoading} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? loadingMessage + "..." : "运行 Agent Pipeline"}</button>
             <button type="button" onClick={handleHealthCheck} disabled={isCheckingHealth} className="min-h-10 rounded-md border border-brand-200 bg-brand-50 px-5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-ink-500">{isCheckingHealth ? "检查中..." : "检查 LLM 连接"}</button>
           </div>
           {isLoading ? <p className="rounded-md bg-slate-50 p-3 text-sm text-ink-600">{loadingMessage}</p> : null}
         </div>
       </section>
 
-      <section ref={answerRef} className="scroll-mt-20 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0"><h2 className="text-lg font-semibold text-ink-900">最终回答</h2><p className="mt-1 break-words text-sm text-ink-500">问题：{result?.question ?? question}</p></div>
           <span className="shrink-0 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{responseModeLabel(result?.api.responseMode ?? mode)}</span>
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
-        {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
+        {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}...</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
         {result && usedFallback ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">当前回答为边界兜底：系统会说明不确定性，不会编造知识库或业务工具之外的信息。</p> : null}
         {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">scenario / intent</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{result.route.scenario} / {result.route.intent}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">confidence / risk</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {result.structuredOutput.riskLevel}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">fallback / sources</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">toolsUsed</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
       </section>
