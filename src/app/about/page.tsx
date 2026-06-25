@@ -3,39 +3,35 @@ import { PageHeader } from "@/components/PageHeader";
 const sections = [
   {
     title: "项目背景",
-    body: "Enterprise Agent Hub 面向 AI 应用开发工程师岗位展示企业级 AI 应用的完整产品化链路：知识库问答、业务工具调用、Agent Router、多步骤编排、结构化输出和评测分析。",
+    body: "Enterprise Agent Hub 面向 AI 应用开发工程师岗位展示企业级 AI 应用的完整产品化链路：知识库问答、业务工具调用、Agent Router、多步骤编排、结构化输出、真实模型接入和评测分析。",
   },
   {
     title: "技术架构",
-    body: "当前使用 Next.js App Router、TypeScript 和 Tailwind CSS 搭建前端原型。业务数据、RAG、工具调用和 Agent Router 保留本地 mock 能力，V0.5 新增服务端 LLM Client 和 API Route。",
+    body: "当前使用 Next.js App Router、TypeScript 和 Tailwind CSS 搭建前端与服务端原型。业务数据、RAG、工具调用和 Agent Router 保留 mock 能力，Real 模式通过服务端 API Route 调用 OpenAI-compatible 模型。",
   },
   {
-    title: "V0.3 RAG 流程",
-    body: "已实现文档录入、文本切片、关键词提取、简单检索、TopK 召回、来源引用和 mock 回答。该流程为后续接入 Embedding、向量数据库和真实 LLM 预留边界。",
+    title: "RAG 流程",
+    body: "已实现文档录入、文本切片、关键词提取、简单检索、TopK 召回、来源引用和 mock 回答。后续可升级为 Embedding、向量数据库、Rerank 和真实 LLM 生成。",
   },
   {
-    title: "V0.4 Agent Router 流程",
-    body: "用户输入后，Router 判断场景与意图，决定是否调用 RAG，决定需要哪些工具，执行工具调用，汇总 RAG 和工具结果，输出结构化 AgentResponse，并在前端展示完整决策轨迹。",
-  },
-    {
-    title: "V0.5 OpenAI-compatible API",
-    body: "新增 OpenAI-compatible Chat Completions 调用能力，兼容 DeepSeek。用户可在 /chat 选择 mock 或 real 模式，真实调用只发生在服务端 API Route，浏览器不会暴露 API Key。",
+    title: "Agent Router",
+    body: "用户输入后，Router 判断场景与意图，决定是否调用 RAG，选择需要的业务工具，执行工具调用，汇总 RAG 和工具结果，最终输出结构化 AgentResponse，并在前端展示完整执行轨迹。",
   },
   {
-    title: "V0.5.1 DeepSeek 诊断",
-    body: "新增 /api/llm/health 和 /chat 的连接诊断入口，可查看脱敏 Key 状态、最终请求 URL、HTTP 状态、网络错误、响应预览和 JSON 解析结果。如果 deepseek-v4-flash 当前账号不可用，可以临时尝试 deepseek-chat 做兼容测试。",
+    title: "LLM 接入",
+    body: "V0.5 支持 OpenAI-compatible API 与 DeepSeek，API Key 只通过服务端环境变量读取。V0.5.2 支持 HTTPS_PROXY / HTTP_PROXY / ALL_PROXY 和请求超时诊断，适配本地代理网络环境。",
   },
   {
-    title: "密钥与 fallback",
-    body: "API Key 通过 AI_API_KEY、AI_BASE_URL、AI_MODEL、AI_PROVIDER 环境变量管理。未配置 Key、网络失败、HTTP 错误或模型 JSON 解析失败时，系统自动 fallback 到 mock-agent，页面仍可演示。",
+    title: "结构化输出",
+    body: "AgentResponse 包含 scenario、intent、answer、evidence、toolsUsed、sources、confidence、riskLevel 和 nextAction。V0.5.3 增强 JSON 提取、一次 JSON 修复请求和真实文本兜底，减少模型输出不稳定对演示的影响。",
   },
   {
-    title: "结构化输出设计",
-    body: "AgentResponse 包含 scenario、intent、answer、evidence、toolsUsed、sources、confidence、riskLevel 和 nextAction。Real 模式会要求模型返回同样结构，并在失败时保留 mock 输出。",
+    title: "V0.6 评测面板",
+    body: "新增 Agent Evaluation Dashboard，可统计场景识别、意图识别、工具命中、RAG 来源引用、关键词命中、LLM 成功率和 fallback 率。评测默认使用 Mock 模式，Real 模式用于验证真实模型稳定性与结构化输出质量。",
   },
   {
-    title: "V0.6 方向",
-    body: "下一版可升级 Tool Calls、JSON Schema 校验、模型输出重试、流式响应和更正式的评测面板，把真实模型质量纳入可观测指标。",
+    title: "岗位能力点",
+    body: "该项目覆盖 AI 应用开发中的产品原型、RAG、Agent 编排、Tool Calling、结构化输出、服务端模型接入、错误 fallback、连接诊断、评测指标和可观测性能力，适合面试中展示工程闭环。",
   },
 ];
 
@@ -45,7 +41,7 @@ export default function AboutPage() {
       <PageHeader
         eyebrow="About"
         title="项目说明"
-        description="面向面试展示的 AI 应用开发项目说明，突出 mock/real 双模式、OpenAI-compatible API、DeepSeek 兼容和可观测 Agent 执行轨迹。"
+        description="面向面试展示的 AI 应用开发项目说明，突出 Mock / Real 双模式、OpenAI-compatible API、DeepSeek 兼容、Agent 执行轨迹和评测可观测性。"
       />
       <div className="grid gap-5 lg:grid-cols-2">
         {sections.map((section) => (

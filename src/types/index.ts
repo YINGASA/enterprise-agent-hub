@@ -303,9 +303,11 @@ export type LlmGenerateResult = {
   error?: string;
 };
 
+export type AgentResponseMode = "mock" | "real" | "real_repaired" | "real_text_fallback" | "fallback";
+
 export type AgentApiMetadata = {
   requestedMode: LlmMode;
-  responseMode: "mock" | "real" | "real_repaired" | "real_text_fallback" | "fallback";
+  responseMode: AgentResponseMode;
   provider: LlmProvider;
   model: string;
   fallbackReason?: LlmErrorType | "llm_error";
@@ -335,6 +337,62 @@ export type AgentExample = {
   expectedNeedRag: boolean;
 };
 
+
+export type EvaluationCase = {
+  id: string;
+  question: string;
+  expectedScenario: AgentScenario;
+  expectedIntent: AgentIntent;
+  expectedTools: ToolName[];
+  expectedNeedRag: boolean;
+  expectedKeywords: string[];
+  category: AgentScenario;
+  difficulty: "easy" | "medium" | "hard";
+};
+
+export type EvaluationCaseResult = {
+  caseId: string;
+  question: string;
+  passed: boolean;
+  scenarioMatched: boolean;
+  intentMatched: boolean;
+  toolsMatched: boolean;
+  ragUsedMatched: boolean;
+  keywordHit: boolean;
+  citationHit: boolean;
+  responseMode: AgentResponseMode;
+  durationMs: number;
+  route: AgentRoute;
+  toolsUsed: ToolName[];
+  sources: string[];
+  finalAnswer: string;
+  error?: string;
+};
+
+export type EvaluationSummary = {
+  total: number;
+  passed: number;
+  passRate: number;
+  scenarioAccuracy: number;
+  intentAccuracy: number;
+  toolHitRate: number;
+  ragUsageAccuracy: number;
+  citationRate: number;
+  keywordHitRate: number;
+  realSuccessRate: number;
+  jsonParseSuccessRate: number;
+  fallbackRate: number;
+  averageDurationMs: number;
+};
+
+export type EvaluationRunResponse = {
+  summary: EvaluationSummary;
+  results: EvaluationCaseResult[];
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  mode: LlmMode;
+};
 export type EvaluationMetric = {
   label: string;
   value: string;
