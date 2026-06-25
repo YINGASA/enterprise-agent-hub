@@ -75,6 +75,8 @@ export function splitDocument(document: KnowledgeDocument): KnowledgeChunk[] {
     sourceTitle: document.title,
     category: document.category,
     tags: document.tags ?? [],
+    sourceType: document.sourceType ?? (document.isDefault === false ? "user_paste" : "default"),
+    originalFileName: document.originalFileName,
     chunkIndex: index + 1,
     content,
     keywords: extractKeywords(document.title + " " + document.category + " " + (document.tags ?? []).join(" ") + " " + (document.summary ?? "") + " " + content),
@@ -95,8 +97,9 @@ export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3
     const categoryHits = matchedKeywords.filter((keyword) => includesNormalized(categoryText, keyword)).length;
     const tagHits = matchedKeywords.filter((keyword) => includesNormalized(tagsText, keyword)).length;
     const packBoost = preferredPackId && chunk.packId === preferredPackId ? 3 : 0;
-    const score = matchedKeywords.length * 2 + titleHits * 3 + categoryHits * 2 + tagHits * 2 + packBoost;
-    const scoreReason = [matchedKeywords.length ? "关键词命中 " + matchedKeywords.length : "未命中关键词", titleHits ? "标题命中 " + titleHits : "标题未命中", categoryHits ? "分类命中 " + categoryHits : "分类未命中", tagHits ? "标签命中 " + tagHits : "标签未命中", packBoost ? "知识库包加权 " + preferredPackId : "无知识库包加权"];
+    const userSourceBoost = chunk.sourceType === "user_upload" || chunk.sourceType === "user_paste" ? 4 : 0;
+    const score = matchedKeywords.length * 2 + titleHits * 3 + categoryHits * 2 + tagHits * 2 + packBoost + userSourceBoost;
+    const scoreReason = [matchedKeywords.length ? "keyword hits " + matchedKeywords.length : "no keyword hit", titleHits ? "title hits " + titleHits : "no title hit", categoryHits ? "category hits " + categoryHits : "no category hit", tagHits ? "tag hits " + tagHits : "no tag hit", packBoost ? "pack boost " + preferredPackId : "no pack boost", userSourceBoost ? "user imported document boost" : "default knowledge base"];
     return { chunk, score, matchedKeywords: unique(matchedKeywords), scoreReason } satisfies RetrievedChunk;
   }).filter((item) => item.score >= 2).sort((left, right) => right.score - left.score).slice(0, topK);
 }
@@ -106,7 +109,7 @@ function buildSources(retrievedChunks: RetrievedChunk[]): RagAnswer["sources"] {
   for (const item of retrievedChunks) {
     const existing = sourceMap.get(item.chunk.documentId);
     if (existing) { existing.chunkIndexes = unique([...existing.chunkIndexes.map(String), String(item.chunk.chunkIndex)]).map(Number); continue; }
-    sourceMap.set(item.chunk.documentId, { documentId: item.chunk.documentId, title: item.chunk.sourceTitle, category: item.chunk.category, chunkIndexes: [item.chunk.chunkIndex] });
+    sourceMap.set(item.chunk.documentId, { documentId: item.chunk.documentId, title: item.chunk.sourceTitle, category: item.chunk.category, packId: item.chunk.packId, sourceType: item.chunk.sourceType, chunkIndexes: [item.chunk.chunkIndex] });
   }
   return Array.from(sourceMap.values());
 }

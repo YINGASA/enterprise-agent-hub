@@ -48,6 +48,18 @@ export type KnowledgeDocument = {
   }>;
   citations?: string[];
   isDefault?: boolean;
+  sourceType?: KnowledgeSourceType;
+  originalFileName?: string;
+  importedAt?: string;
+};
+
+export type KnowledgeSourceType = "default" | "user_upload" | "user_paste";
+
+export type ImportedKnowledgeDocument = KnowledgeDocument & {
+  sourceType: "user_upload" | "user_paste";
+  isDefault: false;
+  originalFileName?: string;
+  importedAt: string;
 };
 
 export type KnowledgeChunk = {
@@ -57,6 +69,8 @@ export type KnowledgeChunk = {
   sourceTitle: string;
   category: string;
   tags?: string[];
+  sourceType?: KnowledgeSourceType;
+  originalFileName?: string;
   chunkIndex: number;
   content: string;
   keywords: string[];
@@ -77,10 +91,27 @@ export type RagAnswer = {
     documentId: string;
     title: string;
     category: string;
+    packId?: string;
+    sourceType?: KnowledgeSourceType;
     chunkIndexes: number[];
   }>;
   mode: "mock-rag";
   createdAt: string;
+};
+
+export type KnowledgeImportResult =
+  | { ok: true; document: ImportedKnowledgeDocument }
+  | { ok: false; error: KnowledgeImportError };
+
+export type KnowledgeImportError = {
+  code: "empty_content" | "unsupported_file_type" | "file_too_large" | "parse_error" | "missing_title";
+  message: string;
+};
+
+export type KnowledgeLibraryState = {
+  defaultDocuments: KnowledgeDocument[];
+  userDocuments: ImportedKnowledgeDocument[];
+  allDocuments: KnowledgeDocument[];
 };
 
 export type KnowledgePackId = "enterprise-policy" | "ecommerce-support" | "recruitment-career" | "ai-engineering";

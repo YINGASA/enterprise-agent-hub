@@ -204,7 +204,13 @@ export const interviewQuestions: InterviewQuestion[] = [
   { id: "IQ-FE-001", jobId: "JD-FE-INTERN", question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？", focus: "组件拆分、状态管理、异常展示、JSON 可读性。" },
 ];
 
-export const documents: KnowledgeDocument[] = knowledgePackDocuments;
+export const documents: KnowledgeDocument[] = knowledgePackDocuments.map((document) => ({
+  ...document,
+  sourceType: "default",
+  source: document.source ?? "default knowledge pack",
+  owner: document.owner ?? "Enterprise Agent Hub",
+  isDefault: true,
+}));
 
 export const chatMessages: ChatMessage[] = [
   { role: "user", content: "客户说订单 EAH20260624001 已经 3 天没发货，请帮我查一下并生成回复。" },

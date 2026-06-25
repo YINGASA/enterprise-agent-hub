@@ -52,3 +52,7 @@ Each case includes question, expectedScenario, expectedIntent, expectedTools, ex
 - full averageRagScore: 21
 
 Real mode remains optional because it consumes API quota. It is useful for checking whether the real LLM can produce stable structured output.
+
+## V1.0 Compatibility Note
+
+The evaluation API remains deterministic and server-side. It does not read browser `localStorage`, so user-imported knowledge documents do not change the built-in evaluation suite. V1.0 manual testing covers local import and chat retrieval separately, while `/api/evaluation` continues to validate the default Agent Router, keyword RAG, tools, fallback, and LLM response modes against the 50-case dataset.
