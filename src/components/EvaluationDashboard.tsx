@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { evaluationCases } from "@/data/evaluation";
-import type { AgentScenario, EvaluationRunResponse, LlmMode } from "@/types";
+import type { AgentScenario, EvaluationFailureReason, EvaluationRunResponse, LlmMode } from "@/types";
 
 type ScenarioFilter = "all" | AgentScenario;
 
 const scenarioOptions: ScenarioFilter[] = ["all", "enterprise", "ecommerce", "recruitment"];
 
-const metricLabels: Array<{ key: keyof EvaluationRunResponse["summary"]; label: string; suffix?: string }> = [
+const metricLabels: Array<{ key: keyof Omit<EvaluationRunResponse["summary"], "failureBuckets">; label: string; suffix?: string }> = [
   { key: "total", label: "总用例数" },
   { key: "passRate", label: "通过率", suffix: "%" },
   { key: "scenarioAccuracy", label: "场景识别准确率", suffix: "%" },
@@ -22,12 +22,27 @@ const metricLabels: Array<{ key: keyof EvaluationRunResponse["summary"]; label: 
   { key: "averageDurationMs", label: "平均耗时", suffix: "ms" },
 ];
 
+const failureBucketLabels: Record<EvaluationFailureReason, { label: string; advice: string }> = {
+  scenario_mismatch: { label: "Router 场景错误", advice: "检查 routeUserQuestion 的场景关键词和规则顺序。" },
+  intent_mismatch: { label: "Intent 意图错误", advice: "检查意图关键词是否覆盖该表达方式。" },
+  tool_mismatch: { label: "Tool 工具错误", advice: "检查 selectTools 或评测 expectedTools 是否符合业务链路。" },
+  rag_usage_mismatch: { label: "RAG 使用错误", advice: "检查 route.needRag 或 RAG 查询增强规则。" },
+  keyword_miss: { label: "关键词未命中", advice: "检查回答、证据、来源是否覆盖评测关键词，或评测关键词是否过窄。" },
+  citation_miss: { label: "来源引用缺失", advice: "检查 RAG 是否召回 sources，或该 case 是否确实需要来源引用。" },
+  pipeline_error: { label: "Pipeline 异常", advice: "检查 API、工具函数或 LLM fallback 是否抛错。" },
+};
+
 function formatMetric(value: number, suffix = "") {
   return `${value}${suffix}`;
 }
 
 function statusClass(passed: boolean) {
   return passed ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+}
+
+function reasonAdvice(reasons: EvaluationFailureReason[]) {
+  if (reasons.length === 0) return "当前用例通过，无需修复。";
+  return reasons.map((reason) => failureBucketLabels[reason].advice).join(" ");
 }
 
 export function EvaluationDashboard() {
@@ -47,6 +62,8 @@ export function EvaluationDashboard() {
     () => result?.results.filter((item) => scenario === "all" || item.route.scenario === scenario || evaluationCases.find((caseItem) => caseItem.id === item.caseId)?.category === scenario) ?? [],
     [result, scenario],
   );
+
+  const failedResults = useMemo(() => visibleResults.filter((item) => !item.passed), [visibleResults]);
 
   async function handleRun() {
     setIsLoading(true);
@@ -147,6 +164,28 @@ export function EvaluationDashboard() {
         </section>
       )}
 
+      {result ? (
+        <section className="mb-6 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-ink-900">失败分析</h2>
+              <p className="mt-1 text-sm text-ink-500">按失败原因分桶，帮助定位 Router、RAG、Tools 或评测规则问题。</p>
+            </div>
+            <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${failedResults.length === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+              {failedResults.length === 0 ? "当前评测集全部通过" : `${failedResults.length} 条失败`}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {(Object.keys(failureBucketLabels) as EvaluationFailureReason[]).map((reason) => (
+              <article key={reason} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-ink-500">{failureBucketLabels[reason].label}</p>
+                <p className="mt-2 text-2xl font-semibold text-ink-900">{result.summary.failureBuckets[reason]}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-5 py-4">
           <h2 className="font-semibold text-ink-900">评测结果</h2>
@@ -155,7 +194,7 @@ export function EvaluationDashboard() {
           </p>
         </div>
         <div className="max-w-full overflow-x-auto">
-          <table className="min-w-[1180px] divide-y divide-slate-200 text-sm">
+          <table className="min-w-[1280px] divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
               <tr>
                 <th className="px-4 py-3">问题</th>
@@ -163,9 +202,9 @@ export function EvaluationDashboard() {
                 <th className="px-4 py-3">意图</th>
                 <th className="px-4 py-3">工具</th>
                 <th className="px-4 py-3">通过</th>
+                <th className="px-4 py-3">失败原因</th>
                 <th className="px-4 py-3">responseMode</th>
                 <th className="px-4 py-3">耗时</th>
-                <th className="px-4 py-3">错误</th>
                 <th className="px-4 py-3">详情</th>
               </tr>
             </thead>
@@ -194,21 +233,29 @@ export function EvaluationDashboard() {
                     <td className="px-4 py-4">
                       <span className={`rounded-md px-2.5 py-1 text-xs font-semibold ${statusClass(item.passed)}`}>{item.passed ? "pass" : "fail"}</span>
                     </td>
+                    <td className="min-w-[180px] px-4 py-4 text-xs text-ink-600">
+                      <span className="break-words">{item.failureSummary ?? "无"}</span>
+                    </td>
                     <td className="whitespace-nowrap px-4 py-4 font-mono text-xs text-brand-700">{item.responseMode}</td>
                     <td className="whitespace-nowrap px-4 py-4 text-ink-500">{item.durationMs}ms</td>
-                    <td className="min-w-[180px] px-4 py-4 text-xs text-rose-700"><span className="break-words">{item.error ?? "无"}</span></td>
                     <td className="px-4 py-4">
                       <button type="button" onClick={() => setExpandedId(expanded ? null : item.caseId)} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-slate-50">
                         {expanded ? "收起" : "展开"}
                       </button>
                       {expanded ? (
-                        <div className="mt-3 w-[420px] max-w-[70vw] rounded-md bg-slate-50 p-3 text-xs leading-5 text-ink-700">
-                          <p className="font-semibold text-ink-900">finalAnswer</p>
+                        <div className="mt-3 w-[460px] max-w-[70vw] rounded-md bg-slate-50 p-3 text-xs leading-5 text-ink-700">
+                          <p className="font-semibold text-ink-900">failureReasons</p>
+                          <p className="mt-1 break-words">{item.failureReasons.join(", ") || "无"}</p>
+                          <p className="mt-3 font-semibold text-ink-900">修复建议</p>
+                          <p className="mt-1 break-words">{reasonAdvice(item.failureReasons)}</p>
+                          <p className="mt-3 font-semibold text-ink-900">预期 vs 实际</p>
+                          <p className="mt-1 break-words">场景：{caseItem?.expectedScenario} / {item.route.scenario}</p>
+                          <p className="break-words">意图：{caseItem?.expectedIntent} / {item.route.intent}</p>
+                          <p className="break-words">工具：{caseItem?.expectedTools.join(", ") || "无"} / {item.toolsUsed.join(", ") || "无"}</p>
+                          <p className="mt-3 font-semibold text-ink-900">finalAnswer</p>
                           <p className="mt-1 whitespace-pre-wrap break-words">{item.finalAnswer}</p>
                           <p className="mt-3 font-semibold text-ink-900">sources</p>
                           <p className="mt-1 break-words">{item.sources.join(", ") || "无"}</p>
-                          <p className="mt-3 font-semibold text-ink-900">toolsUsed</p>
-                          <p className="mt-1 break-words">{item.toolsUsed.join(", ") || "无"}</p>
                         </div>
                       ) : null}
                     </td>

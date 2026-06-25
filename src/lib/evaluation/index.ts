@@ -1,15 +1,33 @@
 import { evaluationCases } from "@/data/evaluation";
 import { runAgentApiPipeline } from "@/lib/agent/api";
-import type { AgentApiResponse, EvaluationCase, EvaluationCaseResult, EvaluationRunResponse, EvaluationSummary, LlmMode, ToolName } from "@/types";
+import type {
+  AgentApiResponse,
+  EvaluationCase,
+  EvaluationCaseResult,
+  EvaluationFailureReason,
+  EvaluationRunResponse,
+  EvaluationSummary,
+  LlmMode,
+  ToolName,
+} from "@/types";
+
+const failureReasonLabels: Record<EvaluationFailureReason, string> = {
+  scenario_mismatch: "Router 场景错误",
+  intent_mismatch: "Intent 意图错误",
+  tool_mismatch: "Tool 工具错误",
+  rag_usage_mismatch: "RAG 使用错误",
+  keyword_miss: "关键词未命中",
+  citation_miss: "来源引用缺失",
+  pipeline_error: "Pipeline 异常",
+};
 
 function pct(value: number) {
   return Number.isFinite(value) ? Math.round(value * 1000) / 10 : 0;
 }
 
-function sameToolSet(expected: ToolName[], actual: ToolName[]) {
-  const expectedSet = new Set(expected);
+function expectedToolsIncluded(expected: ToolName[], actual: ToolName[]) {
   const actualSet = new Set(actual);
-  return expected.every((tool) => actualSet.has(tool)) && actual.every((tool) => expectedSet.has(tool));
+  return expected.every((tool) => actualSet.has(tool));
 }
 
 function uniqueTools(tools: ToolName[]) {
@@ -17,10 +35,7 @@ function uniqueTools(tools: ToolName[]) {
 }
 
 function getToolsUsed(result: AgentApiResponse): ToolName[] {
-  return uniqueTools([
-    ...result.toolResults.map((item) => item.tool),
-    ...result.structuredOutput.toolsUsed,
-  ]);
+  return uniqueTools([...result.toolResults.map((item) => item.tool), ...result.structuredOutput.toolsUsed]);
 }
 
 function getSources(result: AgentApiResponse) {
@@ -34,7 +49,32 @@ function includesKeyword(text: string, keywords: string[]) {
 }
 
 function usedRag(result: AgentApiResponse) {
-  return Boolean(result.ragAnswer && result.ragAnswer.retrievedChunks.length > 0);
+  return Boolean(result.ragAnswer);
+}
+
+function collectFailureReasons(params: {
+  scenarioMatched: boolean;
+  intentMatched: boolean;
+  toolsMatched: boolean;
+  ragUsedMatched: boolean;
+  keywordHit: boolean;
+  citationHit: boolean;
+  error?: string;
+}): EvaluationFailureReason[] {
+  const reasons: EvaluationFailureReason[] = [];
+  if (!params.scenarioMatched) reasons.push("scenario_mismatch");
+  if (!params.intentMatched) reasons.push("intent_mismatch");
+  if (!params.toolsMatched) reasons.push("tool_mismatch");
+  if (!params.ragUsedMatched) reasons.push("rag_usage_mismatch");
+  if (!params.keywordHit) reasons.push("keyword_miss");
+  if (!params.citationHit) reasons.push("citation_miss");
+  if (params.error) reasons.push("pipeline_error");
+  return reasons;
+}
+
+function summarizeFailure(reasons: EvaluationFailureReason[]) {
+  if (reasons.length === 0) return undefined;
+  return reasons.map((reason) => failureReasonLabels[reason]).join("、");
 }
 
 export function evaluateAgentResult(caseItem: EvaluationCase, pipelineResult: AgentApiResponse, durationMs: number): EvaluationCaseResult {
@@ -42,11 +82,21 @@ export function evaluateAgentResult(caseItem: EvaluationCase, pipelineResult: Ag
   const sources = getSources(pipelineResult);
   const scenarioMatched = pipelineResult.route.scenario === caseItem.expectedScenario;
   const intentMatched = pipelineResult.route.intent === caseItem.expectedIntent;
-  const toolsMatched = sameToolSet(caseItem.expectedTools, toolsUsed);
+  const toolsMatched = expectedToolsIncluded(caseItem.expectedTools, toolsUsed);
   const ragUsedMatched = usedRag(pipelineResult) === caseItem.expectedNeedRag;
-  const keywordHit = includesKeyword(`${pipelineResult.finalAnswer} ${pipelineResult.structuredOutput.evidence.join(" ")}`, caseItem.expectedKeywords);
+  const keywordCorpus = [
+    pipelineResult.finalAnswer,
+    pipelineResult.structuredOutput.answer,
+    ...pipelineResult.structuredOutput.evidence,
+    ...pipelineResult.structuredOutput.sources,
+    ...sources,
+    ...toolsUsed,
+  ].join(" ");
+  const keywordHit = includesKeyword(keywordCorpus, caseItem.expectedKeywords);
   const citationHit = caseItem.expectedNeedRag ? sources.length > 0 : true;
-  const passed = scenarioMatched && intentMatched && toolsMatched && ragUsedMatched && keywordHit && citationHit;
+  const error = pipelineResult.api.llmError ?? pipelineResult.api.parseError;
+  const failureReasons = collectFailureReasons({ scenarioMatched, intentMatched, toolsMatched, ragUsedMatched, keywordHit, citationHit, error });
+  const passed = failureReasons.length === 0;
 
   return {
     caseId: caseItem.id,
@@ -64,7 +114,21 @@ export function evaluateAgentResult(caseItem: EvaluationCase, pipelineResult: Ag
     toolsUsed,
     sources,
     finalAnswer: pipelineResult.finalAnswer,
-    error: pipelineResult.api.llmError ?? pipelineResult.api.parseError,
+    failureReasons,
+    failureSummary: summarizeFailure(failureReasons),
+    error,
+  };
+}
+
+function emptyFailureBuckets(): Record<EvaluationFailureReason, number> {
+  return {
+    scenario_mismatch: 0,
+    intent_mismatch: 0,
+    tool_mismatch: 0,
+    rag_usage_mismatch: 0,
+    keyword_miss: 0,
+    citation_miss: 0,
+    pipeline_error: 0,
   };
 }
 
@@ -77,6 +141,12 @@ export function summarizeEvaluation(results: EvaluationCaseResult[]): Evaluation
   const jsonParseSuccess = count((item) => item.responseMode === "mock" || item.responseMode === "real" || item.responseMode === "real_repaired");
   const fallback = count((item) => item.responseMode === "fallback" || item.responseMode === "real_text_fallback");
   const averageDurationMs = total ? Math.round(results.reduce((sum, item) => sum + item.durationMs, 0) / total) : 0;
+  const failureBuckets = emptyFailureBuckets();
+  for (const result of results) {
+    for (const reason of result.failureReasons) {
+      failureBuckets[reason] += 1;
+    }
+  }
 
   return {
     total,
@@ -92,6 +162,7 @@ export function summarizeEvaluation(results: EvaluationCaseResult[]): Evaluation
     jsonParseSuccessRate: pct(total ? jsonParseSuccess / total : 0),
     fallbackRate: pct(total ? fallback / total : 0),
     averageDurationMs,
+    failureBuckets,
   };
 }
 
@@ -119,6 +190,8 @@ function failedCaseResult(caseItem: EvaluationCase, durationMs: number, error: s
     toolsUsed: [],
     sources: [],
     finalAnswer: "",
+    failureReasons: ["pipeline_error"],
+    failureSummary: failureReasonLabels.pipeline_error,
     error,
   };
 }

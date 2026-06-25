@@ -350,6 +350,15 @@ export type EvaluationCase = {
   difficulty: "easy" | "medium" | "hard";
 };
 
+export type EvaluationFailureReason =
+  | "scenario_mismatch"
+  | "intent_mismatch"
+  | "tool_mismatch"
+  | "rag_usage_mismatch"
+  | "keyword_miss"
+  | "citation_miss"
+  | "pipeline_error";
+
 export type EvaluationCaseResult = {
   caseId: string;
   question: string;
@@ -366,6 +375,8 @@ export type EvaluationCaseResult = {
   toolsUsed: ToolName[];
   sources: string[];
   finalAnswer: string;
+  failureReasons: EvaluationFailureReason[];
+  failureSummary?: string;
   error?: string;
 };
 
@@ -383,6 +394,7 @@ export type EvaluationSummary = {
   jsonParseSuccessRate: number;
   fallbackRate: number;
   averageDurationMs: number;
+  failureBuckets: Record<EvaluationFailureReason, number>;
 };
 
 export type EvaluationRunResponse = {

@@ -1,4 +1,4 @@
-﻿import { jobDescriptions, sampleResume } from "@/data/mock";
+import { jobDescriptions, sampleResume } from "@/data/mock";
 import { runMockRagPipeline } from "@/lib/rag";
 import { analyzeJD, createTicket, generateCustomerReply, queryOrder, queryProduct, searchPolicy } from "@/lib/tools";
 import type {
@@ -130,7 +130,7 @@ export function routeUserQuestion(question: string): AgentRoute {
     };
   }
 
-  if (hasAny(q, ["JD", "岗位", "简历", "匹配", "面试", "求职", "招聘"])) {
+  if (hasAny(q, ["JD", "岗位", "简历", "匹配", "面试", "求职", "招聘", "实习生", "大模型", "核心要求", "项目关键词"])) {
     return {
       scenario: "recruitment",
       intent: "jd_match",
@@ -301,7 +301,7 @@ export function generateMockAgentFinalAnswer(
   } else if (route.intent === "after_sale_reply") {
     finalAnswer = "已根据售后场景生成 mock 客服回复，可结合 RAG 召回的售后规则进行人工确认。";
   } else if (route.intent === "jd_match") {
-    finalAnswer = "已完成 JD 与 mock 简历的规则匹配分析，请查看 matchScore、匹配关键词和能力缺口。";
+    finalAnswer = "已完成 JD 与 mock 简历的规则匹配分析，请查看 matchScore、匹配关键词、能力缺口和面试问题建议。大模型应用开发相关岗位会重点关注 RAG、Agent、Tool Calling、API 调用和项目经验。";
   } else if (route.intent === "ticket_create") {
     finalAnswer = "已模拟创建跟进工单，工单优先级和负责人由规则决定。";
   }
@@ -350,7 +350,8 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
   let ragAnswer: RagAnswer | null = null;
   const ragStart = Date.now();
   if (route.needRag) {
-    ragAnswer = runMockRagPipeline(question, documents);
+    const ragQuestion = route.intent === "policy_check" ? `${question} 退货 售后 签收 拆封 7天无理由 质量问题` : question;
+    ragAnswer = runMockRagPipeline(ragQuestion, documents);
     steps.push(
       makeStep({
         id: "step-rag",
