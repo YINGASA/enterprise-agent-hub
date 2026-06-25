@@ -298,12 +298,14 @@ export type LlmGenerateResult = {
   errorMessage?: string;
   causeMessage?: string;
   causeCode?: string;
+  rawContentPreview?: string;
+  parseError?: string;
   error?: string;
 };
 
 export type AgentApiMetadata = {
   requestedMode: LlmMode;
-  responseMode: "mock" | "real" | "fallback";
+  responseMode: "mock" | "real" | "real_repaired" | "real_text_fallback" | "fallback";
   provider: LlmProvider;
   model: string;
   fallbackReason?: LlmErrorType | "llm_error";
@@ -318,6 +320,8 @@ export type AgentApiMetadata = {
   errorType?: LlmErrorType;
   llmDurationMs?: number;
   llmError?: string;
+  parseError?: string;
+  rawContentPreview?: string;
 };
 
 export type AgentApiResponse = AgentPipelineResult & {

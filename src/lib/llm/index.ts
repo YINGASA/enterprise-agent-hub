@@ -132,20 +132,65 @@ export function getLlmConfig(): LlmClientConfig {
   };
 }
 
-export function safeParseJson(text: string): { data: Record<string, unknown> | null; error?: string } {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
-  const candidate = fenced ?? trimmed;
+function findFirstJsonObject(text: string) {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
 
-  try {
-    const parsed: unknown = JSON.parse(candidate);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return { data: parsed as Record<string, unknown> };
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (escaped) {
+      escaped = false;
+      continue;
     }
-    return { data: null, error: "JSON root is not an object." };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : "Unknown JSON parse error." };
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+
+    if (depth === 0) {
+      return text.slice(start, index + 1);
+    }
   }
+
+  return null;
+}
+
+export function safeParseJson(text: string): { data: Record<string, unknown> | null; error?: string; rawContentPreview: string; candidate?: string } {
+  const trimmed = text.trim();
+  const rawContentPreview = trimmed.slice(0, 500);
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  const candidates = [trimmed, fenced, findFirstJsonObject(fenced ?? trimmed)].filter((item): item is string => Boolean(item));
+  let lastError = "No JSON object found.";
+
+  for (const candidate of candidates) {
+    try {
+      const parsed: unknown = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return { data: parsed as Record<string, unknown>, rawContentPreview, candidate };
+      }
+      lastError = "JSON root is not an object.";
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Unknown JSON parse error.";
+    }
+  }
+
+  return { data: null, error: lastError, rawContentPreview, candidate: candidates.at(-1) };
 }
 
 function failedResult(params: {
@@ -157,6 +202,8 @@ function failedResult(params: {
   httpStatus?: number;
   statusText?: string;
   responseBodyPreview?: string;
+  rawContentPreview?: string;
+  parseError?: string;
   errorName?: string;
   causeMessage?: string;
   causeCode?: string;
@@ -177,12 +224,25 @@ function failedResult(params: {
     httpStatus: params.httpStatus,
     statusText: params.statusText,
     responseBodyPreview: params.responseBodyPreview,
+    rawContentPreview: params.responseBodyPreview,
+    parseError: params.errorType === "json_parse_error" ? params.errorMessage : undefined,
     errorType: params.errorType,
     errorName: params.errorName,
     errorMessage: params.errorMessage,
     causeMessage: params.causeMessage,
     causeCode: params.causeCode,
     error: params.errorMessage,
+  };
+}
+
+function buildRequestBody(messages: LlmMessage[], options: LlmGenerateOptions, includeResponseFormat: boolean) {
+  return {
+    model: getLlmConfig().model,
+    messages,
+    temperature: options.temperature ?? 0.2,
+    max_tokens: options.maxTokens ?? 800,
+    stream: false,
+    ...(includeResponseFormat && options.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
   };
 }
 
@@ -206,36 +266,49 @@ export async function callOpenAICompatibleChat(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
-  try {
+  async function send(includeResponseFormat: boolean) {
     const proxyAgent = createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
+    const body = buildRequestBody(messages, options, includeResponseFormat);
     const requestInit: FetchInitWithDispatcher = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${config.apiKey}`,
       },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        temperature: options.temperature ?? 0.2,
-        max_tokens: options.maxTokens ?? 800,
-        stream: false,
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
       ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
     };
 
-    const response = proxyAgent
-      ? await undiciFetch(config.requestUrl, requestInit as Parameters<typeof undiciFetch>[1])
-      : await fetch(config.requestUrl, requestInit);
+    return proxyAgent
+      ? undiciFetch(config.requestUrl, requestInit as Parameters<typeof undiciFetch>[1])
+      : fetch(config.requestUrl, requestInit);
+  }
 
-    const rawText = await response.text();
-    const responseBodyPreview = rawText.slice(0, 500);
+  try {
+    let response = await send(options.responseFormat === "json_object");
+    let rawText = await response.text();
+    let responseBodyPreview = rawText.slice(0, 500);
     let raw: unknown = rawText;
     try {
       raw = rawText ? JSON.parse(rawText) : null;
     } catch {
       raw = rawText;
+    }
+
+    if (!response.ok && options.responseFormat === "json_object") {
+      const preview = responseBodyPreview.toLowerCase();
+      const maybeUnsupportedResponseFormat = response.status === 400 && preview.includes("response_format");
+      if (maybeUnsupportedResponseFormat) {
+        response = await send(false);
+        rawText = await response.text();
+        responseBodyPreview = rawText.slice(0, 500);
+        try {
+          raw = rawText ? JSON.parse(rawText) : null;
+        } catch {
+          raw = rawText;
+        }
+      }
     }
 
     if (!response.ok) {
@@ -284,6 +357,8 @@ export async function callOpenAICompatibleChat(
       httpStatus: response.status,
       statusText: response.statusText,
       responseBodyPreview,
+      rawContentPreview: parsed.rawContentPreview,
+      parseError: parsed.error,
       errorType: parsed.error ? "json_parse_error" : undefined,
       errorMessage: parsed.error,
       error: parsed.error,

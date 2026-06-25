@@ -1,13 +1,13 @@
-﻿import { AgentWorkspace } from "@/components/AgentWorkspace";
+import { AgentWorkspace } from "@/components/AgentWorkspace";
 import { PageHeader } from "@/components/PageHeader";
 
 export default function ChatPage() {
   return (
-    <div>
+    <div className="overflow-x-hidden">
       <PageHeader
         eyebrow="Agent Workspace"
         title="聊天工作台"
-        description="V0.4 升级为本地规则版 Agent 工作台：自动判断业务场景、任务意图、是否需要 RAG、需要调用哪些工具，并展示完整执行链路。"
+        description="V0.5.3 支持 Mock / Real API 双模式，Real 模式通过服务端 API Route 调用 OpenAI-compatible 模型，并保留 RAG、工具调用、结构化输出和 fallback 机制。"
       />
       <AgentWorkspace />
     </div>
