@@ -1,16 +1,18 @@
 import type { KnowledgeSourceType, RagAnswer } from "@/types";
 
 const ui = {
-  defaultSource: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93",
-  userUpload: "\u7528\u6237\u4e0a\u4f20",
-  userPaste: "\u7528\u6237\u7c98\u8d34",
-  noSources: "\u6682\u65e0\u6765\u6e90\u5f15\u7528\u3002",
-  userDoc: "\u7528\u6237\u6587\u6863",
-  tags: "\u6807\u7b7e\uff1a",
-  matchedKeywords: "\u547d\u4e2d\u5173\u952e\u8bcd\uff1a",
-  scoreReason: "\u547d\u4e2d\u539f\u56e0\uff1a",
-  chunks: "chunks",
-  score: "score",
+  defaultSource: "默认知识库",
+  userUpload: "用户上传",
+  userPaste: "用户粘贴",
+  noSources: "暂无来源引用。",
+  userDoc: "用户文档",
+  pack: "知识库：",
+  tags: "标签：",
+  matchedKeywords: "命中关键词：",
+  scoreReason: "命中原因：",
+  chunks: "切片",
+  score: "得分",
+  scoreBreakdown: "评分拆解：",
 };
 
 function sourceTypeLabel(sourceType?: KnowledgeSourceType) {
@@ -20,6 +22,16 @@ function sourceTypeLabel(sourceType?: KnowledgeSourceType) {
     user_paste: ui.userPaste,
   };
   return sourceType ? labels[sourceType] ?? sourceType : ui.defaultSource;
+}
+
+function packLabel(packId?: string) {
+  const labels: Record<string, string> = {
+    "enterprise-policy": "企业 IT / 行政制度知识库",
+    "ecommerce-support": "电商客服售后知识库",
+    "recruitment-career": "招聘求职匹配知识库",
+    "ai-engineering": "AI 工程规范知识库",
+  };
+  return packId ? labels[packId] ?? packId : ui.defaultSource;
 }
 
 export function SourceList({ sources }: { sources: RagAnswer["sources"] }) {
@@ -38,13 +50,24 @@ export function SourceList({ sources }: { sources: RagAnswer["sources"] }) {
               {source.sourceType && source.sourceType !== "default" ? <span className="rounded bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">{ui.userDoc}</span> : null}
             </div>
             <p className="mt-1 break-words text-xs text-ink-500">
-              {source.category} ? {ui.chunks} {source.chunkIndexes.join(", ")} ? {ui.score} {source.score ?? 0}
+              {source.category}{" \u00b7 "}{packLabel(source.packId)}{" \u00b7 "}{ui.chunks} {source.chunkIndexes.join(", ")}{" \u00b7 "}{ui.score} {source.score ?? 0}
             </p>
           </summary>
           <div className="mt-3 space-y-2 text-xs leading-5 text-ink-600">
+            {source.packId ? <p className="break-words">{ui.pack}{packLabel(source.packId)}</p> : null}
             {source.tags?.length ? <p className="break-words">{ui.tags}{source.tags.join(" / ")}</p> : null}
             {source.matchedKeywords?.length ? <p className="break-words">{ui.matchedKeywords}{source.matchedKeywords.join(" / ")}</p> : null}
             {source.scoreReason?.length ? <p className="break-words">{ui.scoreReason}{source.scoreReason.join(" / ")}</p> : null}
+            {source.scoreBreakdown ? (
+              <details className="rounded bg-white p-2 ring-1 ring-slate-200">
+                <summary className="cursor-pointer font-semibold text-ink-600">{ui.scoreBreakdown}</summary>
+                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  {Object.entries(source.scoreBreakdown).map(([key, value]) => (
+                    <span key={key} className="break-all font-mono text-[11px] text-ink-500">{key}: {Math.round(Number(value) * 10) / 10}</span>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             {source.contentPreview ? <p className="whitespace-pre-wrap break-words rounded bg-white p-2 ring-1 ring-slate-200">{source.contentPreview}{source.contentPreview.length >= 260 ? "..." : ""}</p> : null}
           </div>
         </details>

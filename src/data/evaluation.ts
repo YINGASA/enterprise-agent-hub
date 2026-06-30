@@ -619,7 +619,7 @@ export const evaluationCases: EvaluationCase[] = [
   {
     "id": "EVAL-AI-001",
     "question": "如果模型返回的 JSON 不合法，系统应该怎么处理？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -628,14 +628,14 @@ export const evaluationCases: EvaluationCase[] = [
       "解析",
       "repair"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-002",
     "question": "RAG 检索质量应该怎么评测？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -644,14 +644,14 @@ export const evaluationCases: EvaluationCase[] = [
       "检索",
       "引用"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-003",
     "question": "Agent 工具调用要注意哪些参数和幂等问题？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -660,14 +660,14 @@ export const evaluationCases: EvaluationCase[] = [
       "工具调用",
       "参数"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-004",
     "question": "API Key 为什么不能暴露在前端？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -676,14 +676,14 @@ export const evaluationCases: EvaluationCase[] = [
       "前端",
       "环境变量"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "easy",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-005",
     "question": "fallback 机制在 AI 应用里有什么价值？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -692,14 +692,14 @@ export const evaluationCases: EvaluationCase[] = [
       "异常",
       "降级"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-006",
     "question": "Prompt 设计应该包含哪些约束？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -708,14 +708,14 @@ export const evaluationCases: EvaluationCase[] = [
       "输出",
       "约束"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "easy",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-007",
     "question": "评测集设计要覆盖哪些边界问题？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -724,14 +724,14 @@ export const evaluationCases: EvaluationCase[] = [
       "测试集",
       "覆盖"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-AI-008",
     "question": "Agent Trace 应该展示哪些可观测性字段？",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
@@ -740,7 +740,7 @@ export const evaluationCases: EvaluationCase[] = [
       "可观测性",
       "耗时"
     ],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
@@ -962,26 +962,171 @@ export const evaluationCases: EvaluationCase[] = [
   {
     "id": "EVAL-V11-AI-001",
     "question": "Real API \u5931\u8d25\u65f6\u7cfb\u7edf\u5982\u4f55 fallback\uff1f",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
     "expectedKeywords": ["fallback", "Real API", "\u9519\u8bef"],
-    "category": "general",
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   },
   {
     "id": "EVAL-V11-AI-002",
     "question": "RAG \u547d\u4e2d\u7528\u6237\u6587\u6863\u548c\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u65f6\u600e\u4e48\u89e3\u91ca\uff1f",
-    "expectedScenario": "general",
+    "expectedScenario": "ai_engineering",
     "expectedIntent": "knowledge_qa",
     "expectedTools": [],
     "expectedNeedRag": true,
     "expectedKeywords": ["RAG", "\u6765\u6e90", "scoreReason"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V12-RAG-001",
+    "question": "\u53d1\u7968\u4e22\u4e86\u8fd8\u80fd\u62a5\u9500\u5417",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["\u62a5\u9500", "\u53d1\u7968"],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
+  },
+  {
+    "id": "EVAL-V12-RAG-002",
+    "question": "7\u5929\u65e0\u7406\u7531\u8fc7\u4e86\u8fd8\u80fd\u9000\u5417",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["\u8ba2\u5355\u53f7", "\u7b7e\u6536\u65f6\u95f4", "\u662f\u5426\u62c6\u5c01"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-V12-RAG-003",
+    "question": "\u4e1c\u897f\u4e0d\u559c\u6b22\u60f3\u9000\u548b\u529e",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["\u8ba2\u5355\u53f7", "\u7b7e\u6536\u65f6\u95f4", "\u662f\u5426\u62c6\u5c01"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-V12-RAG-004",
+    "question": "\u8fd9\u4e2a\u5c97\u4f4d\u548c\u6211\u7684\u9879\u76ee\u5339\u914d\u4e0d",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": ["analyzeJD"],
+    "expectedNeedRag": false,
+    "expectedKeywords": ["AI", "\u5339\u914d"],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-V12-RAG-005",
+    "question": "\u6a21\u578b\u8f93\u51fa\u4e0d\u662f\u5408\u6cd5 JSON \u600e\u4e48\u5904\u7406",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["JSON", "repair", "fallback"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V12-RAG-006",
+    "question": "\u660e\u5929\u5e7f\u5dde\u4f1a\u4e0b\u96e8\u5417",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
     "category": "general",
+    "difficulty": "easy",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-V12-RAG-007",
+    "question": "RAG \u68c0\u7d22\u547d\u4e2d\u5c11\u600e\u4e48\u6392\u67e5",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["RAG", "\u68c0\u7d22"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V12-RAG-008",
+    "question": "\u7528\u6237\u6587\u6863\u548c\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u90fd\u547d\u4e2d\u65f6\u600e\u4e48\u89e3\u91ca\u6765\u6e90",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["RAG", "\u6765\u6e90", "scoreReason"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V121-AI-001",
+    "question": "\u6a21\u578b\u8f93\u51fa\u4e0d\u662f\u5408\u6cd5 JSON \u600e\u4e48\u5904\u7406",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["JSON", "repair", "fallback"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V121-AI-002",
+    "question": "RAG \u68c0\u7d22\u7ed3\u679c\u4e0d\u51c6\u600e\u4e48\u529e",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["RAG", "\u68c0\u7d22"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V121-AI-003",
+    "question": "Agent \u5de5\u5177\u8c03\u7528\u5931\u8d25\u600e\u4e48\u5904\u7406",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["Agent", "\u5de5\u5177\u8c03\u7528", "fallback"],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V121-AI-004",
+    "question": "\u600e\u4e48\u8bbe\u8ba1 Agent \u8bc4\u6d4b\u96c6",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["Agent", "\u8bc4\u6d4b", "\u6d4b\u8bd5\u96c6"],
+    "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
   }
+
 
 ];

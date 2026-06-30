@@ -201,3 +201,13 @@ Manual V1.1 acceptance checklist:
 - Import a user document by paste or file upload and verify localStorage persistence.
 - Ask a question that hits both default and user content, then inspect Top sources and score reasons.
 - Run /api/evaluation in Mock mode and verify the suite remains stable.
+
+## V1.2 Hybrid Retrieval Notes
+
+V1.2 upgrades the mock keyword RAG into a more explainable Hybrid Retrieval layer. It is still not embedding or vector search. The retriever now normalizes the query, expands business synonyms, and scores chunks with keyword, title, tag, category, pack, source, phrase, and freshness signals.
+
+Each retrieved chunk can expose scoreBreakdown, scoreReason, retrievalConfidence, lowConfidenceRetrieval, and query expansion terms. This makes the chat answer more trustworthy: if retrieval confidence is low, the Agent should say that the knowledge base evidence is insufficient instead of pretending that weak chunks are authoritative.
+
+V1.2.1 further improves AI engineering routing. Questions about JSON repair, invalid structured output, fallback, Tool Calling failures, Agent evaluation datasets, Prompt constraints, RAG retrieval quality, Embedding, vector search, and source citations are routed to the AI Engineering scenario first and prioritize the `ai-engineering` knowledge pack. In the chat UI this appears as `AI ???? / ?????`, while raw enum values remain available only in debug JSON.
+
+Future V1.3+ work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.

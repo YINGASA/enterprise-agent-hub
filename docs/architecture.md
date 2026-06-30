@@ -127,3 +127,16 @@ V1.1 improves product readiness without adding a database or crawler. Four self-
 The RAG flow remains keyword-based. During retrieval, chunks carry sourceType, packId, category, tags, matchedKeywords, and scoreReason. User-side sources receive a small boost when relevant, while default sources remain eligible so answers can cite both user documents and built-in knowledge.
 
 No third-party webpage content is committed to the repository. URL import and license/source metadata management are intentionally deferred to a later version.
+
+## V1.2 Hybrid Retrieval
+
+V1.2 keeps the no-database, no-vector-store constraint but improves retrieval quality. The RAG layer now has four visible stages:
+
+1. Query normalization: remove noisy punctuation, normalize casing, and keep Chinese/English tokens.
+2. Query expansion: add domain synonyms for refund, reimbursement, JD matching, RAG, Agent, JSON output, and fallback.
+3. Hybrid scoring: combine keywordScore, titleScore, tagScore, categoryScore, packScore, sourceScore, phraseScore, and freshnessScore.
+4. Confidence gating: return retrievalConfidence as high, medium, or low. Low-confidence retrieval adds a boundary note so Mock and Real answers do not overclaim.
+
+The system still uses local chunks and local scoring. It does not call an embedding API, vector database, reranker, LangChain, or LlamaIndex.
+
+V1.2.1 adds an explicit AI engineering route. Router keywords such as Prompt, RAG, Agent, Tool Calling, JSON repair, structured output, fallback, low-confidence retrieval, Evaluation, test set, source citation, vector database, and Embedding map to `ai_engineering / knowledge_qa`. The RAG layer then prefers the `ai-engineering` pack while still allowing mixed-source retrieval when useful.

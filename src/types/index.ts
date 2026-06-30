@@ -76,11 +76,48 @@ export type KnowledgeChunk = {
   keywords: string[];
 };
 
+export type RetrievalConfidence = "high" | "medium" | "low";
+
+export type RagScoreBreakdown = {
+  keywordScore: number;
+  titleScore: number;
+  tagScore: number;
+  categoryScore: number;
+  packScore: number;
+  sourceScore: number;
+  phraseScore: number;
+  freshnessScore: number;
+  totalScore: number;
+};
+
+export type QueryExpansionResult = {
+  originalQuery: string;
+  normalizedQuery: string;
+  keywords: string[];
+  expandedKeywords: string[];
+  phrases: string[];
+  preferredPackId?: KnowledgePackId;
+  scenario?: AgentScenario | "ai-engineering";
+};
+
+export type RagRetrievalMetadata = {
+  query: QueryExpansionResult;
+  topK: number;
+  candidateCount: number;
+  selectedChunkCount: number;
+  maxScore: number;
+  averageScore: number;
+  retrievalConfidence: RetrievalConfidence;
+  lowConfidenceRetrieval: boolean;
+  lowConfidenceReason?: string;
+};
+
 export type RetrievedChunk = {
   chunk: KnowledgeChunk;
   score: number;
   matchedKeywords: string[];
   scoreReason?: string[];
+  scoreBreakdown?: RagScoreBreakdown;
 };
 
 export type RagAnswer = {
@@ -96,12 +133,17 @@ export type RagAnswer = {
     tags?: string[];
     score?: number;
     scoreReason?: string[];
+    scoreBreakdown?: RagScoreBreakdown;
     matchedKeywords?: string[];
     contentPreview?: string;
     chunkIndexes: number[];
   }>;
   mode: "mock-rag";
   createdAt: string;
+  retrievalMetadata?: RagRetrievalMetadata;
+  retrievalConfidence?: RetrievalConfidence;
+  lowConfidenceRetrieval?: boolean;
+  lowConfidenceReason?: string;
 };
 
 export type KnowledgeImportResult =
@@ -225,7 +267,7 @@ export type ToolRunResult<TData = Record<string, unknown>> = {
   executedAt: string;
 };
 
-export type AgentScenario = "enterprise" | "ecommerce" | "recruitment" | "general";
+export type AgentScenario = "enterprise" | "ecommerce" | "recruitment" | "ai_engineering" | "general";
 
 export type AgentIntent =
   | "knowledge_qa"

@@ -35,7 +35,7 @@ function clampConfidence(value: unknown, fallback: number) {
 
 function normalizeStructuredOutput(value: Record<string, unknown>, fallback: AgentStructuredOutput): AgentStructuredOutput {
   return {
-    scenario: value.scenario === "enterprise" || value.scenario === "ecommerce" || value.scenario === "recruitment" || value.scenario === "general" ? value.scenario : fallback.scenario,
+    scenario: value.scenario === "enterprise" || value.scenario === "ecommerce" || value.scenario === "recruitment" || value.scenario === "ai_engineering" || value.scenario === "general" ? value.scenario : fallback.scenario,
     intent:
       value.intent === "knowledge_qa" ||
       value.intent === "policy_check" ||
@@ -117,6 +117,7 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
         "If fallbackStructuredOutput.needsClarification is true, ask for missing information and never invent order/product facts.",
         "For clarification cases, preserve needsClarification, missingFields, clarificationQuestion, usedDemoData, and dataBoundaryNote in JSON.",
         "Do not say a specific order is refundable unless queryOrder returned an order from an explicit user-provided order id.",
+        "If rag.retrievalConfidence is low or rag.lowConfidenceRetrieval is true, state that the knowledge base evidence is insufficient; do not invent sources or treat weak chunks as strong evidence.",
       ].join("\n"),
     },
     {
