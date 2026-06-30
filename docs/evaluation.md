@@ -79,3 +79,5 @@ V1.2 adds retrieval-quality cases for synonym expansion, business phrase matchin
 - weather questions should remain general fallback and should not force unrelated RAG citations.
 
 The full suite target remains passRate >= 90%. Failure buckets continue to explain scenario, intent, tool, RAG usage, citation, keyword, and pipeline issues.
+
+V1.2.1 adds focused AI engineering routing checks. Cases such as ????????? JSON ?????, ?RAG ??????????, ?Agent ???????????, and ????? Agent ???? should resolve to `ai_engineering / knowledge_qa`, use RAG, and prioritize AI engineering sources. This guards against technical knowledge questions falling back to the generic scenario even when retrieval succeeds.

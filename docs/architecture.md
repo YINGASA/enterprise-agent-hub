@@ -138,3 +138,5 @@ V1.2 keeps the no-database, no-vector-store constraint but improves retrieval qu
 4. Confidence gating: return retrievalConfidence as high, medium, or low. Low-confidence retrieval adds a boundary note so Mock and Real answers do not overclaim.
 
 The system still uses local chunks and local scoring. It does not call an embedding API, vector database, reranker, LangChain, or LlamaIndex.
+
+V1.2.1 adds an explicit AI engineering route. Router keywords such as Prompt, RAG, Agent, Tool Calling, JSON repair, structured output, fallback, low-confidence retrieval, Evaluation, test set, source citation, vector database, and Embedding map to `ai_engineering / knowledge_qa`. The RAG layer then prefers the `ai-engineering` pack while still allowing mixed-source retrieval when useful.
