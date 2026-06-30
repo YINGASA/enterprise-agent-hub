@@ -1,41 +1,72 @@
-import type { AgentScenario, KnowledgeChunk, KnowledgeDocument, KnowledgePackId, RagAnswer, RetrievedChunk } from "@/types";
+import type {
+  AgentScenario,
+  KnowledgeChunk,
+  KnowledgeDocument,
+  KnowledgePackId,
+  QueryExpansionResult,
+  RagAnswer,
+  RagRetrievalMetadata,
+  RagScoreBreakdown,
+  RetrievalConfidence,
+  RetrievedChunk,
+} from "@/types";
 
-type RagPipelineOptions = { topK?: number; packId?: KnowledgePackId; scenario?: AgentScenario | "ai-engineering"; };
+type RagPipelineOptions = { topK?: number; packId?: KnowledgePackId; scenario?: AgentScenario | "ai-engineering" };
+type RetrievalOptions = { preferredPackId?: KnowledgePackId; scenario?: AgentScenario | "ai-engineering"; topK?: number };
 
-const DOMAIN_KEYWORDS = ["报销","差旅","发票","行程单","付款凭证","材料","客户拜访","年假","请假","病假","加班","调休","审批","合同","采购","项目立项","工单","SLA","入职","离职","信息安全","客户数据","脱敏","权限","退货","退款","售后","签收","拆封","七天无理由","7天无理由","质量问题","换货","物流","投诉","客服","话术","尺码","库存","缺货","AI","大模型","RAG","Agent","Router","Tool Calling","工具调用","结构化输出","JSON","fallback","评测","可观测性","API Key","Prompt","向量数据库","Embedding","招聘","求职","岗位","JD","简历","匹配","面试","实习生","项目经历","关键词"];
+const DOMAIN_KEYWORDS = [
+  "\u62a5\u9500", "\u5dee\u65c5", "\u53d1\u7968", "\u4ed8\u6b3e\u51ed\u8bc1", "\u5ba1\u6279", "\u8bf7\u5047", "\u5e74\u5047", "\u8c03\u4f11", "\u7535\u8111", "VPN", "\u8d26\u53f7\u6743\u9650", "\u6570\u636e\u5b89\u5168",
+  "\u9000\u8d27", "\u9000\u6b3e", "\u552e\u540e", "7\u5929\u65e0\u7406\u7531", "\u4e03\u5929\u65e0\u7406\u7531", "\u62c6\u5c01", "\u7b7e\u6536", "\u6362\u8d27", "\u7269\u6d41", "\u5ba2\u670d", "\u5c3a\u7801", "\u5e93\u5b58", "\u8d28\u91cf\u95ee\u9898",
+  "\u62db\u8058", "\u5c97\u4f4d", "JD", "\u7b80\u5386", "\u5339\u914d", "\u9762\u8bd5", "\u5019\u9009\u4eba", "\u8bc4\u5206",
+  "AI", "RAG", "Agent", "Router", "Tool Calling", "\u5de5\u5177\u8c03\u7528", "\u7ed3\u6784\u5316\u8f93\u51fa", "JSON", "fallback", "JSON repair", "\u8bc4\u6d4b", "API Key", "Prompt", "\u77e5\u8bc6\u5e93", "\u68c0\u7d22", "\u5f15\u7528",
+];
+
+const BUSINESS_PHRASES = [
+  "7\u5929\u65e0\u7406\u7531", "\u4e03\u5929\u65e0\u7406\u7531", "\u53d1\u7968\u4e22\u4e86", "\u4ed8\u6b3e\u51ed\u8bc1", "\u7535\u8111\u7533\u8bf7", "VPN \u6743\u9650", "API Key", "JSON repair", "\u7ed3\u6784\u5316\u8f93\u51fa", "Tool Calling", "Agent Router", "RAG \u5f15\u7528", "\u68c0\u7d22\u8d28\u91cf", "\u9ed8\u8ba4\u77e5\u8bc6\u5e93", "\u7528\u6237\u6587\u6863",
+];
 
 const SYNONYMS: Record<string, string[]> = {
-  "退货": ["退款", "售后", "七天无理由", "7天无理由", "退换货"],
-  "退款": ["退货", "售后", "到账", "原路退回"],
-  "售后": ["退货", "退款", "换货", "质量问题", "投诉"],
-  "请假": ["年假", "病假", "事假", "调休", "休假"],
-  "年假": ["休假", "请假", "带薪年假"],
-  "调休": ["加班", "请假", "休假"],
-  "JD": ["岗位", "职位", "招聘", "简历", "匹配"],
-  "岗位": ["JD", "职位", "招聘", "求职", "简历"],
-  "简历": ["JD", "岗位", "匹配", "项目经历", "关键词"],
-  "匹配": ["JD", "岗位", "简历", "评分"],
-  "工具调用": ["Tool Calling", "Agent", "参数", "工具"],
-  "Agent": ["Router", "工具调用", "Tool Calling", "Trace"],
-  "RAG": ["知识库", "检索", "引用", "召回", "chunk"],
-  "结构化输出": ["JSON", "Schema", "解析", "repair"],
-  "fallback": ["兜底", "降级", "异常", "失败"],
+  "\u9000\u8d27": ["\u9000\u6b3e", "\u552e\u540e", "7\u5929\u65e0\u7406\u7531", "\u4e03\u5929\u65e0\u7406\u7531", "\u4e0d\u559c\u6b22", "\u60f3\u9000"],
+  "\u9000\u6b3e": ["\u9000\u8d27", "\u552e\u540e", "\u9000\u6b3e\u65f6\u6548"],
+  "\u552e\u540e": ["\u9000\u8d27", "\u9000\u6b3e", "\u6362\u8d27", "\u8d28\u91cf\u95ee\u9898", "\u5ba2\u670d"],
+  "\u62a5\u9500": ["\u53d1\u7968", "\u5dee\u65c5", "\u4ed8\u6b3e\u51ed\u8bc1", "\u5ba1\u6279"],
+  "\u53d1\u7968": ["\u62a5\u9500", "\u7968\u636e", "\u4ed8\u6b3e\u51ed\u8bc1"],
+  "\u8bf7\u5047": ["\u5e74\u5047", "\u75c5\u5047", "\u8c03\u4f11", "\u4f11\u5047"],
+  "JD": ["\u5c97\u4f4d", "\u62db\u8058", "\u7b80\u5386", "\u5339\u914d", "\u9762\u8bd5"],
+  "\u5c97\u4f4d": ["JD", "\u62db\u8058", "\u7b80\u5386", "\u5339\u914d"],
+  "\u7b80\u5386": ["JD", "\u5c97\u4f4d", "\u5339\u914d", "\u9879\u76ee\u7ecf\u5386"],
+  "RAG": ["\u77e5\u8bc6\u5e93", "\u68c0\u7d22", "\u5f15\u7528", "chunk", "\u6765\u6e90"],
+  "Agent": ["Router", "\u5de5\u5177\u8c03\u7528", "Tool Calling", "Trace"],
+  "JSON": ["\u7ed3\u6784\u5316\u8f93\u51fa", "Schema", "\u89e3\u6790", "repair", "\u4fee\u590d"],
+  "fallback": ["\u515c\u5e95", "\u964d\u7ea7", "\u5f02\u5e38", "\u5931\u8d25", "\u8fb9\u754c"],
+  "\u7535\u8111": ["\u8bbe\u5907", "\u7b14\u8bb0\u672c", "\u7535\u8111\u7533\u8bf7"],
+  "VPN": ["\u8fdc\u7a0b\u529e\u516c", "\u8d26\u53f7\u6743\u9650", "\u6743\u9650\u7533\u8bf7"],
 };
 
-const STOP_WORDS = new Set(["什么", "怎么", "需要", "可以", "是否", "一个", "这个", "那个", "请问", "说明", "相关", "如果", "应该", "如何", "有没有", "帮我"]);
+const STOP_WORDS = new Set(["\u4ec0\u4e48", "\u600e\u4e48", "\u9700\u8981", "\u53ef\u4ee5", "\u662f\u5426", "\u4e00\u4e2a", "\u8fd9\u4e2a", "\u90a3\u4e2a", "\u8bf7\u95ee", "\u76f8\u5173", "\u5982\u679c", "\u5e94\u8be5", "\u5982\u4f55", "\u5e2e\u6211", "\u4e00\u4e0b", "\u5417", "\u5462", "\u548b\u529e"]);
 
-const scenarioPackMap: Partial<Record<AgentScenario | "ai-engineering", KnowledgePackId>> = { enterprise: "enterprise-policy", ecommerce: "ecommerce-support", recruitment: "recruitment-career", "ai-engineering": "ai-engineering" };
+const LOW_CONFIDENCE_ANSWER = "\u6839\u636e\u5f53\u524d\u77e5\u8bc6\u5e93\u8d44\u6599\uff0c\u6211\u6ca1\u6709\u627e\u5230\u8db3\u591f\u76f8\u5173\u7684\u53ef\u9760\u4f9d\u636e\u3002\u5efa\u8bae\u8865\u5145\u66f4\u660e\u786e\u7684\u6587\u6863\u3001\u6362\u4e00\u79cd\u95ee\u6cd5\uff0c\u6216\u63d0\u4f9b\u4e1a\u52a1\u4e0a\u4e0b\u6587\u540e\u518d\u7ee7\u7eed\u5224\u65ad\u3002";
+const RAG_ANSWER_PREFIX = "\u6839\u636e\u77e5\u8bc6\u5e93\u6765\u6e90\uff0c";
+const RAG_ANSWER_SUFFIX = " \u4ee5\u4e0a\u4e3a mock RAG \u57fa\u4e8e\u6df7\u5408\u68c0\u7d22\u53ec\u56de\u7684\u56de\u7b54\uff0c\u540e\u7eed\u53ef\u66ff\u6362\u4e3a Embedding\u3001\u5411\u91cf\u6570\u636e\u5e93\u4e0e\u771f\u5b9e LLM \u751f\u6210\u3002";
 
-function normalizeText(text: string) { return text.toLowerCase().replace(/[，。！？、；：.!?;:()（）【】[\]"'“”‘’`]/g, " "); }
+const scenarioPackMap: Partial<Record<AgentScenario | "ai-engineering", KnowledgePackId>> = {
+  enterprise: "enterprise-policy",
+  ecommerce: "ecommerce-support",
+  recruitment: "recruitment-career",
+  "ai-engineering": "ai-engineering",
+};
+
 function unique(values: string[]) { return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))); }
+function normalizeText(text: string) { return text.normalize("NFKC").toLowerCase().replace(/[\u3000-\u303f\uff00-\uffef,.!?;:()[\]{}<>"'~@#$%^&*_+=|\\/\r\n\t]/g, " ").replace(/\s+/g, " ").trim(); }
+function includesNormalized(text: string, keyword: string) { return normalizeText(text).includes(normalizeText(keyword)); }
 
-function sliceLongText(text: string, maxLength = 180) {
+function sliceLongText(text: string, maxLength = 220) {
   const slices: string[] = [];
   let remaining = text.trim();
   while (remaining.length > maxLength) {
     const current = remaining.slice(0, maxLength);
-    const breakIndex = Math.max(current.lastIndexOf("。"), current.lastIndexOf("；"), current.lastIndexOf("，"));
-    const end = breakIndex > 60 ? breakIndex + 1 : maxLength;
+    const breakIndex = Math.max(current.lastIndexOf("."), current.lastIndexOf(";"), current.lastIndexOf("!"), current.lastIndexOf("?"), current.lastIndexOf("\n"));
+    const end = breakIndex > 80 ? breakIndex + 1 : maxLength;
     slices.push(remaining.slice(0, end).trim());
     remaining = remaining.slice(end).trim();
   }
@@ -43,11 +74,14 @@ function sliceLongText(text: string, maxLength = 180) {
   return slices;
 }
 
+function extractBusinessPhrases(text: string) { return BUSINESS_PHRASES.filter((phrase) => includesNormalized(text, phrase)); }
+
 function expandSynonyms(keywords: string[]) {
   const expanded = [...keywords];
   for (const keyword of keywords) {
     for (const [key, values] of Object.entries(SYNONYMS)) {
-      if (keyword.toLowerCase() === key.toLowerCase() || values.some((value) => value.toLowerCase() === keyword.toLowerCase())) expanded.push(key, ...values);
+      const normalizedKeyword = normalizeText(keyword);
+      if (normalizedKeyword === normalizeText(key) || values.some((value) => normalizeText(value) === normalizedKeyword)) expanded.push(key, ...values);
     }
   }
   return unique(expanded);
@@ -55,15 +89,22 @@ function expandSynonyms(keywords: string[]) {
 
 export function extractKeywords(text: string): string[] {
   const normalized = normalizeText(text);
-  const domainMatches = DOMAIN_KEYWORDS.filter((keyword) => normalized.includes(keyword.toLowerCase()));
+  const domainMatches = DOMAIN_KEYWORDS.filter((keyword) => normalized.includes(normalizeText(keyword)));
+  const phraseMatches = extractBusinessPhrases(text);
   const latinTokens = normalized.split(/\s+/).map((token) => token.trim()).filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
-  const chineseMatches = Array.from(text.matchAll(/[\u4e00-\u9fa5]{2,10}/g)).map((match) => match[0]).flatMap((token) => {
+  const chineseMatches = Array.from(text.matchAll(/[\u4e00-\u9fa5]{2,12}/g)).map((match) => match[0]).flatMap((token) => {
     if (token.length <= 4) return [token];
     const grams: string[] = [];
     for (let index = 0; index <= token.length - 2; index += 1) grams.push(token.slice(index, index + 2));
-    return grams;
+    return [token, ...grams];
   }).filter((token) => token.length >= 2 && !STOP_WORDS.has(token));
-  return expandSynonyms(unique([...domainMatches, ...latinTokens, ...chineseMatches])).slice(0, 40);
+  return expandSynonyms(unique([...domainMatches, ...phraseMatches, ...latinTokens, ...chineseMatches])).slice(0, 64);
+}
+
+export function expandQuery(query: string, options: RetrievalOptions = {}): QueryExpansionResult {
+  const keywords = extractKeywords(query).slice(0, 32);
+  const phrases = extractBusinessPhrases(query);
+  return { originalQuery: query, normalizedQuery: normalizeText(query), keywords, expandedKeywords: expandSynonyms([...keywords, ...phrases]).slice(0, 72), phrases, preferredPackId: options.preferredPackId, scenario: options.scenario };
 }
 
 export function splitDocument(document: KnowledgeDocument): KnowledgeChunk[] {
@@ -83,48 +124,113 @@ export function splitDocument(document: KnowledgeDocument): KnowledgeChunk[] {
   }));
 }
 
-function includesNormalized(text: string, keyword: string) { return text.toLowerCase().includes(keyword.toLowerCase()); }
+function countHits(values: string[], text: string) { return values.filter((keyword) => includesNormalized(text, keyword)).length; }
+function freshnessScore(chunk: KnowledgeChunk) { return chunk.sourceType === "user_upload" || chunk.sourceType === "user_paste" ? 2 : 0.5; }
+
+function buildScoreReason(breakdown: RagScoreBreakdown, matchedKeywords: string[], phrases: string[], preferredPackId?: KnowledgePackId, sourceType?: string) {
+  const reasons: string[] = [];
+  if (matchedKeywords.length) reasons.push("keyword hits " + matchedKeywords.length);
+  if (breakdown.titleScore) reasons.push("title boost " + breakdown.titleScore);
+  if (breakdown.tagScore) reasons.push("tag boost " + breakdown.tagScore);
+  if (breakdown.categoryScore) reasons.push("category boost " + breakdown.categoryScore);
+  if (breakdown.packScore) reasons.push("pack boost " + preferredPackId);
+  if (breakdown.sourceScore) reasons.push("user document boost");
+  if (breakdown.phraseScore) reasons.push("phrase hits " + phrases.length);
+  if (breakdown.freshnessScore) reasons.push(sourceType === "default" ? "default freshness" : "user freshness");
+  return reasons.length ? reasons : ["below semantic threshold"];
+}
+
+function selectDiverse(candidates: RetrievedChunk[], topK: number) {
+  const selected: RetrievedChunk[] = [];
+  const usedDocuments = new Set<string>();
+  for (const item of candidates) {
+    if (selected.length >= topK) break;
+    if (!usedDocuments.has(item.chunk.documentId)) { selected.push(item); usedDocuments.add(item.chunk.documentId); }
+  }
+  for (const item of candidates) {
+    if (selected.length >= topK) break;
+    if (!selected.some((selectedItem) => selectedItem.chunk.id === item.chunk.id)) selected.push(item);
+  }
+  return selected;
+}
+
+function getConfidence(selected: RetrievedChunk[], candidateCount: number): Pick<RagRetrievalMetadata, "retrievalConfidence" | "lowConfidenceRetrieval" | "lowConfidenceReason" | "maxScore" | "averageScore"> {
+  const scores = selected.map((item) => item.score);
+  const maxScore = scores.length ? Math.max(...scores) : 0;
+  const averageScore = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
+  let retrievalConfidence: RetrievalConfidence = "low";
+  if (maxScore >= 20 && averageScore >= 10) retrievalConfidence = "high";
+  else if (maxScore >= 10 && candidateCount > 0) retrievalConfidence = "medium";
+  const lowConfidenceRetrieval = retrievalConfidence === "low";
+  return { retrievalConfidence, lowConfidenceRetrieval, lowConfidenceReason: lowConfidenceRetrieval ? "No sufficiently relevant knowledge base chunks were found for this query." : undefined, maxScore, averageScore };
+}
 
 export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3, preferredPackId?: KnowledgePackId): RetrievedChunk[] {
-  const queryKeywords = extractKeywords(query);
-  if (!query.trim() || queryKeywords.length === 0) return [];
-  return chunks.map((chunk) => {
+  const queryExpansion = expandQuery(query, { preferredPackId });
+  if (!query.trim() || queryExpansion.expandedKeywords.length === 0) return [];
+  const candidates = chunks.map((chunk) => {
     const titleText = chunk.sourceTitle;
     const categoryText = chunk.category;
     const tagsText = (chunk.tags ?? []).join(" ");
-    const matchedKeywords = queryKeywords.filter((keyword) => chunk.keywords.some((chunkKeyword) => chunkKeyword.toLowerCase() === keyword.toLowerCase()) || includesNormalized(chunk.content, keyword) || includesNormalized(titleText, keyword) || includesNormalized(categoryText, keyword) || includesNormalized(tagsText, keyword));
-    const titleHits = matchedKeywords.filter((keyword) => includesNormalized(titleText, keyword)).length;
-    const categoryHits = matchedKeywords.filter((keyword) => includesNormalized(categoryText, keyword)).length;
-    const tagHits = matchedKeywords.filter((keyword) => includesNormalized(tagsText, keyword)).length;
-    const packBoost = preferredPackId && chunk.packId === preferredPackId ? 3 : 0;
-    const userSourceBoost = chunk.sourceType === "user_upload" || chunk.sourceType === "user_paste" ? 4 : 0;
-    const score = matchedKeywords.length * 2 + titleHits * 3 + categoryHits * 2 + tagHits * 2 + packBoost + userSourceBoost;
-    const scoreReason = [matchedKeywords.length ? "keyword hits " + matchedKeywords.length : "no keyword hit", titleHits ? "title hits " + titleHits : "no title hit", categoryHits ? "category hits " + categoryHits : "no category hit", tagHits ? "tag hits " + tagHits : "no tag hit", packBoost ? "pack boost " + preferredPackId : "no pack boost", userSourceBoost ? "user document boost" : "default knowledge base"];
-    return { chunk, score, matchedKeywords: unique(matchedKeywords), scoreReason } satisfies RetrievedChunk;
-  }).filter((item) => item.score >= 2).sort((left, right) => right.score - left.score).slice(0, topK);
+    const corpus = [chunk.content, titleText, categoryText, tagsText, chunk.packId ?? ""].join(" ");
+    const matchedKeywords = queryExpansion.expandedKeywords.filter((keyword) => chunk.keywords.some((chunkKeyword) => normalizeText(chunkKeyword) === normalizeText(keyword)) || includesNormalized(corpus, keyword));
+    const uniqueMatches = unique(matchedKeywords);
+    const phraseHits = queryExpansion.phrases.filter((phrase) => includesNormalized(corpus, phrase));
+    const titleHits = countHits(uniqueMatches, titleText);
+    const categoryHits = countHits(uniqueMatches, categoryText);
+    const tagHits = countHits(uniqueMatches, tagsText);
+    const keywordScore = uniqueMatches.length * 2;
+    const titleScore = titleHits * 4;
+    const tagScore = tagHits * 3;
+    const categoryScore = categoryHits * 2;
+    const packScore = preferredPackId && chunk.packId === preferredPackId ? 5 : 0;
+    const sourceScore = chunk.sourceType === "user_upload" || chunk.sourceType === "user_paste" ? 4 : 0;
+    const phraseScore = phraseHits.length * 5;
+    const freshScore = freshnessScore(chunk);
+    const totalScore = keywordScore + titleScore + tagScore + categoryScore + packScore + sourceScore + phraseScore + freshScore;
+    const scoreBreakdown: RagScoreBreakdown = { keywordScore, titleScore, tagScore, categoryScore, packScore, sourceScore, phraseScore, freshnessScore: freshScore, totalScore };
+    return { chunk, score: Math.round(totalScore), matchedKeywords: uniqueMatches, scoreReason: buildScoreReason(scoreBreakdown, uniqueMatches, phraseHits, preferredPackId, chunk.sourceType), scoreBreakdown } satisfies RetrievedChunk;
+  }).filter((item) => item.score >= 4).sort((left, right) => right.score - left.score);
+  return selectDiverse(candidates, topK);
 }
 
 function buildSources(retrievedChunks: RetrievedChunk[]): RagAnswer["sources"] {
   const sourceMap = new Map<string, RagAnswer["sources"][number]>();
   for (const item of retrievedChunks) {
     const existing = sourceMap.get(item.chunk.documentId);
-    if (existing) { existing.chunkIndexes = unique([...existing.chunkIndexes.map(String), String(item.chunk.chunkIndex)]).map(Number); existing.score = Math.max(existing.score ?? 0, item.score); existing.scoreReason = unique([...(existing.scoreReason ?? []), ...(item.scoreReason ?? [])]); existing.matchedKeywords = unique([...(existing.matchedKeywords ?? []), ...item.matchedKeywords]); continue; }
-    sourceMap.set(item.chunk.documentId, { documentId: item.chunk.documentId, title: item.chunk.sourceTitle, category: item.chunk.category, packId: item.chunk.packId, sourceType: item.chunk.sourceType, tags: item.chunk.tags, score: item.score, scoreReason: item.scoreReason, matchedKeywords: item.matchedKeywords, contentPreview: item.chunk.content.slice(0, 260), chunkIndexes: [item.chunk.chunkIndex] });
+    if (existing) {
+      existing.chunkIndexes = unique([...existing.chunkIndexes.map(String), String(item.chunk.chunkIndex)]).map(Number);
+      existing.score = Math.max(existing.score ?? 0, item.score);
+      existing.scoreReason = unique([...(existing.scoreReason ?? []), ...(item.scoreReason ?? [])]);
+      existing.matchedKeywords = unique([...(existing.matchedKeywords ?? []), ...item.matchedKeywords]);
+      if (!existing.scoreBreakdown || item.score > (existing.scoreBreakdown.totalScore ?? 0)) existing.scoreBreakdown = item.scoreBreakdown;
+      continue;
+    }
+    sourceMap.set(item.chunk.documentId, { documentId: item.chunk.documentId, title: item.chunk.sourceTitle, category: item.chunk.category, packId: item.chunk.packId, sourceType: item.chunk.sourceType, tags: item.chunk.tags, score: item.score, scoreReason: item.scoreReason, scoreBreakdown: item.scoreBreakdown, matchedKeywords: item.matchedKeywords, contentPreview: item.chunk.content.slice(0, 260), chunkIndexes: [item.chunk.chunkIndex] });
   }
   return Array.from(sourceMap.values());
 }
 
-export function generateMockRagAnswer(question: string, retrievedChunks: RetrievedChunk[]): RagAnswer {
+function buildMetadata(query: string, selected: RetrievedChunk[], chunks: KnowledgeChunk[], options: RetrievalOptions): RagRetrievalMetadata {
+  const queryExpansion = expandQuery(query, options);
+  const confidence = getConfidence(selected, selected.length);
+  return { query: queryExpansion, topK: options.topK ?? 3, candidateCount: chunks.length, selectedChunkCount: selected.length, ...confidence };
+}
+
+export function generateMockRagAnswer(question: string, retrievedChunks: RetrievedChunk[], metadata?: RagRetrievalMetadata): RagAnswer {
   const createdAt = new Date().toISOString();
-  if (retrievedChunks.length === 0) return { question, answer: "根据当前知识库资料，我还不能确定这个问题的答案。建议补充相关文档、业务规则或可调用工具后再回答。", retrievedChunks: [], sources: [], mode: "mock-rag", createdAt };
+  const lowConfidence = metadata?.lowConfidenceRetrieval || retrievedChunks.length === 0;
+  if (lowConfidence) return { question, answer: LOW_CONFIDENCE_ANSWER, retrievedChunks, sources: buildSources(retrievedChunks), mode: "mock-rag", createdAt, retrievalMetadata: metadata, retrievalConfidence: metadata?.retrievalConfidence ?? "low", lowConfidenceRetrieval: true, lowConfidenceReason: metadata?.lowConfidenceReason ?? "No sufficiently relevant chunks were found." };
   const evidence = retrievedChunks.slice(0, 2).map((item) => item.chunk.content).join(" ");
-  return { question, answer: "根据知识库资料，" + evidence + " 以上为 mock RAG 基于关键词检索生成的回答，后续可替换为向量检索与真实 LLM 生成。", retrievedChunks, sources: buildSources(retrievedChunks), mode: "mock-rag", createdAt };
+  return { question, answer: RAG_ANSWER_PREFIX + evidence + RAG_ANSWER_SUFFIX, retrievedChunks, sources: buildSources(retrievedChunks), mode: "mock-rag", createdAt, retrievalMetadata: metadata, retrievalConfidence: metadata?.retrievalConfidence ?? "medium", lowConfidenceRetrieval: metadata?.lowConfidenceRetrieval ?? false, lowConfidenceReason: metadata?.lowConfidenceReason };
 }
 
 export function runMockRagPipeline(question: string, documents: KnowledgeDocument[], topKOrOptions: number | RagPipelineOptions = 3): RagAnswer {
   const options: RagPipelineOptions = typeof topKOrOptions === "number" ? { topK: topKOrOptions } : topKOrOptions;
   const preferredPackId = options.packId ?? (options.scenario ? scenarioPackMap[options.scenario] : undefined);
   const chunks = documents.flatMap((document) => splitDocument(document));
-  const retrievedChunks = retrieveChunks(question, chunks, options.topK ?? 3, preferredPackId);
-  return generateMockRagAnswer(question, retrievedChunks);
+  const topK = options.topK ?? 3;
+  const retrievedChunks = retrieveChunks(question, chunks, topK, preferredPackId);
+  const metadata = buildMetadata(question, retrievedChunks, chunks, { topK, preferredPackId, scenario: options.scenario });
+  return generateMockRagAnswer(question, retrievedChunks, metadata);
 }

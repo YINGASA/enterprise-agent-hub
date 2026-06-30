@@ -11,6 +11,7 @@ const ui = {
   scoreReason: "\u547d\u4e2d\u539f\u56e0\uff1a",
   chunks: "chunks",
   score: "score",
+  scoreBreakdown: "scoreBreakdown:",
 };
 
 function sourceTypeLabel(sourceType?: KnowledgeSourceType) {
@@ -45,6 +46,16 @@ export function SourceList({ sources }: { sources: RagAnswer["sources"] }) {
             {source.tags?.length ? <p className="break-words">{ui.tags}{source.tags.join(" / ")}</p> : null}
             {source.matchedKeywords?.length ? <p className="break-words">{ui.matchedKeywords}{source.matchedKeywords.join(" / ")}</p> : null}
             {source.scoreReason?.length ? <p className="break-words">{ui.scoreReason}{source.scoreReason.join(" / ")}</p> : null}
+            {source.scoreBreakdown ? (
+              <details className="rounded bg-white p-2 ring-1 ring-slate-200">
+                <summary className="cursor-pointer font-semibold text-ink-600">{ui.scoreBreakdown}</summary>
+                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  {Object.entries(source.scoreBreakdown).map(([key, value]) => (
+                    <span key={key} className="break-all font-mono text-[11px] text-ink-500">{key}: {Math.round(Number(value) * 10) / 10}</span>
+                  ))}
+                </div>
+              </details>
+            ) : null}
             {source.contentPreview ? <p className="whitespace-pre-wrap break-words rounded bg-white p-2 ring-1 ring-slate-200">{source.contentPreview}{source.contentPreview.length >= 260 ? "..." : ""}</p> : null}
           </div>
         </details>

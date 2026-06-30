@@ -14,6 +14,9 @@ export function ChunkList({ chunks }: { chunks: KnowledgeChunk[] }) {
               <span className="font-mono text-brand-700">chunk #{chunk.chunkIndex}</span>
               <span>{chunk.sourceTitle}</span>
               <span>{chunk.category}</span>
+              <span>sourceType: {chunk.sourceType ?? "default"}</span>
+              <span>packId: {chunk.packId ?? "none"}</span>
+              {chunk.tags?.length ? <span>tags: {chunk.tags.join(" / ")}</span> : null}
             </div>
           </div>
           <p className="text-sm leading-6 text-ink-700">{chunk.content}</p>

@@ -67,3 +67,15 @@ Manual V1.1 checks:
 - Import user documents by paste and file upload, then verify localStorage persistence.
 - Confirm Top sources show source type, category, tags, score, scoreReason, and chunk summary.
 - Confirm Mock full evaluation remains above 90% passRate.
+
+## V1.2 Retrieval Quality Cases
+
+V1.2 adds retrieval-quality cases for synonym expansion, business phrase matching, colloquial user questions, AI engineering questions, and low-confidence fallback. Example checks include:
+
+- invoice-loss reimbursement questions should hit reimbursement policy.
+- expired 7-day return questions should hit after-sales policy and request missing order context.
+- colloquial refund questions should trigger ecommerce policy_check without using demo order data.
+- invalid JSON questions should hit JSON repair / fallback knowledge.
+- weather questions should remain general fallback and should not force unrelated RAG citations.
+
+The full suite target remains passRate >= 90%. Failure buckets continue to explain scenario, intent, tool, RAG usage, citation, keyword, and pipeline issues.
