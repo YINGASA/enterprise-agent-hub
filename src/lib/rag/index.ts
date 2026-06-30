@@ -53,6 +53,7 @@ const scenarioPackMap: Partial<Record<AgentScenario | "ai-engineering", Knowledg
   enterprise: "enterprise-policy",
   ecommerce: "ecommerce-support",
   recruitment: "recruitment-career",
+  ai_engineering: "ai-engineering",
   "ai-engineering": "ai-engineering",
 };
 

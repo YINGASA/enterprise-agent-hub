@@ -267,7 +267,7 @@ export type ToolRunResult<TData = Record<string, unknown>> = {
   executedAt: string;
 };
 
-export type AgentScenario = "enterprise" | "ecommerce" | "recruitment" | "general";
+export type AgentScenario = "enterprise" | "ecommerce" | "recruitment" | "ai_engineering" | "general";
 
 export type AgentIntent =
   | "knowledge_qa"

@@ -35,7 +35,7 @@ function clampConfidence(value: unknown, fallback: number) {
 
 function normalizeStructuredOutput(value: Record<string, unknown>, fallback: AgentStructuredOutput): AgentStructuredOutput {
   return {
-    scenario: value.scenario === "enterprise" || value.scenario === "ecommerce" || value.scenario === "recruitment" || value.scenario === "general" ? value.scenario : fallback.scenario,
+    scenario: value.scenario === "enterprise" || value.scenario === "ecommerce" || value.scenario === "recruitment" || value.scenario === "ai_engineering" || value.scenario === "general" ? value.scenario : fallback.scenario,
     intent:
       value.intent === "knowledge_qa" ||
       value.intent === "policy_check" ||
