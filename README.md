@@ -208,6 +208,13 @@ V1.2 upgrades the mock keyword RAG into a more explainable Hybrid Retrieval laye
 
 Each retrieved chunk can expose scoreBreakdown, scoreReason, retrievalConfidence, lowConfidenceRetrieval, and query expansion terms. This makes the chat answer more trustworthy: if retrieval confidence is low, the Agent should say that the knowledge base evidence is insufficient instead of pretending that weak chunks are authoritative.
 
-V1.2.1 further improves AI engineering routing. Questions about JSON repair, invalid structured output, fallback, Tool Calling failures, Agent evaluation datasets, Prompt constraints, RAG retrieval quality, Embedding, vector search, and source citations are routed to the AI Engineering scenario first and prioritize the `ai-engineering` knowledge pack. In the chat UI this appears as `AI ???? / ?????`, while raw enum values remain available only in debug JSON.
+V1.2.1 further improves AI engineering routing. Questions about JSON repair, invalid structured output, fallback, Tool Calling failures, Agent evaluation datasets, Prompt constraints, RAG retrieval quality, Embedding, vector search, and source citations are routed to the AI Engineering scenario first and prioritize the `ai-engineering` knowledge pack. In the chat UI this appears as `AI Engineering / Knowledge QA` in product-facing labels, while raw enum values remain available only in debug JSON.
 
 Future V1.3+ work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.
+
+
+## V1.3 Evaluation History and Export
+
+V1.3 turns the Evaluation Dashboard into a lightweight evaluation management view. After a run, users can save the result to browser localStorage, compare recent pass rates, keep the latest 20 runs, and export Markdown or JSON reports for project review, README screenshots, and interview discussion.
+
+This is browser-local persistence, not a backend database. Future work can move evaluation history to a database, add team-level history, and render trend charts over time.

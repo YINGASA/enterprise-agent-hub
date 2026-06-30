@@ -511,6 +511,27 @@ export type EvaluationRunResponse = {
   mode: LlmMode;
   selectedSuite: "quick" | "standard" | "full" | "custom";
 };
+export type EvaluationRunHistoryItem = {
+  id: string;
+  createdAt: string;
+  mode: "mock" | "real";
+  suite: "quick" | "standard" | "full" | string;
+  caseCount: number;
+  passed: number;
+  passRate: number;
+  scenarioAccuracy: number;
+  intentAccuracy: number;
+  toolHitRate: number;
+  ragUsageAccuracy: number;
+  citationRate: number;
+  keywordHitRate: number;
+  fallbackRate?: number;
+  averageRagScore?: number;
+  failureSummary?: string;
+  failureBuckets?: Record<string, number>;
+  resultSnapshot?: unknown;
+};
+
 export type EvaluationMetric = {
   label: string;
   value: string;

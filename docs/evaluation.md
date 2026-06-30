@@ -80,4 +80,11 @@ V1.2 adds retrieval-quality cases for synonym expansion, business phrase matchin
 
 The full suite target remains passRate >= 90%. Failure buckets continue to explain scenario, intent, tool, RAG usage, citation, keyword, and pipeline issues.
 
-V1.2.1 adds focused AI engineering routing checks. Cases such as ????????? JSON ?????, ?RAG ??????????, ?Agent ???????????, and ????? Agent ???? should resolve to `ai_engineering / knowledge_qa`, use RAG, and prioritize AI engineering sources. This guards against technical knowledge questions falling back to the generic scenario even when retrieval succeeds.
+V1.2.1 adds focused AI engineering routing checks. Invalid JSON output, inaccurate RAG retrieval, failed Agent tool calls, and Agent evaluation dataset questions should resolve to `ai_engineering / knowledge_qa`, use RAG, and prioritize AI engineering sources. This guards against technical knowledge questions falling back to the generic scenario even when retrieval succeeds.
+
+
+## V1.3 History and Reports
+
+V1.3 adds browser-local evaluation history. Users can save a run, review the latest 20 records, compare the latest passRate with the previous run, inspect the recent five-run average, delete one record, clear all records, and export reports as Markdown or JSON.
+
+The history is stored in localStorage and is not sent to a database. `/api/evaluation` remains deterministic and stateless; the browser decides whether to save or export the returned result.
