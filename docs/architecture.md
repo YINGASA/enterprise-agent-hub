@@ -93,9 +93,9 @@ Fallback is part of the engineering design:
 
 This lets the demo remain usable even when the model or network is unstable.
 
-## V0.9 Knowledge Packs
+## Knowledge Packs
 
-V0.9 organizes mock documents into four Knowledge Packs:
+The system organizes default mock documents into four read-only Knowledge Packs:
 
 - enterprise-policy: reimbursement, travel, leave, security, procurement, contract, SLA, onboarding and offboarding.
 - ecommerce-support: return/refund policy, opened products, quality issues, size mismatch, logistics, complaints, scripts and inventory.

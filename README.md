@@ -80,7 +80,7 @@ flowchart TD
 - `/tools` - Tool center with runnable local tool examples
 - `/scenarios` - Scenario templates aligned with Agent Router intents and tools
 - `/evaluation` - Agent Evaluation Dashboard for batch evaluation and failure analysis
-- `/about` - Project showcase, architecture, version roadmap, metrics, and resume highlights
+- `/about` - Project overview, architecture, version roadmap, metrics, and engineering highlights
 
 ## Screenshots / 项目截图
 
@@ -135,10 +135,10 @@ Do not commit `.env.local`.
 
 ## Evaluation Results
 
-Current V1.1 Mock full-suite evaluation target:
+Current V1.3 Mock full-suite evaluation result:
 
-- total: 58
-- passed: 50
+- total: 74
+- passed: 74
 - passRate: 100%
 - scenarioAccuracy: 100%
 - intentAccuracy: 100%
