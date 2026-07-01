@@ -4,7 +4,7 @@ The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as e
 
 ## V1.3 Dataset
 
-The built-in dataset contains 74 cases after V1.2 retrieval-quality and AI engineering routing expansion:
+The built-in dataset contains 80cases after V1.2 retrieval-quality and AI engineering routing expansion:
 
 - 12 enterprise policy cases
 - 12 ecommerce support cases
@@ -16,7 +16,7 @@ The UI supports three suite sizes:
 
 - Quick: 15 cases
 - Standard: 30 cases
-- Full: 74 current cases
+- Full: 80current cases
 
 Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. The suite covers IT/admin operations, ecommerce edge policies, recruitment matching, AI engineering explainability, Hybrid RAG quality, and fallback behavior.
 
@@ -48,14 +48,14 @@ Each case includes question, expectedScenario, expectedIntent, expectedTools, ex
 
 - quick: 15/15, passRate 100%
 - standard: 30/30, passRate 100%
-- full: 74/74, passRate 100%
+- full: 80/80, passRate 100%
 - full target: passRate >= 90%
 
 Real mode remains optional because it consumes API quota. It is useful for checking whether the real LLM can produce stable structured output.
 
 ## V1.0 Compatibility Note
 
-The evaluation API remains deterministic and server-side. It does not read browser `localStorage`, so user-imported knowledge documents do not change the built-in evaluation suite. V1.0 manual testing covers local import and chat retrieval separately, while `/api/evaluation` continues to validate the default Agent Router, keyword RAG, tools, fallback, and LLM response modes against the 74-case dataset.
+The evaluation API remains deterministic and server-side. It does not read browser `localStorage`, so user-imported knowledge documents do not change the built-in evaluation suite. V1.0 manual testing covers local import and chat retrieval separately, while `/api/evaluation` continues to validate the default Agent Router, keyword RAG, tools, fallback, and LLM response modes against the 80-case dataset.
 
 ## V1.1 Source Explainability Checks
 
@@ -100,3 +100,8 @@ V1.4 keeps the evaluation API stateless and adds frontend-only observability fea
 - Expandable history detail panels for metrics, failure summary, and failure buckets.
 
 All of these features read from browser localStorage. They do not introduce a database, backend persistence, or external analytics service.
+## V1.5 Retriever Strategy Cases
+
+V1.5 extends the full suite to 80 cases. The added checks cover short technical queries, colloquial refund intent, reimbursement ticket loss, recruitment matching, weather fallback, and embedding/vector-database concepts.
+
+The target remains passRate >= 90%. These cases validate that the Retriever Adapter does not regress Router decisions, missing-parameter clarification, low-confidence fallback, or AI engineering knowledge routing.

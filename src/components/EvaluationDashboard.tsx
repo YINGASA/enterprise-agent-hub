@@ -24,7 +24,7 @@ type ReportPreviewState = { kind: "markdown" | "json"; title: string; content: s
 const suiteOptions: Array<{ value: SuiteOption; label: string; description: string }> = [
   { value: "quick", label: "快速 15 条", description: "快速回归检查" },
   { value: "standard", label: "标准 30 条", description: "覆盖主要业务场景" },
-  { value: "full", label: "完整 74 条", description: "覆盖全部内置评测用例" },
+  { value: "full", label: "完整 80条", description: "覆盖全部内置评测用例" },
 ];
 
 const packOptions = [{ id: "all", name: "全部知识库" }, ...knowledgePacks, { id: "fallback", name: "兜底 / 超出范围" }];
@@ -89,7 +89,7 @@ function displayValue(value: number | undefined, suffix = "") {
 function suiteLabel(value: string) {
   if (value === "quick") return "快速 15 条";
   if (value === "standard") return "标准 30 条";
-  if (value === "full") return "完整 74 条";
+  if (value === "full") return "完整 80条";
   return value;
 }
 

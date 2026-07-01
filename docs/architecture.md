@@ -153,3 +153,10 @@ This keeps the project database-free while showing an engineering loop for regre
 The Evaluation Dashboard now reads saved history from browser localStorage and renders lightweight SVG trend charts without adding a charting dependency. The chart layer visualizes passRate, fallbackRate, and averageRagScore for the latest 20 saved runs.
 
 Report previews are generated entirely in the browser from the same history snapshot. Markdown and JSON content can be previewed, copied, and downloaded, while `/api/evaluation` remains stateless and server-side.
+## V1.5 Retriever Adapter
+
+The retrieval layer now exposes a small adapter contract: `RetrieverInput`, `RetrieverResult`, and `Retriever`. Existing Hybrid Retrieval is wrapped as `hybridRetriever`, and the Agent-facing RAG pipeline can call a retriever mode without knowing how chunks are scored.
+
+`mockEmbeddingRetriever` is intentionally local and deterministic. It builds token-hash vectors and cosine scores so the UI and metadata can exercise embeddingScore, rerankScore, retrieverMode, rerankReason, and vectorReady fields without calling a real embedding API.
+
+The `auto` strategy preserves Hybrid Retrieval as the default. It attempts mock embedding rerank only for short queries or low-confidence Hybrid retrieval, so irrelevant vector-like matches do not become authoritative. This keeps offline demos stable while reserving a clean upgrade path to OpenAI / DeepSeek / BGE embeddings and pgvector / Qdrant / Chroma.

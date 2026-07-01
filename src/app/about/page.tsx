@@ -6,7 +6,7 @@ const capabilities = [
   "Pack-aware Hybrid RAG，支持 Query Expansion、多维评分、scoreBreakdown 和 retrievalConfidence",
   "Agent Router 识别业务场景与任务意图，统一编排 RAG、Tools、LLM 与 fallback",
   "OpenAI-compatible / DeepSeek Real API 接入，服务端管理 Key，前端不暴露密钥",
-  "74 条多场景 Agent Evaluation Suite，支持历史记录、趋势摘要和 Markdown / JSON 报告导出",
+  "80 条多场景 Agent Evaluation Suite，支持历史记录、趋势摘要和 Markdown / JSON 报告导出",
 ];
 
 const versions = [
@@ -32,7 +32,7 @@ const engineeringHighlights = [
   "Agent：Router 判断业务场景和意图，统一编排 RAG、Tools、LLM 与 fallback。",
   "Tool Calling：本地工具支持订单查询、商品查询、规则检索、工单创建、JD 分析和客服回复生成。",
   "结构化输出：Real API 返回 AgentResponse JSON，支持 parse、repair 和文本兜底。",
-  "评测闭环：74 条多场景测试用例，支持保存历史、趋势摘要和 Markdown / JSON 报告导出。",
+  "评测闭环：80 条多场景测试用例，支持保存历史、趋势摘要和 Markdown / JSON 报告导出。",
 ];
 
 export default function AboutPage() {
@@ -62,7 +62,7 @@ export default function AboutPage() {
       <section className="grid gap-4 md:grid-cols-4">
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">Knowledge Packs</p><p className="mt-2 text-2xl font-semibold text-ink-900">4</p></article>
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">Mock 文档</p><p className="mt-2 text-2xl font-semibold text-ink-900">42</p></article>
-        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">完整评测</p><p className="mt-2 text-2xl font-semibold text-ink-900">74/74</p></article>
+        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">完整评测</p><p className="mt-2 text-2xl font-semibold text-ink-900">80/80</p></article>
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">passRate</p><p className="mt-2 text-2xl font-semibold text-ink-900">100%</p></article>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">

@@ -77,6 +77,7 @@ export type KnowledgeChunk = {
 };
 
 export type RetrievalConfidence = "high" | "medium" | "low";
+export type RetrieverMode = "hybrid" | "mock_embedding" | "auto";
 
 export type RagScoreBreakdown = {
   keywordScore: number;
@@ -87,6 +88,8 @@ export type RagScoreBreakdown = {
   sourceScore: number;
   phraseScore: number;
   freshnessScore: number;
+  embeddingScore?: number;
+  rerankScore?: number;
   totalScore: number;
 };
 
@@ -110,6 +113,10 @@ export type RagRetrievalMetadata = {
   retrievalConfidence: RetrievalConfidence;
   lowConfidenceRetrieval: boolean;
   lowConfidenceReason?: string;
+  retrieverMode?: RetrieverMode;
+  retrievalStrategy?: string;
+  rerankReason?: string;
+  vectorReady?: boolean;
 };
 
 export type RetrievedChunk = {
@@ -118,6 +125,8 @@ export type RetrievedChunk = {
   matchedKeywords: string[];
   scoreReason?: string[];
   scoreBreakdown?: RagScoreBreakdown;
+  embeddingScore?: number;
+  rerankReason?: string;
 };
 
 export type RagAnswer = {
