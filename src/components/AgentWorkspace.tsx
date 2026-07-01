@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
+import { ChatRunHistoryPanel } from "@/components/ChatRunHistoryPanel";
 import { SourceList } from "@/components/SourceList";
 import { readUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import type { AgentApiResponse, KnowledgeSourceType, LlmMode, ToolName } from "@/types";
@@ -200,6 +201,8 @@ export function AgentWorkspace() {
         {healthResult ? <CollapsibleSection title="LLM Health Diagnostic JSON" description="连接诊断 JSON 默认折叠，不挤占回答区域。" defaultOpen={false}><pre className="max-h-[420px] max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-100">{JSON.stringify(healthResult, null, 2)}</pre></CollapsibleSection> : null}
         <CollapsibleSection title="来源引用完整列表" description="查看全部 sources。" defaultOpen={false}><SourceList sources={result?.ragAnswer?.sources ?? []} /></CollapsibleSection>
       </section>
+
+      <ChatRunHistoryPanel currentResult={result} />
     </div>
   );
 }
