@@ -2,9 +2,9 @@
 
 The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as expected across enterprise knowledge QA, ecommerce after-sales support, recruitment/JD matching, AI engineering knowledge, and fallback scenarios.
 
-## V0.9 Dataset
+## V1.3 Dataset
 
-The built-in dataset now contains 58 cases after V1.1 demo scenario expansion:
+The built-in dataset contains 74 cases after V1.2 retrieval-quality and AI engineering routing expansion:
 
 - 12 enterprise policy cases
 - 12 ecommerce support cases
@@ -16,9 +16,9 @@ The UI supports three suite sizes:
 
 - Quick: 15 cases
 - Standard: 30 cases
-- Full: all current cases
+- Full: 74 current cases
 
-Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. V1.1 adds cases for IT/admin operations, ecommerce edge policies, recruitment matching, and AI engineering explainability.
+Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. The suite covers IT/admin operations, ecommerce edge policies, recruitment matching, AI engineering explainability, Hybrid RAG quality, and fallback behavior.
 
 ## Metrics
 
@@ -44,18 +44,18 @@ Each case includes question, expectedScenario, expectedIntent, expectedTools, ex
 - citation_miss
 - pipeline_error
 
-## V1.1 Mock Full Evaluation Result
+## V1.3 Mock Full Evaluation Result
 
 - quick: 15/15, passRate 100%
 - standard: 30/30, passRate 100%
-- full: validated locally in Mock mode during V1.1 acceptance; target passRate >= 90%
-- full averageRagScore: 21
+- full: 74/74, passRate 100%
+- full target: passRate >= 90%
 
 Real mode remains optional because it consumes API quota. It is useful for checking whether the real LLM can produce stable structured output.
 
 ## V1.0 Compatibility Note
 
-The evaluation API remains deterministic and server-side. It does not read browser `localStorage`, so user-imported knowledge documents do not change the built-in evaluation suite. V1.0 manual testing covers local import and chat retrieval separately, while `/api/evaluation` continues to validate the default Agent Router, keyword RAG, tools, fallback, and LLM response modes against the 50-case dataset.
+The evaluation API remains deterministic and server-side. It does not read browser `localStorage`, so user-imported knowledge documents do not change the built-in evaluation suite. V1.0 manual testing covers local import and chat retrieval separately, while `/api/evaluation` continues to validate the default Agent Router, keyword RAG, tools, fallback, and LLM response modes against the 74-case dataset.
 
 ## V1.1 Source Explainability Checks
 

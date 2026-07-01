@@ -4,7 +4,7 @@
 
 Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
 
-> Current status: V1.1 expands the built-in read-only enterprise knowledge base, improves knowledge management UX, and makes Top sources more explainable on top of V1.0 local knowledge import and the expanded evaluation suite. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+> Current status: V1.3 includes Hybrid RAG retrieval, AI engineering routing, local knowledge import, and an Evaluation Dashboard with 74 built-in cases, browser-local history, trend summary, and Markdown / JSON report export. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
 
 ## Project Positioning
 
@@ -91,7 +91,7 @@ Recommended screenshots:
 - Chat Agent Pipeline: show Router, RAG, Tools, LLM step, structured output, and Real API response.
 - Knowledge Base: show read-only default documents, imported local documents, chunks, keywords, source types, and citations.
 - Tool Center: show runnable tool cards and formatted JSON results.
-- Evaluation Dashboard: show 15/15 mock evaluation result, metrics, and failure analysis area.
+- Evaluation Dashboard: show 74-case mock evaluation results, metrics, failure analysis, local history, trend summary, and report export actions.
 
 Suggested capture plan is documented in `docs/screenshots.md`. When images are ready, place them under `public/screenshots/`.
 
@@ -172,7 +172,7 @@ This project is ready for Vercel-style deployment:
 - RAG is currently pack-aware keyword-based mock retrieval, not vector search.
 - Tool Calling is local tool orchestration, not model-native `tool_calls`.
 - Data is local mock data, not a real database.
-- Uploaded files, permissions, audit logs, and persistent evaluation history are planned future work.
+- Uploaded files, permissions, audit logs, and server-side evaluation history are planned future work.
 
 ## Roadmap
 
@@ -181,7 +181,7 @@ This project is ready for Vercel-style deployment:
 - pgvector / Qdrant support
 - Rerank and citation quality scoring
 - Real model-native Tool Calls
-- Evaluation history and trend comparison
+- Database-backed evaluation history and trend charts
 - User permissions and audit logs
 - Production observability and tracing
 ## V1.1 Knowledge Management Experience
@@ -210,7 +210,7 @@ Each retrieved chunk can expose scoreBreakdown, scoreReason, retrievalConfidence
 
 V1.2.1 further improves AI engineering routing. Questions about JSON repair, invalid structured output, fallback, Tool Calling failures, Agent evaluation datasets, Prompt constraints, RAG retrieval quality, Embedding, vector search, and source citations are routed to the AI Engineering scenario first and prioritize the `ai-engineering` knowledge pack. In the chat UI this appears as `AI Engineering / Knowledge QA` in product-facing labels, while raw enum values remain available only in debug JSON.
 
-Future V1.3+ work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.
+Future V1.4+ work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.
 
 
 ## V1.3 Evaluation History and Export
