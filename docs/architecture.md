@@ -93,9 +93,9 @@ Fallback is part of the engineering design:
 
 This lets the demo remain usable even when the model or network is unstable.
 
-## V0.9 Knowledge Packs
+## Knowledge Packs
 
-V0.9 organizes mock documents into four Knowledge Packs:
+The system organizes default mock documents into four read-only Knowledge Packs:
 
 - enterprise-policy: reimbursement, travel, leave, security, procurement, contract, SLA, onboarding and offboarding.
 - ecommerce-support: return/refund policy, opened products, quality issues, size mismatch, logistics, complaints, scripts and inventory.
@@ -140,3 +140,10 @@ V1.2 keeps the no-database, no-vector-store constraint but improves retrieval qu
 The system still uses local chunks and local scoring. It does not call an embedding API, vector database, reranker, LangChain, or LlamaIndex.
 
 V1.2.1 adds an explicit AI engineering route. Router keywords such as Prompt, RAG, Agent, Tool Calling, JSON repair, structured output, fallback, low-confidence retrieval, Evaluation, test set, source citation, vector database, and Embedding map to `ai_engineering / knowledge_qa`. The RAG layer then prefers the `ai-engineering` pack while still allowing mixed-source retrieval when useful.
+
+
+## V1.3 Evaluation History
+
+Evaluation runs are still executed through `/api/evaluation`, but history persistence is intentionally frontend-only. The browser stores compact run snapshots in `localStorage` under `enterprise-agent-hub:evaluation-history`, retaining the latest 20 runs. Markdown and JSON report exports are generated locally in the browser.
+
+This keeps the project database-free while showing an engineering loop for regression tracking, report export, and interview-ready quality evidence. A later version can replace localStorage with database-backed evaluation history and trend charts.
