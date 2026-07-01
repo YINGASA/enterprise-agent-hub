@@ -181,7 +181,7 @@ This project is ready for Vercel-style deployment:
 - pgvector / Qdrant support
 - Rerank and citation quality scoring
 - Real model-native Tool Calls
-- Database-backed evaluation history and trend charts
+- Database-backed evaluation history and team-level trend analytics
 - User permissions and audit logs
 - Production observability and tracing
 ## V1.1 Knowledge Management Experience
@@ -210,7 +210,7 @@ Each retrieved chunk can expose scoreBreakdown, scoreReason, retrievalConfidence
 
 V1.2.1 further improves AI engineering routing. Questions about JSON repair, invalid structured output, fallback, Tool Calling failures, Agent evaluation datasets, Prompt constraints, RAG retrieval quality, Embedding, vector search, and source citations are routed to the AI Engineering scenario first and prioritize the `ai-engineering` knowledge pack. In the chat UI this appears as `AI Engineering / Knowledge QA` in product-facing labels, while raw enum values remain available only in debug JSON.
 
-Future V1.4+ work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.
+Future work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.
 
 
 ## V1.3 Evaluation History and Export
@@ -218,3 +218,9 @@ Future V1.4+ work can replace this local scoring with Embedding + Vector DB + Re
 V1.3 turns the Evaluation Dashboard into a lightweight evaluation management view. After a run, users can save the result to browser localStorage, compare recent pass rates, keep the latest 20 runs, and export Markdown or JSON reports for project review, README screenshots, and interview discussion.
 
 This is browser-local persistence, not a backend database. Future work can move evaluation history to a database, add team-level history, and render trend charts over time.
+
+## V1.4 Evaluation Trend Visualization
+
+V1.4 extends the Evaluation Dashboard with browser-local trend visualization. Saved evaluation runs are plotted with lightweight SVG charts for passRate, fallbackRate, and averageRagScore. The page also supports Markdown and JSON report preview, copy, and download before exporting files.
+
+The trend data still lives only in browser localStorage. There is no database or backend persistence in this version.

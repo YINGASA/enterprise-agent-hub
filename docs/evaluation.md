@@ -88,3 +88,15 @@ V1.2.1 adds focused AI engineering routing checks. Invalid JSON output, inaccura
 V1.3 adds browser-local evaluation history. Users can save a run, review the latest 20 records, compare the latest passRate with the previous run, inspect the recent five-run average, delete one record, clear all records, and export reports as Markdown or JSON.
 
 The history is stored in localStorage and is not sent to a database. `/api/evaluation` remains deterministic and stateless; the browser decides whether to save or export the returned result.
+
+## V1.4 Trend Visualization and Report Preview
+
+V1.4 keeps the evaluation API stateless and adds frontend-only observability features:
+
+- Trend charts for the latest 20 saved runs, including passRate, fallbackRate, and averageRagScore.
+- Enhanced trend summary with latest pass rate, delta from previous run, recent five-run average, latest fallback rate, latest average RAG score, and latest run time.
+- Markdown and JSON report preview before download.
+- Copy-to-clipboard support for generated report content.
+- Expandable history detail panels for metrics, failure summary, and failure buckets.
+
+All of these features read from browser localStorage. They do not introduce a database, backend persistence, or external analytics service.
