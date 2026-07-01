@@ -146,4 +146,10 @@ V1.2.1 adds an explicit AI engineering route. Router keywords such as Prompt, RA
 
 Evaluation runs are still executed through `/api/evaluation`, but history persistence is intentionally frontend-only. The browser stores compact run snapshots in `localStorage` under `enterprise-agent-hub:evaluation-history`, retaining the latest 20 runs. Markdown and JSON report exports are generated locally in the browser.
 
-This keeps the project database-free while showing an engineering loop for regression tracking, report export, and interview-ready quality evidence. A later version can replace localStorage with database-backed evaluation history and trend charts.
+This keeps the project database-free while showing an engineering loop for regression tracking, report export, and interview-ready quality evidence. V1.4 adds frontend-only trend visualization and report preview on top of the same localStorage history. A later version can replace localStorage with database-backed evaluation history and team-level trend analytics.
+
+## V1.4 Evaluation Visualization
+
+The Evaluation Dashboard now reads saved history from browser localStorage and renders lightweight SVG trend charts without adding a charting dependency. The chart layer visualizes passRate, fallbackRate, and averageRagScore for the latest 20 saved runs.
+
+Report previews are generated entirely in the browser from the same history snapshot. Markdown and JSON content can be previewed, copied, and downloaded, while `/api/evaluation` remains stateless and server-side.
