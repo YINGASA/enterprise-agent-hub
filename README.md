@@ -4,7 +4,7 @@
 
 Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
 
-> Current status: V1.3 includes Hybrid RAG retrieval, AI engineering routing, local knowledge import, and an Evaluation Dashboard with 80built-in cases, browser-local history, trend summary, and Markdown / JSON report export. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+> Current status: V1.6 includes Hybrid RAG retrieval, AI engineering routing, local knowledge import, an Evaluation Dashboard with 80 built-in cases, and Chat run history with Agent Trace report export. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
 
 ## Project Positioning
 
@@ -233,3 +233,8 @@ V1.5 introduces a pluggable Retriever Adapter layer under `src/lib/retrieval`. T
 - Auto Retriever: keeps Hybrid as the default and only attempts mock embedding rerank when the query is short or Hybrid confidence is low.
 
 Future work can connect OpenAI / DeepSeek / BGE embeddings and vector stores such as pgvector, Qdrant, or Chroma without rewriting the Agent pipeline UI contract.
+## V1.6 Chat Run History
+
+V1.6 adds browser-local Chat run history for the Agent Workspace. Users can manually save a completed Agent run, review Router / RAG / Tools / LLM / Retriever metadata, and preview, copy, or download Markdown and JSON run reports.
+
+The history is stored in browser localStorage under a project-scoped key and keeps the latest 30 runs. It is not a server-side audit log; a future version can move this data to database-backed team activity logs.

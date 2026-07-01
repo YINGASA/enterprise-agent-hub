@@ -445,6 +445,27 @@ export type AgentExample = {
 };
 
 
+export type ChatRunHistoryItem = {
+  id: string;
+  createdAt: string;
+  question: string;
+  finalAnswer: string;
+  responseMode: string;
+  scenario: string;
+  intent: string;
+  confidence?: number;
+  riskLevel?: string;
+  needsClarification?: boolean;
+  fallback?: boolean;
+  fallbackReason?: string;
+  toolsUsed?: string[];
+  sourcesCount?: number;
+  retrievalConfidence?: RetrievalConfidence;
+  retrieverMode?: RetrieverMode;
+  rerankReason?: string;
+  durationMs?: number;
+  resultSnapshot?: unknown;
+};
 export type EvaluationCase = {
   id: string;
   question: string;

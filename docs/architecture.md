@@ -160,3 +160,8 @@ The retrieval layer now exposes a small adapter contract: `RetrieverInput`, `Ret
 `mockEmbeddingRetriever` is intentionally local and deterministic. It builds token-hash vectors and cosine scores so the UI and metadata can exercise embeddingScore, rerankScore, retrieverMode, rerankReason, and vectorReady fields without calling a real embedding API.
 
 The `auto` strategy preserves Hybrid Retrieval as the default. It attempts mock embedding rerank only for short queries or low-confidence Hybrid retrieval, so irrelevant vector-like matches do not become authoritative. This keeps offline demos stable while reserving a clean upgrade path to OpenAI / DeepSeek / BGE embeddings and pgvector / Qdrant / Chroma.
+## V1.6 Chat Run History
+
+The Chat Workspace now has a frontend-only run-history layer. After an Agent Pipeline run, the user can save the result snapshot into browser localStorage. Each snapshot keeps the question, final answer, response mode, route, retriever metadata, RAG sources, tool calls, structured output, and API metadata.
+
+The same snapshot can be rendered into Markdown or JSON reports for local review. This improves observability without adding a database or backend persistence layer. Later versions can replace localStorage with server-side audit logs, team workspaces, and searchable run history.
