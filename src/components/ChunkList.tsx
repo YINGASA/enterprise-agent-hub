@@ -16,6 +16,7 @@ export function ChunkList({ chunks }: { chunks: KnowledgeChunk[] }) {
               <span>{chunk.category}</span>
               <span>sourceType: {chunk.sourceType ?? "default"}</span>
               <span>packId: {chunk.packId ?? "none"}</span>
+              <span>vectorReady: yes (mock)</span>
               {chunk.tags?.length ? <span>tags: {chunk.tags.join(" / ")}</span> : null}
             </div>
           </div>

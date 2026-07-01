@@ -1126,7 +1126,101 @@ export const evaluationCases: EvaluationCase[] = [
     "category": "ai_engineering",
     "difficulty": "medium",
     "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V15-RETRIEVER-001",
+    "question": "json解析失败",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "JSON",
+      "repair",
+      "fallback"
+    ],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
+  },
+  {
+    "id": "EVAL-V15-RETRIEVER-002",
+    "question": "售后不想要了",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": [
+      "searchPolicy"
+    ],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "订单号",
+      "签收时间",
+      "是否拆封",
+      "售后"
+    ],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-V15-RETRIEVER-003",
+    "question": "报销票据没了还能报销吗",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "报销",
+      "票据",
+      "发票"
+    ],
+    "category": "enterprise",
+    "difficulty": "medium",
+    "packId": "enterprise-policy"
+  },
+  {
+    "id": "EVAL-V15-RETRIEVER-004",
+    "question": "项目和岗位匹配吗",
+    "expectedScenario": "recruitment",
+    "expectedIntent": "jd_match",
+    "expectedTools": [
+      "analyzeJD"
+    ],
+    "expectedNeedRag": false,
+    "expectedKeywords": [
+      "匹配",
+      "AI"
+    ],
+    "category": "recruitment",
+    "difficulty": "medium",
+    "packId": "recruitment-career"
+  },
+  {
+    "id": "EVAL-V15-RETRIEVER-005",
+    "question": "天气怎么样",
+    "expectedScenario": "general",
+    "expectedIntent": "general_chat",
+    "expectedTools": [],
+    "expectedNeedRag": false,
+    "expectedKeywords": [],
+    "category": "general",
+    "difficulty": "easy",
+    "packId": "fallback"
+  },
+  {
+    "id": "EVAL-V15-RETRIEVER-006",
+    "question": "embedding 和向量库有什么区别",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": [
+      "Embedding",
+      "向量库",
+      "RAG"
+    ],
+    "category": "ai_engineering",
+    "difficulty": "medium",
+    "packId": "ai-engineering"
   }
-
-
 ];

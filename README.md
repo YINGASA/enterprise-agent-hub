@@ -4,7 +4,7 @@
 
 Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
 
-> Current status: V1.3 includes Hybrid RAG retrieval, AI engineering routing, local knowledge import, and an Evaluation Dashboard with 74 built-in cases, browser-local history, trend summary, and Markdown / JSON report export. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+> Current status: V1.3 includes Hybrid RAG retrieval, AI engineering routing, local knowledge import, and an Evaluation Dashboard with 80built-in cases, browser-local history, trend summary, and Markdown / JSON report export. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
 
 ## Project Positioning
 
@@ -91,7 +91,7 @@ Recommended screenshots:
 - Chat Agent Pipeline: show Router, RAG, Tools, LLM step, structured output, and Real API response.
 - Knowledge Base: show read-only default documents, imported local documents, chunks, keywords, source types, and citations.
 - Tool Center: show runnable tool cards and formatted JSON results.
-- Evaluation Dashboard: show 74-case mock evaluation results, metrics, failure analysis, local history, trend summary, and report export actions.
+- Evaluation Dashboard: show 80-case mock evaluation results, metrics, failure analysis, local history, trend summary, and report export actions.
 
 Suggested capture plan is documented in `docs/screenshots.md`. When images are ready, place them under `public/screenshots/`.
 
@@ -137,8 +137,8 @@ Do not commit `.env.local`.
 
 Current V1.3 Mock full-suite evaluation result:
 
-- total: 74
-- passed: 74
+- total: 80
+- passed: 80
 - passRate: 100%
 - scenarioAccuracy: 100%
 - intentAccuracy: 100%
@@ -224,3 +224,12 @@ This is browser-local persistence, not a backend database. Future work can move 
 V1.4 extends the Evaluation Dashboard with browser-local trend visualization. Saved evaluation runs are plotted with lightweight SVG charts for passRate, fallbackRate, and averageRagScore. The page also supports Markdown and JSON report preview, copy, and download before exporting files.
 
 The trend data still lives only in browser localStorage. There is no database or backend persistence in this version.
+## V1.5 Retriever Adapter
+
+V1.5 introduces a pluggable Retriever Adapter layer under `src/lib/retrieval`. The current default remains local, explainable Hybrid Retrieval, while the codebase now also includes a deterministic Mock Embedding Retriever and an Auto strategy for future vector-search upgrades.
+
+- Hybrid Retriever: keyword, title, tag, category, pack, source, phrase, freshness, and explainable scoreBreakdown.
+- Mock Embedding Retriever: local token-hash vectors plus cosine similarity. It does not call a real embedding API and is not equivalent to a production vector database.
+- Auto Retriever: keeps Hybrid as the default and only attempts mock embedding rerank when the query is short or Hybrid confidence is low.
+
+Future work can connect OpenAI / DeepSeek / BGE embeddings and vector stores such as pgvector, Qdrant, or Chroma without rewriting the Agent pipeline UI contract.
