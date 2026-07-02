@@ -1,15 +1,15 @@
-"use client";
+﻿"use client";
 
 import { useRef, useState } from "react";
 import { knowledgePacks } from "@/data/knowledgePacks";
-import { createImportedKnowledgeDocument, readKnowledgeFile, SUPPORTED_IMPORT_EXTENSIONS } from "@/lib/knowledge/import";
+import { createImportedKnowledgeDocument, readKnowledgeFile, SUPPORTED_IMPORT_EXTENSIONS, titleFromMarkdown } from "@/lib/knowledge/import";
 import type { ImportedKnowledgeDocument, KnowledgeSourceType } from "@/types";
 
 type DocumentFormProps = {
   onAdd: (document: ImportedKnowledgeDocument) => void;
 };
 
-const categories = ["制度流程", "售后规则", "岗位说明", "AI工程规范", "用户导入", "General"];
+const categories = ["制度流程", "售后规则", "岗位说明", "AI 工程规范", "用户导入", "General"];
 
 function parseTags(value: string) {
   return value
@@ -44,6 +44,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
       let parsedContent = content.trim();
       let sourceType: Extract<KnowledgeSourceType, "user_upload" | "user_paste"> = "user_paste";
       let originalFileName: string | undefined;
+      let resolvedTitle = title.trim();
 
       if (file) {
         const parsed = await readKnowledgeFile(file);
@@ -54,10 +55,11 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         parsedContent = parsed.content;
         sourceType = "user_upload";
         originalFileName = file.name;
+        resolvedTitle = resolvedTitle || titleFromMarkdown(parsedContent) || titleFromFileName(file.name);
       }
 
       const result = createImportedKnowledgeDocument({
-        title: title.trim() || (file ? titleFromFileName(file.name) : ""),
+        title: resolvedTitle,
         category,
         tags: parseTags(tags),
         packId,
@@ -72,7 +74,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
       }
 
       onAdd(result.document);
-      setSuccess(`已导入：${result.document.title}`);
+      setSuccess(`已成功导入：${result.document.title}`);
       setTitle("");
       setPackId(knowledgePacks[0]?.id ?? "enterprise-policy");
       setCategory(categories[0]);
@@ -90,7 +92,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
       <div className="mb-4">
         <h2 className="font-semibold text-ink-900">导入知识文档</h2>
         <p className="mt-1 text-sm leading-6 text-ink-500">
-          V1.0 支持粘贴文本或选择本地 txt / md / json / csv 文件，内容仅保存在浏览器 localStorage，不上传服务器。
+          支持粘贴文本或选择本地 txt / md / json / csv 文件，内容仅保存在当前浏览器 localStorage，不上传服务器。
         </p>
       </div>
       <div className="space-y-4">
@@ -114,7 +116,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         </div>
         <label className="block">
           <span className="text-sm font-medium text-ink-700">标签</span>
-          <input value={tags} onChange={(event) => setTags(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="例如：电脑申请、资产、审批" />
+          <input value={tags} onChange={(event) => setTags(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="例如：电脑申请、资产、审批；留空时会自动提取" />
         </label>
         <label className="block">
           <span className="text-sm font-medium text-ink-700">粘贴文本导入</span>

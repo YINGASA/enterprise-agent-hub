@@ -1,4 +1,4 @@
-import type { ImportedKnowledgeDocument, KnowledgeImportResult, KnowledgeSourceType } from "@/types";
+﻿import type { ImportedKnowledgeDocument, KnowledgeImportResult, KnowledgeSourceType } from "@/types";
 
 export const MAX_IMPORT_FILE_SIZE = 1024 * 1024;
 export const SUPPORTED_IMPORT_EXTENSIONS = [".txt", ".md", ".json", ".csv"] as const;
@@ -28,18 +28,58 @@ function formatJsonValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function parseCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
 function parseCsvToText(raw: string) {
   const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length === 0) return "";
-  const headers = lines[0].split(",").map((item) => item.trim()).filter(Boolean);
+  const headers = parseCsvLine(lines[0]).filter(Boolean);
   const rows = lines.slice(1, 21).map((line, rowIndex) => {
-    const cells = line.split(",").map((item) => item.trim());
+    const cells = parseCsvLine(line);
     const pairs = headers.length
       ? headers.map((header, index) => `${header}: ${cells[index] ?? ""}`).join("; ")
       : cells.join("; ");
     return `第 ${rowIndex + 1} 行：${pairs}`;
   });
   return [`CSV 表头：${headers.join("、") || "无表头"}`, ...rows].join("\n");
+}
+
+export function titleFromMarkdown(content: string) {
+  const line = content.split(/\r?\n/).find((item) => /^#\s+/.test(item.trim()));
+  return line?.replace(/^#\s+/, "").trim() ?? "";
+}
+
+export function extractAutoTags(title: string, content: string, maxTags = 8) {
+  const candidates = [
+    ...title.split(/[\s,，、/|]+/),
+    ...content.match(/[A-Za-z][A-Za-z0-9+#.-]{1,}|[\u4e00-\u9fa5]{2,8}/g) ?? [],
+  ];
+  const stopWords = new Set(["如果", "可以", "需要", "应该", "流程", "说明", "制度", "文档", "用户", "公司"]);
+  const unique = Array.from(new Set(candidates.map((item) => item.trim()).filter((item) => item.length >= 2 && !stopWords.has(item))));
+  return unique.slice(0, maxTags);
 }
 
 export function parseImportedContent(raw: string, fileName = "document.txt") {
@@ -90,12 +130,13 @@ export function createImportedKnowledgeDocument(input: ImportInput): KnowledgeIm
     return { ok: false, error: { code: "empty_content", message: "请粘贴正文或选择有效文件。" } };
   }
   const now = new Date().toISOString();
+  const tags = input.tags.length ? input.tags : extractAutoTags(input.title, input.content);
   const document: ImportedKnowledgeDocument = {
     id: `user-doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     packId: input.packId,
     title: input.title.trim(),
     category: input.category.trim() || "用户导入",
-    tags: input.tags,
+    tags,
     summary: summarizeContent(input.content),
     content: input.content.trim(),
     createdAt: now,
