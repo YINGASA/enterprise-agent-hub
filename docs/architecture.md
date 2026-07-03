@@ -78,7 +78,7 @@ Real API mode uses server-side API routes only:
 5. Server parses structured JSON.
 6. Server returns final answer, structured output, trace steps, and diagnostics.
 
-API keys are never exposed in browser code.
+API keys are never exposed in browser code. For public demos, the Chat Workspace recommends Mock mode by default. A lightweight server-only status route reports whether Real API environment variables are configured without exposing secrets. When `AI_API_KEY` is missing, the UI keeps Real API visible as an optional capability but blocks the run action with a friendly message, so the deployed demo still works end to end through Mock mode.
 
 ## Fallback Flow
 
@@ -165,3 +165,11 @@ The `auto` strategy preserves Hybrid Retrieval as the default. It attempts mock 
 The Chat Workspace now has a frontend-only run-history layer. After an Agent Pipeline run, the user can save the result snapshot into browser localStorage. Each snapshot keeps the question, final answer, response mode, route, retriever metadata, RAG sources, tool calls, structured output, and API metadata.
 
 The same snapshot can be rendered into Markdown or JSON reports for local review. This improves observability without adding a database or backend persistence layer. Later versions can replace localStorage with server-side audit logs, team workspaces, and searchable run history.
+
+## V1.6.1 Knowledge Import Persistence
+
+V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.
+
+The storage key is `enterprise-agent-hub:user-knowledge-documents`. Imported records are plain JSON-serializable document objects: title, content, category, tags, packId, sourceType, originalFileName, createdAt, updatedAt, and importedAt. Files themselves are not stored; only parsed text and metadata are persisted.
+
+`/chat` reads the same browser-local user documents and sends them to `/api/agent` for that request, so refreshed user documents can participate in RAG retrieval. `/api/evaluation` remains deterministic and does not read browser localStorage.

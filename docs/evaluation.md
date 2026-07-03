@@ -1,10 +1,10 @@
-# Evaluation Dashboard
+﻿# Evaluation Dashboard
 
 The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as expected across enterprise knowledge QA, ecommerce after-sales support, recruitment/JD matching, AI engineering knowledge, and fallback scenarios.
 
 ## V1.3 Dataset
 
-The built-in dataset contains 80cases after V1.2 retrieval-quality and AI engineering routing expansion:
+The built-in dataset contains 80 cases after V1.2 retrieval-quality and AI engineering routing expansion:
 
 - 12 enterprise policy cases
 - 12 ecommerce support cases
@@ -16,7 +16,7 @@ The UI supports three suite sizes:
 
 - Quick: 15 cases
 - Standard: 30 cases
-- Full: 80current cases
+- Full: 80 current cases
 
 Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. The suite covers IT/admin operations, ecommerce edge policies, recruitment matching, AI engineering explainability, Hybrid RAG quality, and fallback behavior.
 
@@ -105,3 +105,13 @@ All of these features read from browser localStorage. They do not introduce a da
 V1.5 extends the full suite to 80 cases. The added checks cover short technical queries, colloquial refund intent, reimbursement ticket loss, recruitment matching, weather fallback, and embedding/vector-database concepts.
 
 The target remains passRate >= 90%. These cases validate that the Retriever Adapter does not regress Router decisions, missing-parameter clarification, low-confidence fallback, or AI engineering knowledge routing.
+## V1.6.1 Knowledge Import Persistence Check
+
+V1.6.1 does not change the built-in evaluation API. `/api/evaluation` still runs against the default mock knowledge base so full Mock remains stable at 80/80 in local validation.
+
+User-imported documents are validated manually because they live in browser localStorage. Recommended checks:
+
+- Import a `.md` or pasted policy document in `/knowledge`.
+- Refresh the page and confirm the user document count, document details, and chunks remain visible.
+- Ask a related question in `/chat` and confirm sources include `user_upload` or `user_paste`.
+- Delete or clear user documents and confirm default Knowledge Packs remain available.

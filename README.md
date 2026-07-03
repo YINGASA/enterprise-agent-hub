@@ -1,114 +1,100 @@
 # Enterprise Agent Hub
 
-企业知识库与业务流程自动化 Agent 平台
+面向企业知识库与业务流程自动化的 AI Agent 产品原型。
 
-Enterprise Agent Hub is an interview-ready AI application project that demonstrates how to build an enterprise Agent platform with RAG, Agent Router, Tool Calling, OpenAI-compatible API integration, structured JSON output, fallback handling, and an evaluation dashboard.
+Enterprise Agent Hub 用于展示一个企业 AI Agent 从产品设计到工程实现的完整闭环：用户提出业务问题后，系统通过 Agent Router 判断场景与意图，结合 Hybrid RAG 检索、业务工具调用、Mock / Real API 双模式、结构化输出、fallback、评测面板和运行追踪，形成可解释、可评估、可复盘的 AI 应用体验。
 
-> Current status: V1.6 includes Hybrid RAG retrieval, AI engineering routing, local knowledge import, an Evaluation Dashboard with 80 built-in cases, and Chat run history with Agent Trace report export. The project uses local mock/default data by default and can optionally call a real OpenAI-compatible model such as DeepSeek from server-side API routes.
+## 项目定位
 
-## Project Positioning
+这是一个 AI 产品原型，不是单纯的 API 调用 Demo。项目重点展示企业 AI Agent 在以下环节中的设计和实现能力：
 
-Enterprise Agent Hub is a lightweight enterprise AI application platform based on:
+- 知识库问答：默认 Knowledge Packs + 用户本地导入文档共同参与 RAG。
+- 业务工具调用：订单、商品、规则、工单、JD 分析等本地工具可编排。
+- 评测验证：内置 80 条多场景 Mock 评测用例，支持历史记录、趋势和报告导出。
+- 运行追踪：Chat 侧可保存单次 Agent Run，导出 Router / RAG / Tools / LLM / Retriever Trace。
+- 真实模型接入：支持 OpenAI-compatible / DeepSeek Real API，失败时 fallback 到 mock-agent。
 
-- RAG knowledge retrieval
-- Agent Router
-- Tool Calling
-- OpenAI-compatible API
-- JSON structured output
-- JSON repair and fallback
-- Agent Evaluation Dashboard
+## 核心场景
 
-The goal is to show the engineering loop of an AI application, not only a single model call.
+- 企业知识库问答：报销、差旅、请假、IT 权限、数据安全、设备申请等。
+- 电商客服售后：订单查询、退货退款、售后规则、物流异常、客服回复。
+- 招聘 JD 匹配：岗位要求、简历关键词、候选人评分、项目匹配建议。
+- AI 工程规范问答：JSON repair、fallback、RAG 引用、Tool Calling、评测集设计。
 
-## Core Features
+## 核心能力
 
-- Knowledge Packs: built-in read-only packs for IT/admin, ecommerce support, recruitment matching, and AI engineering
-- Pack-aware keyword RAG with title/category/tag/pack weighting
-- Expanded Agent Evaluation Suite with quick / standard / full modes and V1.1 demo scenarios
-- Multi-scenario Agent workspace
-- Enterprise knowledge base Q&A
-- E-commerce customer support and after-sales handling
-- Recruitment and JD matching Agent
-- RAG retrieval with source citations
-- Rule-based Agent Router
-- Local Tool Calling orchestration
-- DeepSeek / OpenAI-compatible Real API mode
-- Mock / Real dual mode
-- JSON structured output
-- JSON parse, repair, and text fallback
-- LLM connectivity diagnostics with optional proxy support
-- Agent Evaluation Dashboard with pass rate, routing accuracy, tool hit rate, citation rate, and fallback rate
+- Agent Router：规则版场景与意图识别，支持 enterprise / ecommerce / recruitment / ai_engineering / general。
+- Hybrid RAG：关键词、标题、标签、分类、知识包、来源、业务短语、时效等多维评分。
+- Retriever Adapter：封装 Hybrid Retriever，并预留 Mock Embedding / Auto 检索策略接口。
+- Tool Calling：本地工具编排，覆盖订单、商品、规则检索、工单、JD 分析和客服回复。
+- Mock / Real API 双模式：Mock 默认可用，Real API 通过服务端 API Route 调用模型。
+- Knowledge Import：支持 txt / md / json / csv 本地导入和粘贴文本导入。
+- Evaluation Dashboard：支持 quick / standard / full 评测、失败分桶、历史记录、趋势图和报告导出。
+- Chat Run History：支持保存单次 Agent 运行、查看 Trace、导出 Markdown / JSON 报告。
+- Trace Export：Router、RAG、Tools、Retriever、LLM、fallback 信息可用于复盘和面试讲解。
 
-## Tech Stack
+## 页面说明
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- OpenAI-compatible Chat Completions API
-- DeepSeek-compatible configuration
-- undici ProxyAgent for optional server-side proxy support
-- Local mock data
-- Vercel-ready deployment shape
+- `/about`：项目说明、架构能力、版本能力和工程亮点。
+- `/chat`：Agent 问答工作台，支持 Mock / Real API、RAG 来源、工具调用、Trace 和运行历史。
+- `/knowledge`：知识库管理与用户文档导入，支持粘贴、文件导入、搜索、筛选、chunks 查看和删除。
+- `/evaluation`：Agent 评测面板，支持 80 条 Mock full 评测、历史记录、趋势图和 Markdown / JSON 报告。
+- `/tools`：业务工具演示中心，可直接运行本地工具示例。
+- `/scenarios`：企业知识库、电商售后、招聘求职等场景模板说明。
 
-## Architecture
+## 推荐评估路径
 
-```mermaid
-flowchart TD
-  User[User Input] --> Router[Agent Router]
-  Router --> NeedRag{Need RAG?}
-  NeedRag -->|Yes| RAG[Keyword RAG Retrieval]
-  NeedRag -->|No| SkipRag[Skip RAG]
-  Router --> Tools[Tool Selection]
-  Tools --> ToolRun[Local Tool Calling]
-  RAG --> LLM[LLM Structured Generation]
-  SkipRag --> LLM
-  ToolRun --> LLM
-  LLM --> Parse[JSON Parse]
-  Parse -->|Success| UI[Frontend Agent Trace]
-  Parse -->|Failed| Repair[JSON Repair Retry]
-  Repair -->|Success| UI
-  Repair -->|Failed| TextFallback[Real Text Fallback]
-  TextFallback --> UI
-  UI --> Eval[Evaluation Dashboard]
-```
+建议面试方按下面顺序体验项目：
 
-## Pages
+1. 先看 `/about`：了解项目定位、架构和当前能力边界。
+2. 再看 `/chat`：体验 Agent Router、Hybrid RAG、Tool Calling、Real / Mock 双模式和 Trace。
+3. 再看 `/knowledge`：导入一个本地文档，刷新页面确认仍保留，并在 Chat 中检索。
+4. 再看 `/evaluation`：运行 full Mock 评测，查看 80/80 指标、趋势和报告导出。
+5. 最后看 `docs/`：阅读架构、评测设计、简历 bullet 和面试讲解稿。
 
-- `/` - Project overview and core capabilities
-- `/chat` - Agent workspace with Mock / Real API mode, Router, RAG, Tools, LLM step, and structured output
-- `/knowledge` - Hybrid knowledge library with default packs, local paste/file import, generated chunks, and source citations
-- `/tools` - Tool center with runnable local tool examples
-- `/scenarios` - Scenario templates aligned with Agent Router intents and tools
-- `/evaluation` - Agent Evaluation Dashboard for batch evaluation and failure analysis
-- `/about` - Project overview, architecture, version roadmap, metrics, and engineering highlights
+## 推荐测试问题
 
-## Screenshots / 项目截图
+- 订单10001能不能退？
+- 东西不喜欢想退咋办
+- 模型输出不是合法 JSON 怎么处理
+- 我出差回来想报销，应该准备哪些材料？
+- 公司笔记本电脑申请制度适用于哪些人？
 
-Screenshots are intentionally not embedded yet, so the README does not contain broken image links before release assets are captured.
+其中最后一个问题适合配合 `/knowledge` 用户文档导入测试：先导入一篇“公司笔记本电脑申请制度”，刷新页面后再到 `/chat` 提问，预期 sources 中优先出现用户上传文档。
 
-Recommended screenshots:
+## 知识库导入说明
 
-- Chat Agent Pipeline: show Router, RAG, Tools, LLM step, structured output, and Real API response.
-- Knowledge Base: show read-only default documents, imported local documents, chunks, keywords, source types, and citations.
-- Tool Center: show runnable tool cards and formatted JSON results.
-- Evaluation Dashboard: show 80-case mock evaluation results, metrics, failure analysis, local history, trend summary, and report export actions.
+V1.6.1 修复并强化了用户导入文档的浏览器本地持久化：
 
-Suggested capture plan is documented in `docs/screenshots.md`. When images are ready, place them under `public/screenshots/`.
+- 用户导入文档会保存到当前浏览器 `localStorage`。
+- 刷新 `/knowledge` 后，用户上传和粘贴的文档仍会保留。
+- 删除单个用户文档会同步更新 `localStorage`。
+- 清空用户文档只会清空用户导入内容，不会影响系统内置默认知识库。
+- `/chat` 会读取同一份用户文档，并把它们传给 Agent Pipeline 参与 RAG 检索。
+- 线上演示中，不同浏览器、不同设备、不同域名之间不会共享用户导入文档。
+- 当前不上传文件到服务器，也不使用数据库或对象存储。
 
-## Local Development
+## 本地运行方式
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+打开：`http://localhost:3000`
 
-## Environment Variables
+构建验证：
 
-Mock mode does not require an API key. Real API mode reads environment variables only from server-side API routes.
+```bash
+npm run typecheck
+npm run build
+```
 
-Create `.env.local` locally based on `.env.example`:
+## Real API 配置
+
+默认 Mock 模式不需要 API Key，可以直接体验。Real API 模式需要在本地创建 `.env.local`，并由服务端 API Route 读取。`/chat` 在线上演示时会优先推荐 Mock 模式；如果部署环境没有配置 `AI_API_KEY`，页面会显示友好提示并阻止误运行 Real API。
+
+示例 `.env.example`：
 
 ```env
 AI_API_KEY=your_api_key_here
@@ -122,20 +108,16 @@ ALL_PROXY=
 AI_REQUEST_TIMEOUT_MS=20000
 ```
 
-Do not commit `.env.local`.
+安全要求：
 
-## Mock / Real Mode
+- 不要提交 `.env.local`。
+- 不要把真实 API Key 写入代码、README 或 docs。
+- API Key 只在服务端读取，浏览器端不暴露完整 Key。
+- 部署到 Vercel 时，请在 Project Settings 的 Environment Variables 中配置 Key。
 
-- Mock mode: no API key required, deterministic local rules and mock data.
-- Real mode: calls OpenAI-compatible Chat Completions through `src/app/api/agent/route.ts`.
-- API keys are never exposed in browser-side code.
-- If the model response is not valid JSON, the system tries one JSON repair call.
-- If repair still fails, the UI uses the real text response and fallback structured output.
-- If network, HTTP, or config fails, the system falls back to mock-agent output.
+## 当前评测结果
 
-## Evaluation Results
-
-Current V1.3 Mock full-suite evaluation result:
+当前 Mock full 评测结果：
 
 - total: 80
 - passed: 80
@@ -147,94 +129,30 @@ Current V1.3 Mock full-suite evaluation result:
 - citationRate: 100%
 - keywordHitRate: 100%
 
-The evaluation dashboard also reports failure buckets such as scenario mismatch, intent mismatch, tool mismatch, RAG usage mismatch, keyword miss, citation miss, and pipeline error.
+Real API 模式可用于验证真实模型结构化输出稳定性，但会消耗 API 额度，因此默认评测使用 Mock 模式。
 
-## Security Notes
+## 当前边界
 
-- `.env.local` is ignored and must not be committed.
-- API keys are read only on the server.
-- Browser pages only display masked key diagnostics.
-- Proxy variables are intended for local development and should be configured in the runtime environment when needed.
-- Mock data is synthetic and does not contain real enterprise or personal data.
+- 默认业务数据和知识库内容主要为自建 mock 数据，不是真实企业数据。
+- 用户导入文档保存在浏览器 localStorage，不是服务端知识库。
+- Mock Embedding Retriever 是本地 deterministic 模拟，不等于真实语义向量或生产级向量库。
+- 当前没有数据库、权限系统、团队空间、审计日志或服务端长期记忆。
+- Tool Calling 是本地规则编排，不是模型原生 `tool_calls`。
+- 当前不支持 PDF / DOCX / OCR 等复杂文件解析。
 
-## Vercel Deployment
+## 后续规划
 
-This project is ready for Vercel-style deployment:
+- 多轮对话重新设计：在不牺牲主体验的前提下重做会话和上下文记忆。
+- 用户反馈闭环：对回答质量、来源可信度、工具调用结果进行用户反馈采集。
+- 竞品分析与 PRD 完善：补充企业知识库 Agent / 客服 Agent 的产品需求文档。
+- 真实向量数据库接入：接入 Embedding + pgvector / Qdrant / Chroma。
+- 团队权限与审计日志：支持企业空间、用户角色、操作日志和合规审计。
+- 服务端知识库：将 localStorage 文档升级为数据库 / 对象存储 / 文档解析流水线。
 
-1. Push the repository after review.
-2. Import the project in Vercel.
-3. Configure environment variables in Vercel Project Settings.
-4. Run the default build command: `npm run build`.
-5. Keep Mock mode available for demos even when Real API credentials are not configured.
+## 文档入口
 
-## Current Limitations
-
-- RAG is currently pack-aware keyword-based mock retrieval, not vector search.
-- Tool Calling is local tool orchestration, not model-native `tool_calls`.
-- Data is local mock data, not a real database.
-- Uploaded files, permissions, audit logs, and server-side evaluation history are planned future work.
-
-## Roadmap
-
-- Real file upload and document parsing
-- Embeddings and vector database integration
-- pgvector / Qdrant support
-- Rerank and citation quality scoring
-- Real model-native Tool Calls
-- Database-backed evaluation history and team-level trend analytics
-- User permissions and audit logs
-- Production observability and tracing
-## V1.1 Knowledge Management Experience
-
-V1.1 keeps all content self-generated to avoid copying third-party material into the repository. It adds four built-in read-only knowledge categories that participate in RAG immediately:
-
-- Enterprise IT / Admin: laptop requests, VPN, account permissions, reimbursement, leave, onboarding equipment, software licenses, and data security.
-- Ecommerce Support: seven-day returns, quality issues, wrong shipment, coupons, membership benefits, logistics exceptions, refund timing, and escalation.
-- Recruitment Matching: AI product manager, AI application developer, candidate scoring, interviews, resume screening, project matching, and follow-up scripts.
-- AI Engineering: API key safety, RAG citations, fallback, JSON output, Agent Router, Tool Calling, evaluation datasets, and deployment checks.
-
-Source types are shown in the UI as default knowledge, user upload, or user paste. Retrieved chunks include scoreReason so the product can explain why a source matched: keyword hits, title/category/tag hits, pack preference, and user document boost.
-
-Manual V1.1 acceptance checklist:
-
-- Confirm /knowledge shows read-only default categories without import buttons.
-- Import a user document by paste or file upload and verify localStorage persistence.
-- Ask a question that hits both default and user content, then inspect Top sources and score reasons.
-- Run /api/evaluation in Mock mode and verify the suite remains stable.
-
-## V1.2 Hybrid Retrieval Notes
-
-V1.2 upgrades the mock keyword RAG into a more explainable Hybrid Retrieval layer. It is still not embedding or vector search. The retriever now normalizes the query, expands business synonyms, and scores chunks with keyword, title, tag, category, pack, source, phrase, and freshness signals.
-
-Each retrieved chunk can expose scoreBreakdown, scoreReason, retrievalConfidence, lowConfidenceRetrieval, and query expansion terms. This makes the chat answer more trustworthy: if retrieval confidence is low, the Agent should say that the knowledge base evidence is insufficient instead of pretending that weak chunks are authoritative.
-
-V1.2.1 further improves AI engineering routing. Questions about JSON repair, invalid structured output, fallback, Tool Calling failures, Agent evaluation datasets, Prompt constraints, RAG retrieval quality, Embedding, vector search, and source citations are routed to the AI Engineering scenario first and prioritize the `ai-engineering` knowledge pack. In the chat UI this appears as `AI Engineering / Knowledge QA` in product-facing labels, while raw enum values remain available only in debug JSON.
-
-Future work can replace this local scoring with Embedding + Vector DB + Rerank while keeping the same UI explainability contract.
-
-
-## V1.3 Evaluation History and Export
-
-V1.3 turns the Evaluation Dashboard into a lightweight evaluation management view. After a run, users can save the result to browser localStorage, compare recent pass rates, keep the latest 20 runs, and export Markdown or JSON reports for project review, README screenshots, and interview discussion.
-
-This is browser-local persistence, not a backend database. Future work can move evaluation history to a database, add team-level history, and render trend charts over time.
-
-## V1.4 Evaluation Trend Visualization
-
-V1.4 extends the Evaluation Dashboard with browser-local trend visualization. Saved evaluation runs are plotted with lightweight SVG charts for passRate, fallbackRate, and averageRagScore. The page also supports Markdown and JSON report preview, copy, and download before exporting files.
-
-The trend data still lives only in browser localStorage. There is no database or backend persistence in this version.
-## V1.5 Retriever Adapter
-
-V1.5 introduces a pluggable Retriever Adapter layer under `src/lib/retrieval`. The current default remains local, explainable Hybrid Retrieval, while the codebase now also includes a deterministic Mock Embedding Retriever and an Auto strategy for future vector-search upgrades.
-
-- Hybrid Retriever: keyword, title, tag, category, pack, source, phrase, freshness, and explainable scoreBreakdown.
-- Mock Embedding Retriever: local token-hash vectors plus cosine similarity. It does not call a real embedding API and is not equivalent to a production vector database.
-- Auto Retriever: keeps Hybrid as the default and only attempts mock embedding rerank when the query is short or Hybrid confidence is low.
-
-Future work can connect OpenAI / DeepSeek / BGE embeddings and vector stores such as pgvector, Qdrant, or Chroma without rewriting the Agent pipeline UI contract.
-## V1.6 Chat Run History
-
-V1.6 adds browser-local Chat run history for the Agent Workspace. Users can manually save a completed Agent run, review Router / RAG / Tools / LLM / Retriever metadata, and preview, copy, or download Markdown and JSON run reports.
-
-The history is stored in browser localStorage under a project-scoped key and keeps the latest 30 runs. It is not a server-side audit log; a future version can move this data to database-backed team activity logs.
+- `docs/architecture.md`：系统架构、RAG、Agent Router、Tool Calling、Real API、fallback 和持久化边界。
+- `docs/evaluation.md`：评测集设计、指标说明、Mock full 结果、历史记录和趋势图。
+- `docs/resume-bullets.md`：简历 bullet 与项目介绍版本。
+- `docs/interview-guide.md`：面试讲解思路与常见追问回答。
+- `docs/release-checklist.md`：GitHub / Vercel 发布前检查清单。

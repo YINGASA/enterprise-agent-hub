@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { ChunkList } from "@/components/ChunkList";
@@ -7,7 +7,7 @@ import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { documents as defaultDocuments } from "@/data/mock";
 import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
-import { readUserKnowledgeDocuments, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
+import { clearUserKnowledgeDocuments, readUserKnowledgeDocumentsWithStatus, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import { splitDocument } from "@/lib/rag";
 import type { ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
 
@@ -105,8 +105,11 @@ export function KnowledgeWorkspace() {
   const [selectedDocumentId, setSelectedDocumentId] = useState(defaultDocuments[0]?.id ?? "");
   const [notice, setNotice] = useState("");
 
-  useEffect(() => { setUserDocuments(readUserKnowledgeDocuments()); }, []);
-  useEffect(() => { writeUserKnowledgeDocuments(userDocuments); }, [userDocuments]);
+  useEffect(() => {
+    const loaded = readUserKnowledgeDocumentsWithStatus();
+    setUserDocuments(loaded.data);
+    if (!loaded.ok) setNotice(`用户文档读取失败：${loaded.error}`);
+  }, []);
 
   const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
   const categories = useMemo(() => Array.from(new Set(allDocuments.map((document) => document.category).filter(Boolean))).sort(), [allDocuments]);
@@ -126,30 +129,41 @@ export function KnowledgeWorkspace() {
   const isSelectedUserDocument = Boolean(selectedDocument && selectedDocument.sourceType !== "default");
 
   function handleAdd(document: ImportedKnowledgeDocument) {
-    setUserDocuments((current) => [document, ...current]);
+    const nextDocuments = [document, ...userDocuments.filter((item) => item.id !== document.id)];
+    const saved = writeUserKnowledgeDocuments(nextDocuments);
+    const persistedDocuments = saved.ok ? saved.data : nextDocuments;
+    const chunkCount = splitDocument(document).length;
+    setUserDocuments(persistedDocuments);
     setSelectedDocumentId(document.id);
     setSelectedPack(document.packId ?? allPackOption);
     setSelectedCategory(allCategoryOption);
     setSelectedSourceType(document.sourceType);
-    setNotice(ui.imported + document.title);
+    setNotice(
+      saved.ok
+        ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，并加入 RAG 检索。`
+        : `已导入到当前页面状态，但保存到 localStorage 失败：${saved.error}`,
+    );
   }
 
   function handleDelete(documentId: string) {
     const target = userDocuments.find((document) => document.id === documentId);
     if (!target) return;
-    setUserDocuments((current) => current.filter((document) => document.id !== documentId));
+    const nextDocuments = userDocuments.filter((document) => document.id !== documentId);
+    const saved = writeUserKnowledgeDocuments(nextDocuments);
+    setUserDocuments(saved.ok ? saved.data : nextDocuments);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
-    setNotice(ui.deleted + target.title);
+    setNotice(saved.ok ? ui.deleted + target.title : `已从页面删除，但同步 localStorage 失败：${saved.error}`);
   }
 
   function handleClearUserDocuments() {
     if (!userDocuments.length) return;
     const confirmed = window.confirm(ui.confirmClear);
     if (!confirmed) return;
+    const cleared = clearUserKnowledgeDocuments();
     setUserDocuments([]);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
     setSelectedSourceType(allSourceOption);
-    setNotice(ui.cleared);
+    setNotice(cleared.ok ? ui.cleared : `已清空页面状态，但同步 localStorage 失败：${cleared.error}`);
   }
 
   return (
@@ -175,3 +189,5 @@ export function KnowledgeWorkspace() {
     </div>
   );
 }
+
+
