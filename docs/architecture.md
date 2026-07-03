@@ -1,4 +1,4 @@
-﻿# Architecture
+# Architecture
 
 Enterprise Agent Hub is designed as a small but complete AI application architecture for interview demonstration. It keeps the core AI workflow visible: route, retrieve, call tools, generate structured output, handle fallback, and evaluate quality.
 
@@ -78,7 +78,7 @@ Real API mode uses server-side API routes only:
 5. Server parses structured JSON.
 6. Server returns final answer, structured output, trace steps, and diagnostics.
 
-API keys are never exposed in browser code.
+API keys are never exposed in browser code. For public demos, the Chat Workspace recommends Mock mode by default. A lightweight server-only status route reports whether Real API environment variables are configured without exposing secrets. When `AI_API_KEY` is missing, the UI keeps Real API visible as an optional capability but blocks the run action with a friendly message, so the deployed demo still works end to end through Mock mode.
 
 ## Fallback Flow
 

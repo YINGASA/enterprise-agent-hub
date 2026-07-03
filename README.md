@@ -1,4 +1,4 @@
-﻿# Enterprise Agent Hub
+# Enterprise Agent Hub
 
 面向企业知识库与业务流程自动化的 AI Agent 产品原型。
 
@@ -92,7 +92,7 @@ npm run build
 
 ## Real API 配置
 
-默认 Mock 模式不需要 API Key，可以直接体验。Real API 模式需要在本地创建 `.env.local`，并由服务端 API Route 读取。
+默认 Mock 模式不需要 API Key，可以直接体验。Real API 模式需要在本地创建 `.env.local`，并由服务端 API Route 读取。`/chat` 在线上演示时会优先推荐 Mock 模式；如果部署环境没有配置 `AI_API_KEY`，页面会显示友好提示并阻止误运行 Real API。
 
 示例 `.env.example`：
 
