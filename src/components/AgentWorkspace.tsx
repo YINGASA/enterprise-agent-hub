@@ -20,13 +20,19 @@ const fallbackQuestion = exampleGroups[0].questions[0];
 
 type LlmStatus = {
   configured: boolean;
-  provider?: string;
-  model?: string;
-  missing?: string[];
+};
+
+type LlmHealthResult = {
+  configured: boolean;
+  healthy: boolean;
+  durationMs?: number;
+  statusCode?: number;
+  errorType?: string;
+  message?: string;
 };
 
 function responseModeLabel(mode: AgentApiResponse["api"]["responseMode"] | LlmMode) {
-  const labels: Record<string, string> = { mock: "Mock 模式", real: "Real API", real_repaired: "Real API · JSON 修复", real_text_fallback: "Real API · 文本兜底", fallback: "兜底模式" };
+  const labels: Record<string, string> = { mock: "Mock 模式", real: "Real API 成功", real_repaired: "Real API · JSON 修复", real_text_fallback: "Real API · 文本兜底", real_error_fallback: "Real API 失败，已使用兜底回答", fallback: "兜底模式" };
   return labels[mode] ?? mode;
 }
 function scenarioLabel(scenario?: string) {
@@ -81,7 +87,7 @@ export function AgentWorkspace() {
   const [result, setResult] = useState<AgentApiResponse | null>(null);
   const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
   const [llmStatusError, setLlmStatusError] = useState("");
-  const [healthResult, setHealthResult] = useState<unknown>(null);
+  const [healthResult, setHealthResult] = useState<LlmHealthResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [clientError, setClientError] = useState("");
@@ -109,16 +115,21 @@ export function AgentWorkspace() {
   const rerankEnabled = Boolean(retrievalMetadata?.rerankReason || retrievedChunks.some((item) => item.embeddingScore || item.scoreBreakdown?.embeddingScore));
   const embeddingScores = retrievedChunks.map((item) => item.embeddingScore ?? item.scoreBreakdown?.embeddingScore).filter((value): value is number => typeof value === "number");
   const maxEmbeddingScore = embeddingScores.length ? Math.max(...embeddingScores) : 0;
-  const usedFallback = result ? result.api.responseMode === "fallback" || result.api.responseMode === "real_text_fallback" || result.route.intent === "general_chat" : false;
+  const realErrorFallback = result?.api.responseMode === "real_error_fallback";
+  const usedFallback = result ? result.api.responseMode === "fallback" || result.api.responseMode === "real_text_fallback" || result.api.responseMode === "real_error_fallback" || result.route.intent === "general_chat" : false;
   const loadingMessage = mode === "real" ? "正在执行 Router / RAG / Tools / LLM" : "正在执行 Mock Agent Pipeline";
   const missingFields = result?.structuredOutput.missingFields ?? [];
   const needsClarification = Boolean(result?.structuredOutput.needsClarification);
   const realApiUnavailable = mode === "real" && llmStatus?.configured === false;
   const runButtonDisabled = isLoading || realApiUnavailable;
   const llmStatusText = llmStatus
-    ? llmStatus.configured
-      ? "Real API：已启用"
-      : "Real API：当前未启用"
+    ? !llmStatus.configured
+      ? "Real API：未配置"
+      : healthResult?.healthy
+        ? "Real API：连接正常"
+        : healthResult && healthResult.healthy === false
+          ? "Real API：连接失败"
+          : "Real API：已配置，待验证"
     : llmStatusError || "正在检查 Real API 状态...";
 
   useEffect(() => {
@@ -169,9 +180,9 @@ export function AgentWorkspace() {
     setClientError("");
     try {
       const response = await fetch("/api/llm/health", { method: "GET" });
-      setHealthResult((await response.json()) as unknown);
+      setHealthResult((await response.json()) as LlmHealthResult);
     } catch (error) {
-      setHealthResult({ ok: false, stage: "client_error", errorMessage: error instanceof Error ? error.message : "Unknown client error." });
+      setHealthResult({ configured: Boolean(llmStatus?.configured), healthy: false, errorType: "client_error", message: error instanceof Error ? error.message : "Unknown client error." });
     } finally {
       setIsCheckingHealth(false);
     }
@@ -191,7 +202,7 @@ export function AgentWorkspace() {
           <div className="grid max-w-sm grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1 text-sm">
             {(["mock", "real"] as LlmMode[]).map((item) => <button key={item} type="button" onClick={() => setMode(item)} className={modeButtonClass(mode === item)}><span className="block truncate">{item === "mock" ? "Mock 模式" : "Real API 模式"}</span></button>)}
           </div>
-          <div className={llmStatus?.configured ? "rounded-md bg-emerald-50 p-3 text-sm leading-6 text-emerald-800" : "rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800"}>
+          <div className={healthResult?.healthy ? "rounded-md bg-emerald-50 p-3 text-sm leading-6 text-emerald-800" : llmStatus?.configured ? "rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800" : "rounded-md bg-slate-50 p-3 text-sm leading-6 text-ink-700"}>
             <p className="mt-1 break-words">推荐使用 Mock 模式体验完整流程。该模式无需配置 API Key，可稳定展示 Agent Router、Hybrid RAG、Tool Calling、评测面板与 Trace 导出等核心能力。Real API 模式作为可选能力保留，用于在配置模型服务后验证真实大模型生成效果。</p>
             <p className="mt-1 break-words">{llmStatusText}</p>
             {realApiUnavailable ? <p className="mt-1 break-words">当前未启用 Real API，请使用 Mock 模式体验完整流程，或在部署环境配置模型服务后再切换。</p> : null}
@@ -211,6 +222,7 @@ export function AgentWorkspace() {
           <span className="shrink-0 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{responseModeLabel(result?.api.responseMode ?? mode)}</span>
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
+        {realErrorFallback ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm leading-6 text-rose-700">Real API 请求失败，当前展示的是系统兜底回答，不代表真实模型生成结果。{result?.api.httpStatus === 403 ? "403 通常表示 Key、模型权限、账户额度或模型名称配置存在问题。" : result?.api.llmError ? ` ${result.api.llmError}` : ""}</p> : null}
         {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}...</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
         {needsClarification ? <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-900"><p className="font-semibold">{"\u9700\u8981\u8865\u5145\u4fe1\u606f"}</p>{missingFields.length ? <p className="mt-1 break-words">{"还需要你补充："}{missingFields.map(fieldLabel).join("、")}</p> : null}{result?.structuredOutput.clarificationQuestion ? <p className="mt-2 break-words"><span className="font-semibold">{"下一步请补充："}</span>{result.structuredOutput.clarificationQuestion}</p> : null}{result?.structuredOutput.dataBoundaryNote ? <p className="mt-1 break-words text-amber-800"><span className="font-semibold">{"回答边界："}</span>{result.structuredOutput.dataBoundaryNote}</p> : null}</div> : null}
         {result?.structuredOutput.usedDemoData ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-sm leading-6 text-ink-700">{"\u5f53\u524d\u4f7f\u7528\u6f14\u793a\u6570\u636e\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba2\u5355\u3002"}</p> : null}
@@ -218,7 +230,7 @@ export function AgentWorkspace() {
         {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">业务场景 / 任务意图</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{scenarioLabel(result.route.scenario)} / {intentLabel(result.route.intent)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">置信度 / 风险等级</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {riskLabel(result.structuredOutput.riskLevel)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">兜底回答 / 来源引用</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0} 条</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">调用工具</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
       </section>
 
-      {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"\u77e5\u8bc6\u5e93\u4e0e RAG"}</h3><p className="mt-2 break-words text-sm text-ink-600">{"\u547d\u4e2d\u77e5\u8bc6\u5e93\u5305\uff1a"}{hitPacks.length ? hitPacks.map(packLabel).join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u547d\u4e2d\uff1a"}{defaultHitCount}{" \u7bc7 \u00b7 \u7528\u6237\u6587\u6863\u547d\u4e2d\uff1a"}{userHitCount}{" \u7bc7"}</p><p className="mt-2 break-words text-sm text-ink-600">{"Top \u6765\u6e90\u7c7b\u578b\uff1a"}{topSourceTypes.length ? topSourceTypes.join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u6700\u9ad8\u5206\uff1a"}{maxRagScore}{" \u00b7 \u5e73\u5747\u5206\uff1a"}{averageRagScore}</p><p className="mt-2 text-sm text-ink-600">{"\u68c0\u7d22\u6a21\u5f0f\uff1a"}{retrieverModeLabel(retrieverMode)}</p><p className="mt-2 text-sm text-ink-600">{"\u662f\u5426\u542f\u7528\u91cd\u6392\uff1a"}{yesNo(rerankEnabled)}</p><p className="mt-2 break-words text-sm text-ink-600">{"\u91cd\u6392\u539f\u56e0\uff1a"}{retrievalMetadata?.rerankReason ?? "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"Embedding \u5206\u6570\uff1a"}{maxEmbeddingScore ? Math.round(maxEmbeddingScore * 10) / 10 : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u68c0\u7d22\u7f6e\u4fe1\u5ea6\uff1a"}{retrievalConfidenceLabel(retrievalConfidence)}</p><p className="mt-2 break-words text-sm text-ink-600">{"\u67e5\u8be2\u6269\u5c55\u8bcd\uff1a"}{expandedTerms.length ? expandedTerms.join(" / ") : "\u65e0"}</p>{lowConfidenceRag ? <p className="mt-2 rounded-md bg-amber-50 p-2 text-sm text-amber-800">{"\u5f53\u524d\u77e5\u8bc6\u5e93\u76f8\u5173\u4f9d\u636e\u4e0d\u8db3\uff0c\u56de\u7b54\u5c06\u4ee5\u901a\u7528\u5efa\u8bae\u6216\u6f84\u6e05\u4e3a\u4e3b\u3002"}</p> : null}<p className="mt-2 break-words text-sm text-ink-500">{"\u8bc4\u5206\u539f\u56e0\uff1a"}{scoreReasons.length ? scoreReasons.join(" / ") : "\u6682\u65e0"}</p><p className="mt-2 text-sm text-ink-500">{"\u56de\u7b54\u8fb9\u754c\uff1a\u5f53\u524d\u4e3a mock/keyword RAG\uff0c\u65e0\u6765\u6e90\u65f6\u5e94\u8865\u5145\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u3002"}</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"Top \u6765\u6e90 / \u5de5\u5177"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words">{source.title}{" \u00b7 "}{sourceTypeLabel(source.sourceType)}{" \u00b7 \u5207\u7247 "}{source.chunkIndexes.join(", ")}</p>) : <p>{"\u6682\u65e0\u6765\u6e90"}</p>}{topTools.length ? topTools.map((tool) => <p key={tool.executedAt + tool.tool} className="break-words">{toolLabel(tool.tool)}: {tool.status}</p>) : <p>{"\u6682\u65e0\u5de5\u5177\u8c03\u7528"}</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"LLM \u72b6\u6001\u6458\u8981"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>{"\u8bf7\u6c42\u6a21\u5f0f\uff1a"}{result.api.requestedMode}</p><p>{"\u54cd\u5e94\u6a21\u5f0f\uff1a"}{responseModeLabel(result.api.responseMode)}</p><p>{"模型服务："}{result.api.responseMode === "mock" ? "Mock 模式" : result.api.responseMode === "fallback" ? "兜底模式" : "Real API"}</p><p>{"\u8017\u65f6\uff1a"}{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "\u65e0"}</p><p className="break-words">{"\u9519\u8bef\u7c7b\u578b\uff1a"}{result.api.errorType ?? "\u65e0"}</p></div></article></section> : null}
+      {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"\u77e5\u8bc6\u5e93\u4e0e RAG"}</h3><p className="mt-2 break-words text-sm text-ink-600">{"\u547d\u4e2d\u77e5\u8bc6\u5e93\u5305\uff1a"}{hitPacks.length ? hitPacks.map(packLabel).join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u547d\u4e2d\uff1a"}{defaultHitCount}{" \u7bc7 \u00b7 \u7528\u6237\u6587\u6863\u547d\u4e2d\uff1a"}{userHitCount}{" \u7bc7"}</p><p className="mt-2 break-words text-sm text-ink-600">{"Top \u6765\u6e90\u7c7b\u578b\uff1a"}{topSourceTypes.length ? topSourceTypes.join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u6700\u9ad8\u5206\uff1a"}{maxRagScore}{" \u00b7 \u5e73\u5747\u5206\uff1a"}{averageRagScore}</p><p className="mt-2 text-sm text-ink-600">{"\u68c0\u7d22\u6a21\u5f0f\uff1a"}{retrieverModeLabel(retrieverMode)}</p><p className="mt-2 text-sm text-ink-600">{"\u662f\u5426\u542f\u7528\u91cd\u6392\uff1a"}{yesNo(rerankEnabled)}</p><p className="mt-2 break-words text-sm text-ink-600">{"\u91cd\u6392\u539f\u56e0\uff1a"}{retrievalMetadata?.rerankReason ?? "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"Embedding \u5206\u6570\uff1a"}{maxEmbeddingScore ? Math.round(maxEmbeddingScore * 10) / 10 : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u68c0\u7d22\u7f6e\u4fe1\u5ea6\uff1a"}{retrievalConfidenceLabel(retrievalConfidence)}</p><p className="mt-2 break-words text-sm text-ink-600">{"\u67e5\u8be2\u6269\u5c55\u8bcd\uff1a"}{expandedTerms.length ? expandedTerms.join(" / ") : "\u65e0"}</p>{lowConfidenceRag ? <p className="mt-2 rounded-md bg-amber-50 p-2 text-sm text-amber-800">{"\u5f53\u524d\u77e5\u8bc6\u5e93\u76f8\u5173\u4f9d\u636e\u4e0d\u8db3\uff0c\u56de\u7b54\u5c06\u4ee5\u901a\u7528\u5efa\u8bae\u6216\u6f84\u6e05\u4e3a\u4e3b\u3002"}</p> : null}<p className="mt-2 break-words text-sm text-ink-500">{"\u8bc4\u5206\u539f\u56e0\uff1a"}{scoreReasons.length ? scoreReasons.join(" / ") : "\u6682\u65e0"}</p><p className="mt-2 text-sm text-ink-500">{"\u56de\u7b54\u8fb9\u754c\uff1a\u5f53\u524d\u4e3a mock/keyword RAG\uff0c\u65e0\u6765\u6e90\u65f6\u5e94\u8865\u5145\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u3002"}</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"Top \u6765\u6e90 / \u5de5\u5177"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words">{source.title}{" \u00b7 "}{sourceTypeLabel(source.sourceType)}{" \u00b7 \u5207\u7247 "}{source.chunkIndexes.join(", ")}</p>) : <p>{"\u6682\u65e0\u6765\u6e90"}</p>}{topTools.length ? topTools.map((tool) => <p key={tool.executedAt + tool.tool} className="break-words">{toolLabel(tool.tool)}: {tool.status}</p>) : <p>{"\u6682\u65e0\u5de5\u5177\u8c03\u7528"}</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"LLM \u72b6\u6001\u6458\u8981"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>{"\u8bf7\u6c42\u6a21\u5f0f\uff1a"}{result.api.requestedMode}</p><p>{"\u54cd\u5e94\u6a21\u5f0f\uff1a"}{responseModeLabel(result.api.responseMode)}</p><p>{"模型服务："}{result.api.responseMode === "mock" ? "Mock 模式" : result.api.responseMode === "real_error_fallback" ? "Real API 失败，已兜底" : result.api.responseMode === "fallback" ? "兜底模式" : "Real API"}</p><p>{"\u8017\u65f6\uff1a"}{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "\u65e0"}</p><p className="break-words">{"\u9519\u8bef\u7c7b\u578b\uff1a"}{result.api.errorType ?? "\u65e0"}</p></div></article></section> : null}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -114,6 +114,16 @@ AI_REQUEST_TIMEOUT_MS=20000
 - 不要把真实 API Key 写入代码、README 或 docs。
 - API Key 只在服务端读取，浏览器端不暴露完整 Key。
 - 部署到 Vercel 时，请在 Project Settings 的 Environment Variables 中配置 Key。
+Real API 线上不可用时，请检查：
+
+- Vercel 是否配置 `AI_API_KEY`。
+- `AI_BASE_URL` 是否正确。
+- `AI_MODEL` 是否为当前账号可用的模型。
+- `AI_PROVIDER` 是否匹配当前 OpenAI-compatible 服务。
+- 修改环境变量后是否已经重新部署。
+- 不要配置本地代理地址，例如 `127.0.0.1:7897`。
+
+如果上游返回 403，通常表示 Key、模型权限、账户额度或模型名称配置存在问题；此时 `/chat` 会明确显示 Real API 失败，并使用系统兜底回答，不会伪装成真实模型生成成功。
 
 ## 当前评测结果
 

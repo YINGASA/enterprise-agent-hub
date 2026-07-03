@@ -217,12 +217,12 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
       ...pipeline,
       api: buildApiMetadata({
         requestedMode,
-        responseMode: "fallback",
+        responseMode: "real_error_fallback",
         provider: config.provider,
         model: config.model,
         fallbackReason: firstMissing,
         errorType: firstMissing,
-        llmError: firstMissing,
+        llmError: "Real API 未配置，当前展示的是系统兜底回答。",
       }),
     };
   }
@@ -369,13 +369,17 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
     ],
     api: buildApiMetadata({
       requestedMode,
-      responseMode: "fallback",
+      responseMode: "real_error_fallback",
       provider: llmResult.provider,
       model: llmResult.model,
       fallbackReason,
       errorType: llmResult.errorType,
+      httpStatus: llmResult.httpStatus,
+      statusText: llmResult.statusText,
       llmDurationMs: llmResult.durationMs,
-      llmError: llmResult.errorMessage ?? llmResult.error ?? "LLM did not return parseable JSON.",
+      llmError: llmResult.httpStatus === 403
+        ? "Real API 请求失败：模型服务拒绝请求，请检查部署环境变量、模型名称、Key 权限或账户额度。"
+        : llmResult.errorMessage ?? llmResult.error ?? "Real API 请求失败，当前展示的是系统兜底回答。",
       parseError: llmResult.parseError,
       rawContentPreview: llmResult.rawContentPreview,
     }),
