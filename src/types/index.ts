@@ -410,7 +410,7 @@ export type LlmGenerateResult = {
   error?: string;
 };
 
-export type AgentResponseMode = "mock" | "real" | "real_repaired" | "real_text_fallback" | "fallback";
+export type AgentResponseMode = "mock" | "real" | "real_repaired" | "real_text_fallback" | "real_error_fallback" | "fallback";
 
 export type AgentApiMetadata = {
   requestedMode: LlmMode;
@@ -427,6 +427,8 @@ export type AgentApiMetadata = {
   maskedProxyUrl?: string;
   timeoutMs?: number;
   errorType?: LlmErrorType;
+  httpStatus?: number;
+  statusText?: string;
   llmDurationMs?: number;
   llmError?: string;
   parseError?: string;
@@ -576,5 +578,3 @@ export type TestCase = {
   result: "pass" | "review";
   latency: string;
 };
-
-

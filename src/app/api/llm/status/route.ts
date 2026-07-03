@@ -8,8 +8,5 @@ export async function GET() {
 
   return NextResponse.json({
     configured: config.isConfigured,
-    provider: config.provider,
-    model: config.model,
-    missing: config.missing,
   });
 }
