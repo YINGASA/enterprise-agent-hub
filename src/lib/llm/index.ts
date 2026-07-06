@@ -1,5 +1,3 @@
-import { ProxyAgent, fetch as undiciFetch } from "undici";
-import type { Dispatcher } from "undici";
 import type { LlmClientConfig, LlmErrorType, LlmGenerateOptions, LlmGenerateResult, LlmMessage, LlmProvider, LlmProxyType } from "@/types";
 
 type ChatCompletionResponse = {
@@ -19,7 +17,7 @@ type ErrorWithCause = Error & {
 };
 
 type FetchInitWithDispatcher = RequestInit & {
-  dispatcher?: Dispatcher;
+  dispatcher?: unknown;
 };
 
 const defaultBaseUrl = "https://api.deepseek.com";
@@ -94,8 +92,11 @@ function parseTimeoutMs(value: string | undefined) {
   return defaultTimeoutMs;
 }
 
-function createProxyAgent(proxyUrl: string | undefined) {
-  return proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
+async function createProxyAgent(proxyUrl: string | undefined) {
+  if (!proxyUrl) return undefined;
+
+  const { ProxyAgent } = await import("undici");
+  return new ProxyAgent(proxyUrl);
 }
 
 export function getLlmConfig(): LlmClientConfig {
@@ -267,7 +268,7 @@ export async function callOpenAICompatibleChat(
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
   async function send(includeResponseFormat: boolean) {
-    const proxyAgent = createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
+    const proxyAgent = await createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
     const body = buildRequestBody(messages, options, includeResponseFormat);
     const requestInit: FetchInitWithDispatcher = {
       method: "POST",
@@ -280,9 +281,12 @@ export async function callOpenAICompatibleChat(
       ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
     };
 
-    return proxyAgent
-      ? undiciFetch(config.requestUrl, requestInit as Parameters<typeof undiciFetch>[1])
-      : fetch(config.requestUrl, requestInit);
+    if (proxyAgent) {
+      const { fetch: undiciFetch } = await import("undici");
+      return undiciFetch(config.requestUrl, requestInit as Parameters<typeof undiciFetch>[1]);
+    }
+
+    return fetch(config.requestUrl, requestInit);
   }
 
   try {
