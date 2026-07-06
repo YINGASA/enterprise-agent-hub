@@ -28,6 +28,18 @@ const versions = [
   { version: "V1.6", title: "Chat \u8fd0\u884c\u5386\u53f2\u4e0e Trace \u5bfc\u51fa", body: "\u652f\u6301\u4fdd\u5b58 Chat \u8fd0\u884c\u5386\u53f2\uff0c\u590d\u76d8 Router / RAG / Tools / LLM / Retriever Trace\uff0c\u5e76\u5bfc\u51fa Markdown / JSON \u8fd0\u884c\u62a5\u544a\u3002" },
 ];
 
+
+const problemCards = [
+  { title: "知识分散", body: "企业制度、售后规则、JD 和工程规范常常分散在不同文档中，查找成本高。" },
+  { title: "回答缺少边界", body: "普通问答容易编造事实，系统通过来源引用、缺失参数澄清和 fallback 提醒降低误导。" },
+  { title: "Agent 不可观测", body: "将 Router、RAG、Tools、Retriever 和 LLM 结果串成 Trace，便于复盘和导出运行报告。" },
+  { title: "缺少质量验证", body: "内置 80 条多场景评测用例，持续检查场景识别、工具命中、RAG 引用和 fallback 边界。" },
+];
+
+const evaluationPath = ["/about 理解项目定位", "/chat 体验 Agent 问答与 Trace", "/knowledge 导入本地知识文档", "/evaluation 运行质量评测", "/tools 查看业务工具演示"];
+
+const roadmap = ["多轮对话重新设计", "用户反馈闭环", "真实 Embedding 与向量数据库", "团队权限与审计日志"];
+
 const engineeringHighlights = [
   "RAG：从 Knowledge Packs、用户导入文档、chunks、keywords、scoreBreakdown 到 sources，形成可解释检索链路。",
   "Agent：Router 判断业务场景和意图，统一编排 RAG、Tools、LLM 与 fallback。",
@@ -49,6 +61,14 @@ export default function AboutPage() {
         <p className="mt-3 text-sm leading-7 text-ink-600">平台围绕企业知识库问答、电商客服售后、招聘求职匹配和 AI 工程规范四类场景构建。当前默认知识库与业务数据仍为 mock 数据，用户导入文档保存在浏览器 localStorage；Hybrid RAG 使用关键词、标题、标签、分类、知识库包、来源和业务短语等信号进行本地加权评分，不是 Embedding 向量检索。</p>
       </section>
       <section>
+        <h2 className="mb-4 text-lg font-semibold text-ink-900">解决的问题</h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{problemCards.map((item) => <article key={item.title} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{item.title}</h3><p className="mt-2 text-sm leading-6 text-ink-600">{item.body}</p></article>)}</div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-ink-900">推荐评估路径</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-5">{evaluationPath.map((item, index) => <div key={item} className="rounded-md border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-semibold text-brand-600">Step {index + 1}</p><p className="mt-1 text-sm leading-6 text-ink-700">{item}</p></div>)}</div>
+      </section>
+      <section>
         <h2 className="mb-4 text-lg font-semibold text-ink-900">核心能力</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{capabilities.map((item) => <article key={item} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-sm font-semibold leading-6 text-ink-900">{item}</p></article>)}</div>
       </section>
@@ -65,6 +85,10 @@ export default function AboutPage() {
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">Mock 文档</p><p className="mt-2 text-2xl font-semibold text-ink-900">42</p></article>
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">完整评测</p><p className="mt-2 text-2xl font-semibold text-ink-900">80/80</p></article>
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">passRate</p><p className="mt-2 text-2xl font-semibold text-ink-900">100%</p></article>
+      </section>
+      <section className="grid gap-4 md:grid-cols-2">
+        <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-semibold text-ink-900">当前边界</h2><p className="mt-3 text-sm leading-7 text-ink-600">默认业务数据为 mock 数据，用户导入文档保存在浏览器 localStorage，当前不是生产级权限系统，Mock Embedding 不等于真实向量库。</p></article>
+        <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-semibold text-ink-900">后续规划</h2><div className="mt-3 flex flex-wrap gap-2">{roadmap.map((item) => <span key={item} className="rounded-md bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">{item}</span>)}</div></article>
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-ink-900">工程实现亮点</h2>

@@ -74,7 +74,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
       }
 
       onAdd(result.document);
-      setSuccess(`已成功导入：${result.document.title}`);
+      setSuccess(`\u5df2\u6210\u529f\u5bfc\u5165\uff1a${result.document.title}\u3002\u5df2\u4fdd\u5b58\u5230\u5f53\u524d\u6d4f\u89c8\u5668\u672c\u5730\uff0c\u5237\u65b0\u540e\u4ecd\u4f1a\u4fdd\u7559\uff0c\u5e76\u53ef\u53c2\u4e0e\u804a\u5929\u5de5\u4f5c\u53f0\u68c0\u7d22\u3002`);
       setTitle("");
       setPackId(knowledgePacks[0]?.id ?? "enterprise-policy");
       setCategory(categories[0]);
@@ -134,7 +134,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         </label>
         {error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p> : null}
         {success ? <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</p> : null}
-        <button type="submit" disabled={isImporting} className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400">
+        <button type="submit" disabled={isImporting} className="w-full cursor-pointer rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400">
           {isImporting ? "导入中..." : "导入到知识库"}
         </button>
       </div>

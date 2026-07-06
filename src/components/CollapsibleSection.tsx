@@ -17,7 +17,7 @@ export function CollapsibleSection({ title, description, defaultOpen = false, ch
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-start justify-between gap-4 px-5 py-4 text-left"
+        className="flex w-full cursor-pointer items-start justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50"
       >
         <span className="min-w-0">
           <span className="block font-semibold text-ink-900">{title}</span>
