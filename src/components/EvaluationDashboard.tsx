@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { EvaluationReportPreview } from "@/components/EvaluationReportPreview";
 import { EvaluationTrendChart } from "@/components/EvaluationTrendChart";
+import { ChatFeedbackStatsPanel } from "@/components/ChatFeedbackStatsPanel";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import {
   clearEvaluationHistory,
@@ -235,6 +236,8 @@ export function EvaluationDashboard() {
     </section>
 
     <EvaluationTrendChart history={history} />
+
+    <ChatFeedbackStatsPanel />
 
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="font-semibold text-ink-900">评测历史记录</h2>

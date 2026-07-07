@@ -195,7 +195,7 @@ function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey
 }
 
 export async function runAgentApiPipeline(question: string, requestedMode: LlmMode, userDocuments: ImportedKnowledgeDocument[] = []): Promise<AgentApiResponse> {
-  const pipelineDocuments = [...documents, ...userDocuments];
+  const pipelineDocuments = [...documents, ...userDocuments.filter((document) => document.enabled !== false)];
   const pipeline = runAgentPipeline(question, pipelineDocuments);
   const config = getLlmConfig();
 

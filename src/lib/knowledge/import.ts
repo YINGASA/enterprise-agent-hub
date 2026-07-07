@@ -147,6 +147,7 @@ export function createImportedKnowledgeDocument(input: ImportInput): KnowledgeIm
     sourceType: input.sourceType,
     originalFileName: input.originalFileName,
     importedAt: now,
+    enabled: true,
   };
   return { ok: true, document };
 }
