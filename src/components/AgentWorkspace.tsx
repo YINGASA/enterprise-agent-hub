@@ -53,7 +53,7 @@ function toolLabel(tool: ToolName) {
   return labels[tool] ?? tool;
 }
 function fieldLabel(field: string) {
-  const labels: Record<string, string> = { orderId: "订单号", productId: "商品编号", productName: "商品名称", signedAt: "签收时间", isOpened: "是否拆封", returnReason: "退货原因", priority: "优先级" };
+  const labels: Record<string, string> = { orderId: "订单号", productId: "商品编号", productName: "商品名称", signedAt: "签收时间", isOpened: "是否拆封", returnReason: "退货原因", priority: "优先级", expenseType: "报销类型", leaveType: "假期类型", dateRange: "请假日期", applicationType: "申请事项" };
   return labels[field] ?? field;
 }
 function unique(values: string[]) { return Array.from(new Set(values.filter(Boolean))); }
@@ -101,22 +101,27 @@ export function AgentWorkspace() {
   const [feedbackMessage, setFeedbackMessage] = useState("");
 
   const selectedExample = useMemo(() => exampleGroups.flatMap((group) => group.questions).find((item) => item === question), [question]);
-  const hitPacks = useMemo(() => unique(result?.ragAnswer?.retrievedChunks.map((item) => item.chunk.packId ?? "") ?? []), [result]);
-  const topSources = result?.ragAnswer?.sources.slice(0, 3) ?? [];
   const topTools = result?.toolResults.slice(0, 3) ?? [];
   const retrievedChunks = result?.ragAnswer?.retrievedChunks ?? [];
   const ragScores = retrievedChunks.map((item) => item.score);
-  const defaultHitCount = unique(retrievedChunks.filter((item) => (item.chunk.sourceType ?? "default") === "default").map((item) => item.chunk.documentId)).length;
-  const userHitCount = unique(retrievedChunks.filter((item) => item.chunk.sourceType === "user_upload" || item.chunk.sourceType === "user_paste").map((item) => item.chunk.documentId)).length;
-  const topSourceTypes = unique(retrievedChunks.slice(0, 5).map((item) => sourceTypeLabel(item.chunk.sourceType)));
-  const scoreReasons = unique(retrievedChunks.flatMap((item) => item.scoreReason ?? []).slice(0, 6));
   const maxRagScore = ragScores.length ? Math.max(...ragScores) : 0;
   const averageRagScore = ragScores.length ? Math.round(ragScores.reduce((sum, score) => sum + score, 0) / ragScores.length) : 0;
   const retrievalMetadata = result?.ragAnswer?.retrievalMetadata;
   const retrievalConfidence = result?.ragAnswer?.retrievalConfidence ?? retrievalMetadata?.retrievalConfidence;
   const expandedTerms = retrievalMetadata?.query.expandedKeywords.slice(0, 8) ?? [];
   const lowConfidenceRag = Boolean(result?.ragAnswer?.lowConfidenceRetrieval);
-  const noReliableRag = Boolean(result && (!result.ragAnswer || result.ragAnswer.sources.length === 0 || lowConfidenceRag));
+  const allSources = result?.ragAnswer?.sources ?? [];
+  const sourceThreshold = maxRagScore >= 10 ? Math.max(8, Math.round(maxRagScore * 0.6)) : Number.POSITIVE_INFINITY;
+  const reliableSources = lowConfidenceRag ? [] : allSources.filter((source) => (source.score ?? 0) >= sourceThreshold).slice(0, 4);
+  const reliableDocumentIds = new Set(reliableSources.map((source) => source.documentId));
+  const reliableChunks = retrievedChunks.filter((item) => reliableDocumentIds.has(item.chunk.documentId));
+  const hitPacks = useMemo(() => unique(reliableChunks.map((item) => item.chunk.packId ?? "")), [reliableChunks]);
+  const topSources = reliableSources.slice(0, 3);
+  const defaultHitCount = unique(reliableChunks.filter((item) => (item.chunk.sourceType ?? "default") === "default").map((item) => item.chunk.documentId)).length;
+  const userHitCount = unique(reliableChunks.filter((item) => item.chunk.sourceType === "user_upload" || item.chunk.sourceType === "user_paste").map((item) => item.chunk.documentId)).length;
+  const topSourceTypes = unique(reliableChunks.slice(0, 5).map((item) => sourceTypeLabel(item.chunk.sourceType)));
+  const scoreReasons = unique(reliableChunks.flatMap((item) => item.scoreReason ?? []).slice(0, 6));
+  const noReliableRag = Boolean(result && (!result.ragAnswer || reliableSources.length === 0 || lowConfidenceRag));
   const retrieverMode = retrievalMetadata?.retrieverMode;
   const rerankEnabled = Boolean(retrievalMetadata?.rerankReason || retrievedChunks.some((item) => item.embeddingScore || item.scoreBreakdown?.embeddingScore));
   const embeddingScores = retrievedChunks.map((item) => item.embeddingScore ?? item.scoreBreakdown?.embeddingScore).filter((value): value is number => typeof value === "number");
@@ -250,14 +255,14 @@ export function AgentWorkspace() {
         {result?.structuredOutput.usedDemoData ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-sm leading-6 text-ink-700">{"\u5f53\u524d\u4f7f\u7528\u6f14\u793a\u6570\u636e\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba2\u5355\u3002"}</p> : null}
         {result && usedFallback && !needsClarification ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">{"\u5f53\u524d\u56de\u7b54\u4e3a\u8fb9\u754c\u515c\u5e95\uff1a\u7cfb\u7edf\u4f1a\u8bf4\u660e\u4e0d\u786e\u5b9a\u6027\uff0c\u4e0d\u4f1a\u7f16\u9020\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u4e4b\u5916\u7684\u4fe1\u606f\u3002"}</p> : null}
         {noReliableRag ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">当前知识库中没有找到足够可靠的依据。建议上传相关制度、SOP 或 FAQ 文档后再提问；系统会避免把低相关片段包装成确定结论。</p> : null}
-        {result?.ragAnswer?.sources.length ? (
+        {reliableSources.length ? (
           <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-ink-900">本次回答依据</h3>
-              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-ink-600">{result.ragAnswer.sources.length} 条来源</span>
+              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-ink-600">{reliableSources.length} 条高相关来源</span>
             </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-3">
-              {result.ragAnswer.sources.slice(0, 3).map((source) => (
+              {topSources.map((source) => (
                 <article key={source.documentId} className="rounded-md bg-slate-50 p-3 text-sm leading-6">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="break-words font-semibold text-ink-900">{source.title}</p>
@@ -271,7 +276,7 @@ export function AgentWorkspace() {
             </div>
           </div>
         ) : null}
-        {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">业务场景 / 任务意图</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{scenarioLabel(result.route.scenario)} / {intentLabel(result.route.intent)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">置信度 / 风险等级</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {riskLabel(result.structuredOutput.riskLevel)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">兜底回答 / 来源引用</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {result.ragAnswer?.sources.length ?? 0} 条</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">调用工具</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
+        {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">业务场景 / 任务意图</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{scenarioLabel(result.route.scenario)} / {intentLabel(result.route.intent)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">置信度 / 风险等级</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {riskLabel(result.structuredOutput.riskLevel)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">兜底回答 / 来源引用</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {reliableSources.length} 条</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">调用工具</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
         {result ? (
           <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-ink-900">回答反馈</h3>
@@ -323,7 +328,7 @@ export function AgentWorkspace() {
       <section className="space-y-4">
         <CollapsibleSection title="详细调试信息" description="默认折叠，面试讲解时可展开查看完整 Agent Trace。" defaultOpen={false}><AgentTracePanel result={result} /></CollapsibleSection>
         {healthResult ? <CollapsibleSection title="LLM Health Diagnostic JSON" description="连接诊断 JSON 默认折叠，不挤占回答区域。" defaultOpen={false}><pre className="max-h-[420px] max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-100">{JSON.stringify(healthResult, null, 2)}</pre></CollapsibleSection> : null}
-        <CollapsibleSection title="来源引用完整列表" description="查看全部 sources。" defaultOpen={false}><SourceList sources={result?.ragAnswer?.sources ?? []} /></CollapsibleSection>
+        <CollapsibleSection title="来源引用完整列表" description="仅展示达到相关性阈值的 sources；原始召回可在 Trace 中查看。" defaultOpen={false}><SourceList sources={reliableSources} /></CollapsibleSection>
       </section>
 
       <ChatRunHistoryPanel currentResult={result} />

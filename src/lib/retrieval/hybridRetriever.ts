@@ -48,7 +48,6 @@ const STOP_WORDS = new Set(["\u4ec0\u4e48", "\u600e\u4e48", "\u9700\u8981", "\u5
 
 const LOW_CONFIDENCE_ANSWER = "\u6839\u636e\u5f53\u524d\u77e5\u8bc6\u5e93\u8d44\u6599\uff0c\u6211\u6ca1\u6709\u627e\u5230\u8db3\u591f\u76f8\u5173\u7684\u53ef\u9760\u4f9d\u636e\u3002\u5efa\u8bae\u8865\u5145\u66f4\u660e\u786e\u7684\u6587\u6863\u3001\u6362\u4e00\u79cd\u95ee\u6cd5\uff0c\u6216\u63d0\u4f9b\u4e1a\u52a1\u4e0a\u4e0b\u6587\u540e\u518d\u7ee7\u7eed\u5224\u65ad\u3002";
 const RAG_ANSWER_PREFIX = "\u6839\u636e\u77e5\u8bc6\u5e93\u6765\u6e90\uff0c";
-const RAG_ANSWER_SUFFIX = " \u4ee5\u4e0a\u4e3a mock RAG \u57fa\u4e8e\u6df7\u5408\u68c0\u7d22\u53ec\u56de\u7684\u56de\u7b54\uff0c\u540e\u7eed\u53ef\u66ff\u6362\u4e3a Embedding\u3001\u5411\u91cf\u6570\u636e\u5e93\u4e0e\u771f\u5b9e LLM \u751f\u6210\u3002";
 
 const scenarioPackMap: Partial<Record<AgentScenario | "ai-engineering", KnowledgePackId>> = {
   enterprise: "enterprise-policy",
@@ -213,6 +212,13 @@ function buildSources(retrievedChunks: RetrievedChunk[]): RagAnswer["sources"] {
   return Array.from(sourceMap.values());
 }
 
+function filterReliableRetrievedChunks(retrievedChunks: RetrievedChunk[], metadata?: RagRetrievalMetadata) {
+  const maxScore = metadata?.maxScore ?? (retrievedChunks.length ? Math.max(...retrievedChunks.map((item) => item.score)) : 0);
+  if (maxScore < 10) return [];
+  const threshold = Math.max(8, Math.round(maxScore * 0.6));
+  return retrievedChunks.filter((item) => item.score >= threshold).slice(0, 4);
+}
+
 export function buildMetadata(query: string, selected: RetrievedChunk[], chunks: KnowledgeChunk[], options: RetrievalOptions): RagRetrievalMetadata {
   const queryExpansion = expandQuery(query, options);
   const confidence = getConfidence(selected, selected.length);
@@ -239,10 +245,11 @@ export function retrieveHybrid(input: RetrieverInput): RetrieverResult {
 }
 export function generateMockRagAnswer(question: string, retrievedChunks: RetrievedChunk[], metadata?: RagRetrievalMetadata): RagAnswer {
   const createdAt = new Date().toISOString();
-  const lowConfidence = metadata?.lowConfidenceRetrieval || retrievedChunks.length === 0;
-  if (lowConfidence) return { question, answer: LOW_CONFIDENCE_ANSWER, retrievedChunks, sources: buildSources(retrievedChunks), mode: "mock-rag", createdAt, retrievalMetadata: metadata, retrievalConfidence: metadata?.retrievalConfidence ?? "low", lowConfidenceRetrieval: true, lowConfidenceReason: metadata?.lowConfidenceReason ?? "No sufficiently relevant chunks were found." };
-  const evidence = retrievedChunks.slice(0, 2).map((item) => item.chunk.content).join(" ");
-  return { question, answer: RAG_ANSWER_PREFIX + evidence + RAG_ANSWER_SUFFIX, retrievedChunks, sources: buildSources(retrievedChunks), mode: "mock-rag", createdAt, retrievalMetadata: metadata, retrievalConfidence: metadata?.retrievalConfidence ?? "medium", lowConfidenceRetrieval: metadata?.lowConfidenceRetrieval ?? false, lowConfidenceReason: metadata?.lowConfidenceReason };
+  const reliableChunks = filterReliableRetrievedChunks(retrievedChunks, metadata);
+  const lowConfidence = metadata?.lowConfidenceRetrieval || reliableChunks.length === 0;
+  if (lowConfidence) return { question, answer: LOW_CONFIDENCE_ANSWER, retrievedChunks, sources: buildSources(reliableChunks), mode: "mock-rag", createdAt, retrievalMetadata: metadata, retrievalConfidence: metadata?.retrievalConfidence ?? "low", lowConfidenceRetrieval: true, lowConfidenceReason: metadata?.lowConfidenceReason ?? "No sufficiently relevant chunks were found." };
+  const evidence = reliableChunks.slice(0, 2).map((item) => item.chunk.content).join(" ");
+  return { question, answer: RAG_ANSWER_PREFIX + evidence, retrievedChunks, sources: buildSources(reliableChunks), mode: "mock-rag", createdAt, retrievalMetadata: metadata, retrievalConfidence: metadata?.retrievalConfidence ?? "medium", lowConfidenceRetrieval: metadata?.lowConfidenceRetrieval ?? false, lowConfidenceReason: metadata?.lowConfidenceReason };
 }
 
 export function runMockRagPipeline(question: string, documents: KnowledgeDocument[], topKOrOptions: number | RagPipelineOptions = 3): RagAnswer {
