@@ -53,7 +53,55 @@ function hasRefundIntent(question: string) {
   return hasAny(question, ["\u9000\u8d27", "\u9000\u6b3e", "\u552e\u540e", "\u600e\u4e48\u9000", "\u60f3\u9000", "\u4e0d\u559c\u6b22", "7\u5929\u65e0\u7406\u7531", "\u4e03\u5929\u65e0\u7406\u7531"]);
 }
 
+function normalizedQuestionLength(question: string) {
+  return question.replace(/[\s，。！？、,.!?]/g, "").length;
+}
+
+function isShortAmbiguousExpenseQuestion(question: string) {
+  return hasAny(question, ["报销"]) && normalizedQuestionLength(question) <= 6 && !hasAny(question, ["差旅", "交通", "餐饮", "客户拜访", "项目", "发票", "票据", "付款凭证", "材料", "出差", "住宿", "机票", "打车"]);
+}
+
+function isShortAmbiguousLeaveQuestion(question: string) {
+  return hasAny(question, ["请假", "休假"]) && normalizedQuestionLength(question) <= 6 && !hasAny(question, ["年假", "病假", "事假", "调休", "婚假", "产假", "几天", "日期", "提前"]);
+}
+
+function isShortAmbiguousApplicationQuestion(question: string) {
+  return hasAny(question, ["怎么申请", "我要申请", "想申请"]) && normalizedQuestionLength(question) <= 8 && !hasAny(question, ["电脑", "VPN", "权限", "账号", "软件", "采购", "合同", "项目"]);
+}
+
 function buildClarificationState(route: AgentRoute, question: string): ClarificationState {
+  if (route.scenario === "enterprise" && route.intent === "knowledge_qa") {
+    if (isShortAmbiguousExpenseQuestion(question)) {
+      return {
+        needsClarification: true,
+        missingFields: ["expenseType"],
+        clarificationQuestion: "你想报销哪类费用？例如差旅、交通、餐饮、客户拜访或项目费用。",
+        usedDemoData: false,
+        dataBoundaryNote: "当前问题只说明了报销意图，还不能判断适用的材料清单和审批流程。",
+      };
+    }
+
+    if (isShortAmbiguousLeaveQuestion(question)) {
+      return {
+        needsClarification: true,
+        missingFields: ["leaveType", "dateRange"],
+        clarificationQuestion: "你想申请哪类假期？请补充假期类型、预计日期和天数。",
+        usedDemoData: false,
+        dataBoundaryNote: "当前问题只说明了请假意图，还不能判断提前申请时间、审批人和材料要求。",
+      };
+    }
+
+    if (isShortAmbiguousApplicationQuestion(question)) {
+      return {
+        needsClarification: true,
+        missingFields: ["applicationType"],
+        clarificationQuestion: "你想申请什么事项？例如电脑、VPN、账号权限、软件授权或采购。",
+        usedDemoData: false,
+        dataBoundaryNote: "当前问题缺少申请事项，无法直接匹配具体流程。",
+      };
+    }
+  }
+
   if ((route.intent === "policy_check" || route.intent === "order_query") && hasRefundIntent(question) && !getExplicitOrderId(question)) {
     return {
       needsClarification: true,
@@ -281,7 +329,13 @@ export function generateMockAgentFinalAnswer(
   let finalAnswer = "当前问题没有命中明确业务流程。根据现有 mock-agent 规则，我还不能确定答案，需要补充资料或改写问题。";
 
   if (clarification.needsClarification) {
-    if (route.intent === "product_query") {
+    if (clarification.missingFields?.includes("expenseType")) {
+      finalAnswer = "可以，我先确认一下报销类型。你想报销哪类费用？例如差旅、交通、餐饮、客户拜访或项目费用。不同费用对应的材料和审批链路会不一样，补充类型后我可以按对应制度帮你列出材料清单和注意事项。";
+    } else if (clarification.missingFields?.includes("leaveType")) {
+      finalAnswer = "可以，我需要先确认请假类型。请补充你要申请的是年假、病假、事假还是调休，以及预计日期和天数。确认后我可以帮你判断需要提前多久申请、是否需要证明材料，以及应走哪条审批流程。";
+    } else if (clarification.missingFields?.includes("applicationType")) {
+      finalAnswer = "可以，我需要先确认你要申请的事项。请说明是电脑、VPN、账号权限、软件授权、采购还是其他流程；确认后我可以按对应制度给出申请路径、审批人和材料要求。";
+    } else if (route.intent === "product_query") {
       finalAnswer = "\u6211\u73b0\u5728\u8fd8\u4e0d\u80fd\u67e5\u8be2\u5177\u4f53\u5546\u54c1\u5e93\u5b58\u6216\u5c3a\u7801\u5efa\u8bae\uff0c\u56e0\u4e3a\u95ee\u9898\u91cc\u6ca1\u6709\u5546\u54c1\u7f16\u53f7\u6216\u5546\u54c1\u540d\u79f0\u3002\u8bf7\u8865\u5145\u5546\u54c1\u7f16\u53f7\u6216\u540d\u79f0\u540e\uff0c\u6211\u53ef\u4ee5\u7ee7\u7eed\u67e5\u8be2\u3002\u5f53\u524d\u53ea\u80fd\u7ed9\u51fa\u901a\u7528\u5efa\u8bae\uff1a\u5148\u786e\u8ba4\u5546\u54c1\u6b3e\u5f0f\u3001\u89c4\u683c\u3001\u989c\u8272\u548c\u5c3a\u7801\uff0c\u518d\u6838\u5bf9\u5e93\u5b58\u72b6\u6001\u3002";
     } else if (route.intent === "after_sale_reply") {
       finalAnswer = "\u53ef\u4ee5\u5148\u7ed9\u5ba2\u6237\u4e00\u6bb5\u901a\u7528\u56de\u590d\uff0c\u4f46\u73b0\u5728\u7f3a\u5c11\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u548c\u5546\u54c1\u662f\u5426\u62c6\u5c01\uff0c\u4e0d\u80fd\u627f\u8bfa\u4e00\u5b9a\u53ef\u9000\u3002\u5efa\u8bae\u56de\u590d\uff1a\u6211\u4eec\u53ef\u4ee5\u5148\u5e2e\u60a8\u6838\u5bf9\u552e\u540e\u89c4\u5219\uff0c\u8bf7\u63d0\u4f9b\u8ba2\u5355\u53f7\u3001\u7b7e\u6536\u65f6\u95f4\u4ee5\u53ca\u5546\u54c1\u662f\u5426\u5df2\u62c6\u5c01\uff1b\u5982\u679c\u7b26\u5408 7 \u5929\u65e0\u7406\u7531\u6216\u8d28\u91cf\u95ee\u9898\u89c4\u5219\uff0c\u53ef\u5728\u8ba2\u5355\u8be6\u60c5\u4e2d\u7533\u8bf7\u552e\u540e/\u9000\u6b3e\u3002";
@@ -338,6 +392,8 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
     ...initialRoute,
     toolsNeeded: uniqueTools(selectTools(initialRoute, question)),
   };
+  const retrievalClarification = buildClarificationState(route, question);
+  const shouldSkipRagForClarification = route.scenario === "enterprise" && route.intent === "knowledge_qa" && Boolean(retrievalClarification.needsClarification);
   steps.push(
     makeStep({
       id: "step-router",
@@ -352,7 +408,7 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
 
   let ragAnswer: RagAnswer | null = null;
   const ragStart = Date.now();
-  if (route.needRag) {
+  if (route.needRag && !shouldSkipRagForClarification) {
     const ragQuestion = route.intent === "policy_check" ? `${question} 退货 售后 签收 拆封 7天无理由 质量问题` : question;
     ragAnswer = runMockRagPipeline(ragQuestion, documents, { topK: 4, packId: inferRagPackId(question, route), scenario: route.scenario });
     steps.push(
@@ -374,7 +430,7 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
         type: "rag",
         status: "skipped",
         input: { question },
-        output: { reason: "当前 route 不需要 RAG。" },
+        output: { reason: shouldSkipRagForClarification ? "当前问题信息不足，先澄清报销、请假或申请类型，避免强行召回低相关来源。" : "当前 route 不需要 RAG。" },
         startedAt: ragStart,
       }),
     );

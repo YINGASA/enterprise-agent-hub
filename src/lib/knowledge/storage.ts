@@ -42,6 +42,7 @@ export function sanitizeImportedKnowledgeDocument(value: unknown): ImportedKnowl
     sourceType,
     originalFileName,
     importedAt,
+    enabled: item.enabled !== false,
   };
 }
 

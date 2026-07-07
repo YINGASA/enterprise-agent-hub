@@ -7,6 +7,7 @@ const capabilities = [
   "Agent Router 识别业务场景与任务意图，统一编排 RAG、Tools、LLM 与 fallback",
   "OpenAI-compatible / DeepSeek Real API 接入，服务端管理 Key，前端不暴露密钥",
   "80 条多场景 Agent Evaluation Suite，支持历史记录、趋势摘要和 Markdown / JSON 报告导出",
+  "Knowledge RAG 应用化能力：用户文档启用/禁用、引用透明化、回答反馈和知识库质量诊断",
 ];
 
 const versions = [
@@ -26,6 +27,7 @@ const versions = [
   { version: "V1.3", title: "评测历史与报告导出", body: "支持保存评测历史、趋势摘要，并导出 Markdown / JSON 报告，用于持续复盘 Agent 质量。" },
   { version: "V1.3.1", title: "评测面板中文化", body: "统一中文化评测页面文案，修正版本说明，提升面试展示和产品体验。" },
   { version: "V1.6", title: "Chat \u8fd0\u884c\u5386\u53f2\u4e0e Trace \u5bfc\u51fa", body: "\u652f\u6301\u4fdd\u5b58 Chat \u8fd0\u884c\u5386\u53f2\uff0c\u590d\u76d8 Router / RAG / Tools / LLM / Retriever Trace\uff0c\u5e76\u5bfc\u51fa Markdown / JSON \u8fd0\u884c\u62a5\u544a\u3002" },
+  { version: "V1.8", title: "Knowledge RAG 应用化升级", body: "增强知识库启用/禁用、RAG 引用片段展示、低置信边界提示、回答反馈闭环和知识库质量诊断。" },
 ];
 
 const engineeringHighlights = [
@@ -69,6 +71,17 @@ export default function AboutPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-ink-900">工程实现亮点</h2>
         <div className="mt-4 space-y-3">{engineeringHighlights.map((item) => <p key={item} className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-ink-600">{item}</p>)}</div>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-ink-900">当前应用边界</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {[
+            "用户导入文档、Chat 反馈和运行历史保存在当前浏览器 localStorage，不是服务端知识库或审计日志。",
+            "当前 Hybrid RAG 与 Mock Embedding 是本地可解释检索实现，不等同于生产级 Embedding + Vector DB。",
+            "默认业务数据仍为 mock 数据，适合验证产品链路和工程结构，不代表真实企业系统。",
+            "后续可替换为真实 Embedding 模型、向量数据库、数据库持久化、权限体系和团队审计后台。",
+          ].map((item) => <p key={item} className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-ink-600">{item}</p>)}
+        </div>
       </section>
     </div>
   );

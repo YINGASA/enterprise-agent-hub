@@ -17,6 +17,24 @@ function truncate(value: string, maxLength: number) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
+function sanitizeBusinessAnswer(value: string) {
+  return value
+    .replace(/以上为\s*mock\s*RAG[\s\S]*?(?:生成|升级路径)。?/gi, "")
+    .replace(/后续可替换为\s*Embedding[\s\S]*?(?:生成|向量数据库)。?/gi, "")
+    .replace(/当前为\s*mock\/keyword\s*RAG[\s\S]*?。?/gi, "")
+    .trim();
+}
+
+function extractAnswerFromJsonLikeText(value: string) {
+  const match = value.match(/"answer"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (!match?.[1]) return null;
+  try {
+    return JSON.parse(`"${match[1]}"`) as string;
+  } catch {
+    return match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+  }
+}
+
 function stringArray(value: unknown, maxItems = 20): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, maxItems) : [];
 }
@@ -47,7 +65,7 @@ function normalizeStructuredOutput(value: Record<string, unknown>, fallback: Age
       value.intent === "general_chat"
         ? value.intent
         : fallback.intent,
-    answer: truncate(typeof value.answer === "string" ? value.answer : fallback.answer, 200),
+    answer: truncate(sanitizeBusinessAnswer(typeof value.answer === "string" ? value.answer : fallback.answer), 300),
     evidence: stringArray(value.evidence, 5).map((item) => truncate(item, 120)),
     toolsUsed: toolArray(value.toolsUsed),
     sources: stringArray(value.sources, 5).map((item) => truncate(item, 80)),
@@ -63,9 +81,11 @@ function normalizeStructuredOutput(value: Record<string, unknown>, fallback: Age
 }
 
 function buildTextFallbackStructuredOutput(text: string, fallback: AgentStructuredOutput): AgentStructuredOutput {
+  const extractedAnswer = extractAnswerFromJsonLikeText(text);
+  const answer = extractedAnswer ?? (text.trim() || fallback.answer);
   return {
     ...fallback,
-    answer: truncate(text.trim() || fallback.answer, 200),
+    answer: truncate(sanitizeBusinessAnswer(answer), 300),
     evidence: fallback.evidence.slice(0, 5),
     sources: fallback.sources.slice(0, 5),
     nextAction: "真实模型已返回文本，但结构化 JSON 解析失败，当前使用文本兜底。",
@@ -93,12 +113,7 @@ function makeStep(params: {
 
 function llmStepInput(result: LlmGenerateResult) {
   return {
-    provider: result.provider,
-    model: result.model,
-    requestUrl: result.requestUrl,
-    hasProxy: result.hasProxy,
-    proxyType: result.proxyType,
-    maskedProxyUrl: result.maskedProxyUrl,
+    modelService: "configured",
     timeoutMs: result.timeoutMs,
   };
 }
@@ -110,13 +125,17 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
       content: [
         "你是 Enterprise Agent Hub 的企业 Agent。",
         "必须严格基于 Router、RAG、工具调用结果回答。",
+        "最终 answer 面向业务用户，只保留业务结论、操作步骤和必要边界，不要解释 mock RAG、Embedding、向量数据库或真实 LLM 等技术实现。",
+        "优先使用 rag.sources 与 retrievedChunks 中的高相关知识库依据；如果 sources 为空或相关性不足，必须说明依据不足并建议补充文档。",
+        "回答尽量分点，避免长段堆叠；不要编造未提供的制度、订单、商品或工具结果。",
         "只返回一个合法 JSON 对象，不要返回 Markdown，不要返回解释文字，不要使用 ```json 代码块。",
         "字段必须完整：scenario, intent, answer, evidence, toolsUsed, sources, confidence, riskLevel, nextAction。",
         "evidence、toolsUsed、sources 必须是字符串数组；confidence 必须是 0 到 1 的数字；riskLevel 只能是 low、medium 或 high。",
-        "answer 控制在 200 字以内；evidence 最多 5 条；sources 最多 5 条；nextAction 控制在 80 字以内。",
+        "answer 控制在 300 字以内；evidence 最多 5 条；sources 最多 5 条；nextAction 控制在 80 字以内。",
         "If fallbackStructuredOutput.needsClarification is true, ask for missing information and never invent order/product facts.",
         "For clarification cases, preserve needsClarification, missingFields, clarificationQuestion, usedDemoData, and dataBoundaryNote in JSON.",
         "Do not say a specific order is refundable unless queryOrder returned an order from an explicit user-provided order id.",
+        "If toolResults contains a successful queryOrder result with order data, treat it as the current workspace order record and do not claim the order was not found, even if the internal mock order id differs from the user's short order number.",
         "If rag.retrievalConfidence is low or rag.lowConfidenceRetrieval is true, state that the knowledge base evidence is insufficient; do not invent sources or treat weak chunks as strong evidence.",
       ].join("\n"),
     },
@@ -129,6 +148,9 @@ function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPip
           rag: pipeline.ragAnswer
             ? {
                 answer: pipeline.ragAnswer.answer,
+                retrievalConfidence: pipeline.ragAnswer.retrievalConfidence,
+                lowConfidenceRetrieval: pipeline.ragAnswer.lowConfidenceRetrieval,
+                lowConfidenceReason: pipeline.ragAnswer.lowConfidenceReason,
                 sources: pipeline.ragAnswer.sources,
                 retrievedChunks: pipeline.ragAnswer.retrievedChunks.map((item) => ({
                   score: item.score,
@@ -179,23 +201,34 @@ function buildRepairMessages(rawContent: string, fallback: AgentStructuredOutput
   ];
 }
 
-function buildApiMetadata(base: Omit<AgentApiMetadata, "requestUrl" | "hasApiKey" | "maskedApiKey" | "apiKeyLength" | "hasProxy" | "proxyType" | "maskedProxyUrl" | "timeoutMs">): AgentApiMetadata {
-  const config = getLlmConfig();
-  return {
-    ...base,
-    requestUrl: config.requestUrl,
-    hasApiKey: config.hasApiKey,
-    maskedApiKey: config.maskedApiKey,
-    apiKeyLength: config.apiKeyLength,
-    hasProxy: config.hasProxy,
-    proxyType: config.proxyType,
-    maskedProxyUrl: config.maskedProxyUrl,
-    timeoutMs: config.timeoutMs,
-  };
+function buildApiMetadata(base: AgentApiMetadata): AgentApiMetadata {
+  return base;
+}
+
+function realApiFailureMessage(result: LlmGenerateResult) {
+  if (result.httpStatus === 403) {
+    return "Real API 请求失败：模型服务拒绝请求，请检查部署环境变量、模型名称、Key 权限或账户额度。";
+  }
+
+  if (result.errorType === "timeout_error") {
+    return "Real API 请求失败：请求模型服务超时，当前展示的是系统兜底回答。";
+  }
+
+  if (result.errorType === "network_error") {
+    return "Real API 请求失败：当前运行环境无法连接模型服务，当前展示的是系统兜底回答。";
+  }
+
+  if (result.errorType === "invalid_response_shape") {
+    return "Real API 请求失败：模型服务返回格式异常，当前展示的是系统兜底回答。";
+  }
+
+  return result.errorType === "http_error"
+    ? "Real API 请求失败：模型服务返回错误，当前展示的是系统兜底回答。"
+    : "Real API 请求失败，当前展示的是系统兜底回答。";
 }
 
 export async function runAgentApiPipeline(question: string, requestedMode: LlmMode, userDocuments: ImportedKnowledgeDocument[] = []): Promise<AgentApiResponse> {
-  const pipelineDocuments = [...documents, ...userDocuments];
+  const pipelineDocuments = [...documents, ...userDocuments.filter((document) => document.enabled !== false)];
   const pipeline = runAgentPipeline(question, pipelineDocuments);
   const config = getLlmConfig();
 
@@ -205,8 +238,6 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
       api: buildApiMetadata({
         requestedMode,
         responseMode: "mock",
-        provider: "mock",
-        model: "mock-agent",
       }),
     };
   }
@@ -218,8 +249,6 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
       api: buildApiMetadata({
         requestedMode,
         responseMode: "real_error_fallback",
-        provider: config.provider,
-        model: config.model,
         fallbackReason: firstMissing,
         errorType: firstMissing,
         llmError: "Real API 未配置，当前展示的是系统兜底回答。",
@@ -253,8 +282,6 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
       api: buildApiMetadata({
         requestedMode,
         responseMode: "real",
-        provider: llmResult.provider,
-        model: llmResult.model,
         llmDurationMs: llmResult.durationMs,
       }),
     };
@@ -295,8 +322,6 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
         api: buildApiMetadata({
           requestedMode,
           responseMode: "real_repaired",
-          provider: repairResult.provider,
-          model: repairResult.model,
           errorType: "json_parse_error",
           llmDurationMs: llmResult.durationMs + repairResult.durationMs,
           parseError: llmResult.parseError ?? llmResult.errorMessage,
@@ -308,7 +333,7 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
     const structuredOutput = buildTextFallbackStructuredOutput(llmResult.content, pipeline.structuredOutput);
     return {
       ...pipeline,
-      finalAnswer: llmResult.content,
+      finalAnswer: structuredOutput.answer,
       structuredOutput,
       steps: [
         ...pipeline.steps,
@@ -332,8 +357,6 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
       api: buildApiMetadata({
         requestedMode,
         responseMode: "real_text_fallback",
-        provider: llmResult.provider,
-        model: llmResult.model,
         errorType: "json_parse_error",
         llmDurationMs: llmResult.durationMs + repairResult.durationMs,
         llmError: "真实模型已返回文本，但结构化 JSON 解析失败，当前使用文本兜底。",
@@ -370,16 +393,12 @@ export async function runAgentApiPipeline(question: string, requestedMode: LlmMo
     api: buildApiMetadata({
       requestedMode,
       responseMode: "real_error_fallback",
-      provider: llmResult.provider,
-      model: llmResult.model,
       fallbackReason,
       errorType: llmResult.errorType,
       httpStatus: llmResult.httpStatus,
       statusText: llmResult.statusText,
       llmDurationMs: llmResult.durationMs,
-      llmError: llmResult.httpStatus === 403
-        ? "Real API 请求失败：模型服务拒绝请求，请检查部署环境变量、模型名称、Key 权限或账户额度。"
-        : llmResult.errorMessage ?? llmResult.error ?? "Real API 请求失败，当前展示的是系统兜底回答。",
+      llmError: realApiFailureMessage(llmResult),
       parseError: llmResult.parseError,
       rawContentPreview: llmResult.rawContentPreview,
     }),

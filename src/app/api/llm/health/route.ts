@@ -21,6 +21,10 @@ function friendlyMessage(params: { configured: boolean; healthy: boolean; status
     return "Real API 连接失败：模型服务拒绝请求，请检查部署环境变量、模型名称、Key 权限或账户额度。";
   }
 
+  if (params.errorType === "timeout_error") {
+    return "Real API 连接失败：请求模型服务超时，请检查模型服务可用性、网络访问或超时配置。";
+  }
+
   if (params.errorType === "network_error") {
     return "Real API 连接失败：当前网络无法连接模型服务，请检查运行环境网络访问能力。";
   }
