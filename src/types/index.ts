@@ -380,6 +380,7 @@ export type LlmErrorType =
   | "missing_api_key"
   | "missing_base_url"
   | "missing_model"
+  | "timeout_error"
   | "network_error"
   | "http_error"
   | "invalid_response_shape"
@@ -416,8 +417,8 @@ export type AgentResponseMode = "mock" | "real" | "real_repaired" | "real_text_f
 export type AgentApiMetadata = {
   requestedMode: LlmMode;
   responseMode: AgentResponseMode;
-  provider: LlmProvider;
-  model: string;
+  provider?: LlmProvider;
+  model?: string;
   fallbackReason?: LlmErrorType | "llm_error";
   requestUrl?: string;
   hasApiKey?: boolean;

@@ -373,7 +373,7 @@ export async function callOpenAICompatibleChat(
     return failedResult({
       config,
       startedAt,
-      errorType: "network_error",
+      errorType: isTimeout ? "timeout_error" : "network_error",
       errorName: typedError?.name ?? "UnknownError",
       errorMessage: isTimeout ? `Request timed out after ${config.timeoutMs}ms.` : typedError?.message ?? "Unknown network error.",
       causeMessage: typedError?.cause?.message,
