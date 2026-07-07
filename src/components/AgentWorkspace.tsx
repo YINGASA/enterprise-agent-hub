@@ -182,6 +182,11 @@ export function AgentWorkspace() {
     };
   }, []);
 
+  useEffect(() => {
+    const questionFromUrl = new URLSearchParams(window.location.search).get("question");
+    if (questionFromUrl?.trim()) setQuestion(questionFromUrl.trim());
+  }, []);
+
   async function handleRun() {
     if (realApiUnavailable) {
       setClientError("当前未配置模型服务。请使用开发模拟模式，或在服务端配置模型服务后再使用真实模型生成。");
