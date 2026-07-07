@@ -82,6 +82,12 @@ function modeButtonClass(active: boolean) { return "min-h-10 rounded-md px-3 py-
 function exampleButtonClass(active: boolean) { return "rounded-md border px-3 py-2 text-left text-xs leading-5 transition " + (active ? "border-brand-200 bg-brand-50 text-brand-700" : "border-slate-200 bg-slate-50 text-ink-600 hover:bg-brand-50"); }
 function formatTools(tools: ToolName[]) { return tools.length ? tools.map(toolLabel).join(" + ") : "未调用工具"; }
 function feedbackButtonClass(active: boolean) { return "rounded-md border px-3 py-2 text-xs font-semibold transition " + (active ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-ink-600 hover:bg-brand-50"); }
+function runtimeStatusClass(responseMode?: AgentApiResponse["api"]["responseMode"] | LlmMode) {
+  if (responseMode === "real_error_fallback") return "bg-rose-50 text-rose-700 ring-rose-100";
+  if (responseMode === "real" || responseMode === "real_repaired") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  if (responseMode === "mock") return "bg-slate-100 text-ink-700 ring-slate-200";
+  return "bg-amber-50 text-amber-700 ring-amber-100";
+}
 
 export function AgentWorkspace() {
   const [question, setQuestion] = useState(fallbackQuestion);
@@ -143,6 +149,12 @@ export function AgentWorkspace() {
           ? "Real API：连接失败"
           : "Real API：已配置，待验证"
     : llmStatusError || "正在检查 Real API 状态...";
+  const generationSteps = [
+    { label: "理解问题", active: isLoading || Boolean(result), detail: result ? `${scenarioLabel(result.route.scenario)} / ${intentLabel(result.route.intent)}` : "识别业务场景与任务意图" },
+    { label: "检索依据", active: isLoading || Boolean(result), detail: result ? `${reliableSources.length} 条高相关来源` : "检索默认知识库与用户文档" },
+    { label: "调用工具", active: isLoading || Boolean(result), detail: result ? formatTools(result.structuredOutput.toolsUsed) : "按需查询订单、商品或规则" },
+    { label: "生成回答", active: isLoading || Boolean(result), detail: result ? responseModeLabel(result.api.responseMode) : activeRuntimeLabel },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -248,14 +260,25 @@ export function AgentWorkspace() {
             <button type="button" onClick={handleRun} disabled={runButtonDisabled} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? loadingMessage + "..." : realApiUnavailable ? "真实模型未配置，请切换开发模拟" : "生成回答"}</button>
             <button type="button" onClick={handleHealthCheck} disabled={isCheckingHealth} className="min-h-10 rounded-md border border-brand-200 bg-brand-50 px-5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-ink-500">{isCheckingHealth ? "检查中..." : "检查 LLM 连接"}</button>
           </div>
-          {isLoading ? <p className="rounded-md bg-slate-50 p-3 text-sm text-ink-600">{loadingMessage}</p> : null}
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            {generationSteps.map((step) => (
+              <div key={step.label} className={"rounded-md border p-3 text-sm " + (step.active ? "border-brand-100 bg-brand-50 text-brand-800" : "border-slate-200 bg-slate-50 text-ink-500")}>
+                <div className="flex items-center gap-2">
+                  <span className={"h-2.5 w-2.5 rounded-full " + (isLoading && step.active ? "animate-pulse bg-brand-600" : step.active ? "bg-brand-500" : "bg-slate-300")} />
+                  <span className="font-semibold">{step.label}</span>
+                </div>
+                <p className="mt-1 break-words text-xs leading-5">{step.detail}</p>
+              </div>
+            ))}
+          </div>
+          {isLoading ? <p className="rounded-md bg-slate-50 p-3 text-sm text-ink-600">正在按顺序执行：问题理解、知识库检索、工具调用和回答生成。结果返回前不会暴露模型配置细节。</p> : null}
         </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0"><h2 className="text-lg font-semibold text-ink-900">最终回答</h2><p className="mt-1 break-words text-sm text-ink-500">问题：{result?.question ?? question}</p></div>
-          <span className="shrink-0 rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{responseModeLabel(result?.api.responseMode ?? mode)}</span>
+          <span className={"shrink-0 rounded-md px-2.5 py-1 text-xs font-semibold ring-1 " + runtimeStatusClass(result?.api.responseMode ?? mode)}>{responseModeLabel(result?.api.responseMode ?? mode)}</span>
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
         {realErrorFallback ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm leading-6 text-rose-700">Real API 请求失败，当前展示的是系统兜底回答，不代表真实模型生成结果。{result?.api.httpStatus === 403 ? "403 通常表示 Key、模型权限、账户额度或模型名称配置存在问题。" : result?.api.llmError ? ` ${result.api.llmError}` : ""}</p> : null}
@@ -267,19 +290,23 @@ export function AgentWorkspace() {
         {reliableSources.length ? (
           <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-ink-900">本次回答依据</h3>
+              <div>
+                <h3 className="text-sm font-semibold text-ink-900">本次回答依据</h3>
+                <p className="mt-1 text-xs text-ink-500">以下来源参与了本轮回答生成，可用于核对制度、流程或订单判断依据。</p>
+              </div>
               <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-ink-600">{reliableSources.length} 条高相关来源</span>
             </div>
             <div className="mt-3 grid gap-3 lg:grid-cols-3">
-              {topSources.map((source) => (
+              {topSources.map((source, index) => (
                 <article key={source.documentId} className="rounded-md bg-slate-50 p-3 text-sm leading-6">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">依据 {index + 1}</span>
                     <p className="break-words font-semibold text-ink-900">{source.title}</p>
                     <span className="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-ink-600 ring-1 ring-slate-200">{sourceTypeLabel(source.sourceType)}</span>
                   </div>
-                  <p className="mt-1 text-xs text-ink-500">{source.category} · 得分 {source.score ?? 0}</p>
-                  {source.scoreReason?.length ? <p className="mt-2 break-words text-xs text-ink-500">命中原因：{source.scoreReason.slice(0, 2).join(" / ")}</p> : null}
-                  {source.contentPreview ? <p className="mt-2 line-clamp-4 whitespace-pre-wrap break-words text-xs text-ink-600">{source.contentPreview}</p> : null}
+                  <p className="mt-1 text-xs text-ink-500">{source.category} · 相关度 {source.score ?? 0}</p>
+                  {source.scoreReason?.length ? <p className="mt-2 break-words text-xs text-ink-500">为什么引用：{source.scoreReason.slice(0, 2).join(" / ")}</p> : null}
+                  {source.contentPreview ? <p className="mt-2 line-clamp-4 whitespace-pre-wrap break-words rounded bg-white p-2 text-xs text-ink-600 ring-1 ring-slate-200">{source.contentPreview}</p> : null}
                 </article>
               ))}
             </div>

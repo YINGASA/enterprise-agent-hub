@@ -21,6 +21,13 @@ import type { EvaluationFailureReason, EvaluationRunHistoryItem, EvaluationRunRe
 type SuiteOption = "quick" | "standard" | "full";
 type PackFilter = "all" | string;
 type ReportPreviewState = { kind: "markdown" | "json"; title: string; content: string; run: EvaluationRunHistoryItem } | null;
+type LlmHealthSnapshot = {
+  configured: boolean;
+  healthy: boolean;
+  durationMs?: number;
+  errorType?: string;
+  message?: string;
+};
 
 const suiteOptions: Array<{ value: SuiteOption; label: string; description: string }> = [
   { value: "quick", label: "快速 15 条", description: "快速回归检查" },
@@ -123,11 +130,35 @@ export function EvaluationDashboard() {
   const [error, setError] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
   const [preview, setPreview] = useState<ReportPreviewState>(null);
+  const [llmHealth, setLlmHealth] = useState<LlmHealthSnapshot | null>(null);
+  const [llmHealthMessage, setLlmHealthMessage] = useState("");
 
   useEffect(() => {
     const loaded = loadEvaluationHistory();
     setHistory(loaded.data);
     if (!loaded.ok) setHistoryMessage(loaded.error);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHealth() {
+      try {
+        const response = await fetch("/api/llm/health", { method: "GET" });
+        const data = (await response.json()) as LlmHealthSnapshot;
+        if (!cancelled) setLlmHealth(data);
+      } catch (error) {
+        if (!cancelled) {
+          setLlmHealthMessage(error instanceof Error ? error.message : "无法读取 Real API 健康状态。");
+        }
+      }
+    }
+
+    loadHealth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredResults = useMemo(() => result?.results ?? [], [result]);
@@ -137,6 +168,19 @@ export function EvaluationDashboard() {
   const previous = history[1];
   const recentFiveAverage = avg(history.slice(0, 5).map((item) => item.passRate));
   const passRateDelta = latest && previous ? Math.round((latest.passRate - previous.passRate) * 10) / 10 : null;
+  const latestMockRun = history.find((item) => item.mode === "mock");
+  const realApiHealthLabel = llmHealth
+    ? !llmHealth.configured
+      ? "Real API 未配置"
+      : llmHealth.healthy
+        ? "Real API 连接正常"
+        : "Real API 连接失败"
+    : llmHealthMessage || "正在检查 Real API 状态";
+  const realApiHealthClass = llmHealth?.healthy
+    ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+    : llmHealth?.configured
+      ? "border-amber-100 bg-amber-50 text-amber-800"
+      : "border-slate-200 bg-slate-50 text-ink-700";
 
   async function runEvaluation() {
     setIsRunning(true);
@@ -199,6 +243,29 @@ export function EvaluationDashboard() {
       </div>
       {error ? <p className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
       {historyMessage ? <p className="mt-4 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{historyMessage}</p> : null}
+    </section>
+
+    <section className="grid gap-4 lg:grid-cols-2">
+      <article className={"rounded-lg border p-5 shadow-sm " + realApiHealthClass}>
+        <p className="text-xs font-semibold uppercase tracking-wide">Real API 健康状态</p>
+        <h3 className="mt-2 text-lg font-semibold">{realApiHealthLabel}</h3>
+        <p className="mt-2 text-sm leading-6">
+          {llmHealth?.healthy
+            ? `真实模型链路可用，最近一次检查耗时 ${llmHealth.durationMs ?? 0}ms。`
+            : llmHealth?.configured
+              ? "模型服务已配置但连接未通过。Real 评测可能失败或走兜底，Mock 回归不受影响。"
+              : "当前环境未配置模型服务；Real 评测不可用，仍可使用 Mock 完整回归验证核心链路。"}
+        </p>
+        {llmHealth?.errorType ? <p className="mt-2 break-words text-xs">错误类型：{llmHealth.errorType}</p> : null}
+      </article>
+      <article className="rounded-lg border border-brand-100 bg-brand-50 p-5 text-brand-800 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide">Mock 回归摘要</p>
+        <h3 className="mt-2 text-lg font-semibold">{latestMockRun ? `最近 Mock：${latestMockRun.passed}/${latestMockRun.caseCount}` : "建议先运行完整 80 条 Mock 回归"}</h3>
+        <p className="mt-2 text-sm leading-6">
+          Mock 回归用于验证 Agent Router、Hybrid RAG、Tool Calling、fallback、结构化输出和引用链路，不依赖外部模型服务。
+        </p>
+        <p className="mt-2 text-xs">目标：完整评测 80/80 或 passRate ≥ 90%。</p>
+      </article>
     </section>
 
     {result ? <>
