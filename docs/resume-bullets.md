@@ -21,7 +21,7 @@
 - 实现本地 Tool Calling 层：订单查询、商品查询、政策检索、工单创建、JD 分析、客服回复生成，并在 Agent Trace 中展示每一步输入、输出和耗时。
 - 接入 OpenAI-compatible Chat Completions，兼容 DeepSeek；API Key 仅在服务端读取，支持 Mock / Real 双模式、代理诊断、请求超时和连接健康检查。
 - 设计结构化输出与容错链路：要求模型返回 AgentResponse JSON，解析失败后进行一次 JSON repair，仍失败时使用真实文本回答和 fallback structured output。
-- 构建 Agent Evaluation Dashboard，内置 15 条测试集，统计 passRate、scenarioAccuracy、intentAccuracy、toolHitRate、ragUsageAccuracy、citationRate、keywordHitRate、fallbackRate，并提供失败原因分桶分析。
+- 构建 Agent Evaluation Dashboard，内置 80 条多场景 Mock 回归用例，统计 passRate、scenarioAccuracy、intentAccuracy、toolHitRate、ragUsageAccuracy、citationRate、keywordHitRate、fallbackRate，并提供失败原因分桶分析。
 
 ## 项目关键词
 

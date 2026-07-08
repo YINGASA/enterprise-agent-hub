@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { ChatRunHistoryPanel } from "@/components/ChatRunHistoryPanel";
@@ -106,6 +107,7 @@ function runtimeStatusClass(responseMode?: AgentApiResponse["api"]["responseMode
 }
 
 export function AgentWorkspace() {
+  const searchParams = useSearchParams();
   const [question, setQuestion] = useState(fallbackQuestion);
   const [mode, setMode] = useState<LlmMode>("mock");
   const [result, setResult] = useState<AgentApiResponse | null>(null);
@@ -199,9 +201,9 @@ export function AgentWorkspace() {
   }, []);
 
   useEffect(() => {
-    const questionFromUrl = new URLSearchParams(window.location.search).get("question");
+    const questionFromUrl = searchParams.get("question");
     if (questionFromUrl?.trim()) setQuestion(questionFromUrl.trim());
-  }, []);
+  }, [searchParams]);
 
   async function handleRun() {
     if (realApiUnavailable) {
@@ -383,7 +385,7 @@ export function AgentWorkspace() {
       </section>
 
       <section className="space-y-4">
-        <CollapsibleSection title="详细调试信息" description="默认折叠，面试讲解时可展开查看完整 Agent Trace。" defaultOpen={false}><AgentTracePanel result={result} /></CollapsibleSection>
+        <CollapsibleSection title="详细调试信息" description="默认折叠，需要排查或复盘时可展开查看完整 Agent Trace。" defaultOpen={false}><AgentTracePanel result={result} /></CollapsibleSection>
         {healthResult ? <CollapsibleSection title="LLM Health Diagnostic JSON" description="连接诊断 JSON 默认折叠，不挤占回答区域。" defaultOpen={false}><pre className="max-h-[420px] max-w-full overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-4 text-xs leading-6 text-slate-100">{JSON.stringify(healthResult, null, 2)}</pre></CollapsibleSection> : null}
         <CollapsibleSection title="来源引用完整列表" description="仅展示达到相关性阈值的 sources；原始召回可在 Trace 中查看。" defaultOpen={false}><SourceList sources={reliableSources} /></CollapsibleSection>
       </section>

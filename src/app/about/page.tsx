@@ -1,11 +1,12 @@
 import { PageHeader } from "@/components/PageHeader";
+import Link from "next/link";
 
 const capabilities = [
   "4 个系统内置 Knowledge Packs，覆盖企业制度、电商售后、招聘匹配和 AI 工程规范",
   "本地知识库导入，支持 txt / md / json / csv，并保存在浏览器 localStorage",
   "Pack-aware Hybrid RAG，支持 Query Expansion、多维评分、scoreBreakdown 和 retrievalConfidence",
   "Agent Router 识别业务场景与任务意图，统一编排 RAG、Tools、LLM 与 fallback",
-  "OpenAI-compatible / DeepSeek Real API 接入，服务端管理 Key，前端不暴露密钥",
+  "OpenAI-compatible Real API 接入，服务端管理模型服务配置，前端不暴露密钥或工程细节",
   "80 条多场景 Agent Evaluation Suite，支持历史记录、趋势摘要和 Markdown / JSON 报告导出",
   "Knowledge RAG 应用化能力：用户文档启用/禁用、引用透明化、回答反馈和知识库质量诊断",
 ];
@@ -38,10 +39,13 @@ const versions = [
   { version: "V1.2", title: "Hybrid RAG 检索质量升级", body: "引入 Query Expansion、多维评分、scoreBreakdown、retrievalConfidence 和低置信边界。" },
   { version: "V1.2.1", title: "AI 工程规范路由优化", body: "JSON repair、fallback、Tool Calling、Agent 评测集等问题优先进入 AI 工程规范场景。" },
   { version: "V1.3", title: "评测历史与报告导出", body: "支持保存评测历史、趋势摘要，并导出 Markdown / JSON 报告，用于持续复盘 Agent 质量。" },
-  { version: "V1.3.1", title: "评测面板中文化", body: "统一中文化评测页面文案，修正版本说明，提升面试展示和产品体验。" },
-  { version: "V1.6", title: "Chat \u8fd0\u884c\u5386\u53f2\u4e0e Trace \u5bfc\u51fa", body: "\u652f\u6301\u4fdd\u5b58 Chat \u8fd0\u884c\u5386\u53f2\uff0c\u590d\u76d8 Router / RAG / Tools / LLM / Retriever Trace\uff0c\u5e76\u5bfc\u51fa Markdown / JSON \u8fd0\u884c\u62a5\u544a\u3002" },
+  { version: "V1.3.1", title: "评测面板中文化", body: "统一中文化评测页面文案，修正版本说明，提升产品使用和复盘体验。" },
+  { version: "V1.6", title: "Chat 运行历史与 Trace 导出", body: "支持保存 Chat 运行历史，复盘 Router / RAG / Tools / LLM / Retriever Trace，并导出 Markdown / JSON 运行报告。" },
   { version: "V1.8", title: "Knowledge RAG 应用化升级", body: "增强知识库启用/禁用、RAG 引用片段展示、低置信边界提示、回答反馈闭环和知识库质量诊断。" },
   { version: "V1.9", title: "Real API 优先运行时", body: "配置模型服务后默认使用真实模型生成回答；开发模拟模式保留用于离线演示、回归测试和故障兜底。" },
+  { version: "V1.9.2", title: "知识库可用性打磨", body: "知识库列表展示启用状态、来源类型、chunks、标签、建议测试问题和质量诊断，支持一键带问题进入 Chat。" },
+  { version: "V1.9.3", title: "业务工具可用性打磨", body: "工具中心按业务场景组织，提供流程模板、示例输入、模拟结果和跳转 Chat 验证入口。" },
+  { version: "V1.9.4", title: "Release Candidate 收口", body: "统一全站版本语境、演示路径、错误状态和 Real API / 开发模拟模式文案，准备进入外部测试。" },
 ];
 
 const engineeringHighlights = [
@@ -90,6 +94,23 @@ export default function AboutPage() {
         <h2 className="text-lg font-semibold text-ink-900">运行链路</h2>
         <p className="mt-3 text-sm leading-7 text-ink-600">用户输入问题后，系统依次完成场景识别、RAG 检索、工具调用、真实模型生成或兜底回答。主界面展示业务答案和高相关引用，Trace 区保留 Router、Retriever、Tools 和 LLM 细节，方便从产品体验一路追到工程诊断。</p>
       </section>
+      <section className="rounded-lg border border-brand-100 bg-brand-50 p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-ink-900">推荐体验路径</h2>
+        <p className="mt-2 text-sm leading-6 text-ink-600">建议按知识库、Chat、业务工具、评测面板的顺序体验完整链路：先准备知识依据，再观察 Agent 如何检索、调用工具、生成回答并被评测验证。</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          {[
+            { href: "/knowledge", title: "/knowledge", desc: "查看默认知识库与用户文档，检查启用状态、chunks 和质量诊断。" },
+            { href: "/chat?question=%E6%88%91%E5%87%BA%E5%B7%AE%E5%9B%9E%E6%9D%A5%E6%83%B3%E6%8A%A5%E9%94%80%EF%BC%8C%E5%BA%94%E8%AF%A5%E5%87%86%E5%A4%87%E5%93%AA%E4%BA%9B%E6%9D%90%E6%96%99%EF%BC%9F", title: "/chat", desc: "带入问题但不自动运行，查看 Real API、RAG、工具和 fallback 展示。" },
+            { href: "/tools", title: "/tools", desc: "按业务流程查看订单、规则、工单、JD 匹配等工具能力。" },
+            { href: "/evaluation", title: "/evaluation", desc: "运行 full Mock 回归，确认 80 条评测和报告导出能力。" },
+          ].map((item) => (
+            <Link key={item.href} href={item.href} className="rounded-md bg-white p-4 shadow-sm ring-1 ring-brand-100 hover:bg-brand-100">
+              <span className="block font-semibold text-brand-800">{item.title}</span>
+              <span className="mt-2 block text-sm leading-6 text-ink-600">{item.desc}</span>
+            </Link>
+          ))}
+        </div>
+      </section>
       <section>
         <h2 className="mb-4 text-lg font-semibold text-ink-900">当前版本能力</h2>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{versions.map((item) => <article key={item.version} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><span className="rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{item.version}</span><h3 className="mt-3 font-semibold text-ink-900">{item.title}</h3><p className="mt-2 text-sm leading-6 text-ink-500">{item.body}</p></article>)}</div>
@@ -110,8 +131,8 @@ export default function AboutPage() {
           {[
             "用户导入文档、Chat 反馈和运行历史保存在当前浏览器 localStorage，不是服务端知识库或审计日志。",
             "当前 Hybrid RAG 与 Mock Embedding 是本地可解释检索实现，不等同于生产级 Embedding + Vector DB。",
-            "默认业务数据仍为 mock 数据，适合验证产品链路和工程结构，不代表真实企业系统。",
-            "Real API 由服务端环境变量配置，前端不会展示 Key、provider、model 或 baseUrl 等工程配置。",
+            "默认业务数据仍为模拟数据，适合验证产品链路和工程结构，不代表真实企业系统。",
+            "Real API 由服务端环境变量配置，前端不会展示密钥或具体模型服务工程配置。",
             "后续可替换为真实 Embedding 模型、向量数据库、数据库持久化、权限体系和团队审计后台。",
           ].map((item) => <p key={item} className="rounded-md bg-slate-50 p-3 text-sm leading-6 text-ink-600">{item}</p>)}
         </div>

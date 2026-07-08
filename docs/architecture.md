@@ -1,6 +1,6 @@
 # Architecture
 
-Enterprise Agent Hub is designed as a small but complete AI application architecture for interview demonstration. It keeps the core AI workflow visible: route, retrieve, call tools, generate structured output, handle fallback, and evaluate quality.
+Enterprise Agent Hub is designed as a small but complete enterprise AI Agent application architecture. It keeps the core AI workflow visible: route, retrieve, call tools, generate structured output, handle fallback, collect feedback, and evaluate quality.
 
 ## High-Level Flow
 
@@ -56,7 +56,7 @@ The router is kept deterministic so it can be evaluated without paying for model
 
 ## Tool Calling Flow
 
-Tool Calling is local orchestration in V0.7:
+Tool Calling is local orchestration in the current V1.9 release-candidate line:
 
 - `queryOrder`
 - `queryProduct`
@@ -65,7 +65,7 @@ Tool Calling is local orchestration in V0.7:
 - `analyzeJD`
 - `generateCustomerReply`
 
-The model does not currently perform native `tool_calls`. The server-side Agent pipeline selects and executes local tools based on Router output. This keeps the workflow inspectable and safe for demos.
+The model does not currently perform native `tool_calls`. The server-side Agent pipeline selects and executes local tools based on Router output. `/tools` presents these tools as business workflow capabilities, while `/chat` summarizes which queries and judgments were performed for each answer.
 
 ## Real API Flow
 
