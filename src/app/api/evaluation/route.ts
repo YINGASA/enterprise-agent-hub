@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { evaluationCases } from "@/data/evaluation";
 import { runEvaluationSuite } from "@/lib/evaluation";
+import { recordEvaluationRun } from "@/lib/ops/storage";
 import type { LlmMode } from "@/types";
 
 export const runtime = "nodejs";
@@ -24,5 +25,6 @@ export async function POST(request: Request) {
   let selectedCases = caseIds.length > 0 ? evaluationCases.filter((caseItem) => caseIds.includes(caseItem.id)) : evaluationCases.slice(0, suiteLimit(requestedSuite));
   if (packId) selectedCases = selectedCases.filter((caseItem) => caseItem.packId === packId);
   const result = await runEvaluationSuite(selectedCases, mode, requestedSuite);
+  await recordEvaluationRun(result);
   return NextResponse.json(result);
 }

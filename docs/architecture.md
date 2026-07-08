@@ -78,7 +78,7 @@ Real API mode uses server-side API routes only:
 5. Server parses structured JSON.
 6. Server returns final answer, structured output, trace steps, and diagnostics.
 
-API keys are never exposed in browser code. For public demos, the Chat Workspace recommends Mock mode by default. A lightweight server-only status route reports whether Real API environment variables are configured without exposing secrets. When `AI_API_KEY` is missing, the UI keeps Real API visible as an optional capability but blocks the run action with a friendly message, so the deployed demo still works end to end through Mock mode.
+API keys are never exposed in browser code. V1.9 uses Real API as the primary runtime when model service environment variables are configured. A lightweight server-only status route reports whether Real API environment variables are configured without exposing secrets. When `AI_API_KEY` is missing, the UI falls back to development simulation mode with a friendly message, so the deployed app still works end to end through Mock mode.
 
 ## Fallback Flow
 
@@ -160,6 +160,20 @@ The retrieval layer now exposes a small adapter contract: `RetrieverInput`, `Ret
 `mockEmbeddingRetriever` is intentionally local and deterministic. It builds token-hash vectors and cosine scores so the UI and metadata can exercise embeddingScore, rerankScore, retrieverMode, rerankReason, and vectorReady fields without calling a real embedding API.
 
 The `auto` strategy preserves Hybrid Retrieval as the default. It attempts mock embedding rerank only for short queries or low-confidence Hybrid retrieval, so irrelevant vector-like matches do not become authoritative. This keeps offline demos stable while reserving a clean upgrade path to OpenAI / DeepSeek / BGE embeddings and pgvector / Qdrant / Chroma.
+
+## V1.10 Production Readiness Foundation
+
+V1.10 adds a lightweight server-side observability and persistence foundation without introducing a database. The server appends JSONL records under the runtime user's home directory by default, or under `EAH_OPS_DATA_DIR` when configured:
+
+- Agent run summaries: question preview, responseMode, scenario, intent, tools used, source count, retrieval confidence, error type, and timestamp.
+- Chat feedback summaries: feedback labels, optional reason preview, responseMode, scenario, intent, source count, and timestamp.
+- Full Mock evaluation summaries: total, passed, passRate, duration, and timestamp.
+
+The persistence layer is deliberately compact and safe. It does not store API keys, provider, model, baseUrl, full prompts, full answers, full user documents, or raw LLM payloads. If file writing fails in a serverless or read-only runtime, the Agent flow continues and only observability is degraded.
+
+`/ops` provides a lightweight operations dashboard protected by `EAH_OPS_TOKEN`. It shows LLM configured status, recent Agent run counts, Real / Mock / fallback ratios, recent error summaries, recent feedback, and the latest full Mock evaluation result. `/api/llm/status` remains safe and only returns `{ configured: boolean }`.
+
+Real API requests now pass through a small in-memory per-IP rate limiter. The default limit is 12 real requests per minute and can be adjusted with `EAH_REAL_API_RATE_LIMIT_PER_MINUTE`. Mock and evaluation flows are not rate-limited by this guard.
 ## V1.6 Chat Run History
 
 The Chat Workspace now has a frontend-only run-history layer. After an Agent Pipeline run, the user can save the result snapshot into browser localStorage. Each snapshot keeps the question, final answer, response mode, route, retriever metadata, RAG sources, tool calls, structured output, and API metadata.

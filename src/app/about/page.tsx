@@ -9,6 +9,7 @@ const capabilities = [
   "OpenAI-compatible Real API 接入，服务端管理模型服务配置，前端不暴露密钥或工程细节",
   "80 条多场景 Agent Evaluation Suite，支持历史记录、趋势摘要和 Markdown / JSON 报告导出",
   "Knowledge RAG 应用化能力：用户文档启用/禁用、引用透明化、回答反馈和知识库质量诊断",
+  "服务端运行摘要：记录 Agent 调用、Chat 反馈和 full Mock 评测摘要，支持 /ops 轻量观测",
 ];
 
 const productProblems = [
@@ -46,6 +47,7 @@ const versions = [
   { version: "V1.9.2", title: "知识库可用性打磨", body: "知识库列表展示启用状态、来源类型、chunks、标签、建议测试问题和质量诊断，支持一键带问题进入 Chat。" },
   { version: "V1.9.3", title: "业务工具可用性打磨", body: "工具中心按业务场景组织，提供流程模板、示例输入、模拟结果和跳转 Chat 验证入口。" },
   { version: "V1.9.4", title: "Release Candidate 收口", body: "统一全站版本语境、演示路径、错误状态和 Real API / 开发模拟模式文案，准备进入外部测试。" },
+  { version: "V1.10", title: "Production Readiness 基础", body: "增加服务端运行摘要持久化、Real API 频率限制和口令保护的 /ops 运行状态页，为后续数据库化打基础。" },
 ];
 
 const engineeringHighlights = [
@@ -129,7 +131,8 @@ export default function AboutPage() {
         <h2 className="text-lg font-semibold text-ink-900">当前应用边界</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {[
-            "用户导入文档、Chat 反馈和运行历史保存在当前浏览器 localStorage，不是服务端知识库或审计日志。",
+            "用户导入文档和 Chat 运行历史仍保存在当前浏览器 localStorage；V1.10 仅服务端记录运行摘要和反馈摘要，不保存完整知识库。",
+            "服务端运行摘要默认写入运行用户的本地目录，可通过 EAH_OPS_DATA_DIR 调整；这不是生产级数据库或长期审计系统。",
             "当前 Hybrid RAG 与 Mock Embedding 是本地可解释检索实现，不等同于生产级 Embedding + Vector DB。",
             "默认业务数据仍为模拟数据，适合验证产品链路和工程结构，不代表真实企业系统。",
             "Real API 由服务端环境变量配置，前端不会展示密钥或具体模型服务工程配置。",

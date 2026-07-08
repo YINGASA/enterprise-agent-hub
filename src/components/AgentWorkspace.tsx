@@ -247,14 +247,35 @@ export function AgentWorkspace() {
   function toggleFeedback(value: ChatAnswerFeedbackValue) {
     setFeedbackValues((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   }
-  function handleSaveFeedback() {
+  async function handleSaveFeedback() {
     if (!result) return;
     if (!feedbackValues.length) {
       setFeedbackMessage("请先选择至少一个反馈标签。");
       return;
     }
     const saved = saveChatFeedback(result, feedbackValues, feedbackReason);
-    setFeedbackMessage(saved.ok ? "已保存反馈到当前浏览器本地，用于后续质量诊断。" : saved.error);
+    if (!saved.ok) {
+      setFeedbackMessage(saved.error);
+      return;
+    }
+    setFeedbackMessage("已保存反馈到当前浏览器本地，并同步写入服务端运行摘要。");
+    try {
+      await fetch("/api/ops/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: result.question,
+          values: feedbackValues,
+          reason: feedbackReason,
+          responseMode: result.api.responseMode,
+          scenario: result.route.scenario,
+          intent: result.route.intent,
+          sourcesCount: result.ragAnswer?.sources.length ?? 0,
+        }),
+      });
+    } catch {
+      setFeedbackMessage("已保存反馈到当前浏览器本地；服务端摘要暂时不可写入。");
+    }
   }
 
   return (
