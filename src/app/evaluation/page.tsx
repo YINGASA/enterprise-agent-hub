@@ -7,7 +7,7 @@ export default function EvaluationPage() {
       <PageHeader
         eyebrow="Evaluation"
         title="Agent 评测面板"
-        description="V1.4 基于 80条多场景评测用例，新增评测历史趋势图表、趋势摘要增强，以及 Markdown / JSON 报告预览与复制能力，用于持续验证 Agent Router、Hybrid RAG、Tool Calling、fallback 与结构化输出质量。"
+        description="V1.9 评测面板用于持续验证 Agent Router、Hybrid RAG、Tool Calling、fallback、结构化输出和引用质量；同时展示 Real API 健康状态、Mock 回归摘要、历史趋势和 Markdown / JSON 报告导出。"
       />
       <EvaluationDashboard />
     </div>

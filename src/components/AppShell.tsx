@@ -5,7 +5,7 @@ const navItems = [
   { href: "/", label: "首页" },
   { href: "/chat", label: "聊天工作台" },
   { href: "/knowledge", label: "知识库" },
-  { href: "/tools", label: "工具中心" },
+  { href: "/tools", label: "业务工具" },
   { href: "/scenarios", label: "场景模板" },
   { href: "/evaluation", label: "评测面板" },
   { href: "/about", label: "项目说明" },

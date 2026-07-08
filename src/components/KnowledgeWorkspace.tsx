@@ -55,7 +55,7 @@ const ui = {
   enabled: "参与检索",
   disabled: "已禁用",
   emptyDocs: "\u6ca1\u6709\u5339\u914d\u7684\u6587\u6863\u3002\u53ef\u4ee5\u8c03\u6574\u641c\u7d22\u6761\u4ef6\uff0c\u6216\u5bfc\u5165\u81ea\u5df1\u7684\u4e1a\u52a1\u6587\u6863\u3002",
-  docDetail: "Document Detail",
+  docDetail: "文档详情",
   noDocument: "\u672a\u9009\u62e9\u6587\u6863",
   category: "\u5206\u7c7b\uff1a",
   updatedAt: "\u66f4\u65b0\u65f6\u95f4\uff1a",
@@ -67,6 +67,22 @@ const ui = {
   ragStatus: "RAG 状态：",
   suggestedQuestions: "建议测试问题",
   qualityDiagnosis: "知识库质量诊断",
+  qualityGood: "当前文档质量良好，可直接参与 RAG 检索。",
+  qualityIssues: "待优化项",
+  testInChat: "测试这个问题",
+  canAnswer: "可回答问题",
+  ragIncluded: "参与 RAG",
+  ragExcluded: "不参与 RAG",
+  ragParticipation: "RAG 参与状态",
+  qualityPreview: "质量提示",
+  noQualityIssues: "暂无明显质量问题",
+  documentSummary: "文档摘要",
+  qualityOverview: "质量诊断概览",
+  qualityOverviewDesc: "以下提示用于帮助补齐可检索内容，不会阻止文档参与 RAG。",
+  docTooShort: "正文偏短，建议补充适用范围、流程、边界和例外情况。",
+  fewChunks: "chunks 数偏少，检索覆盖面有限，建议补充更多业务细节。",
+  missingTags: "标签不足，建议补充 3-8 个业务关键词，提升检索命中率。",
+  missingSummary: "缺少摘要，建议补充一句话说明文档用途。",
   neverImported: "暂无用户导入",
   noUserDocs: "暂无用户文档",
   disabledNote: "该文档已禁用，不会参与 /chat 的 RAG 检索；你可以随时重新启用。",
@@ -123,6 +139,19 @@ function suggestedQuestions(document: KnowledgeDocument) {
 
 function isDocumentEnabled(document: KnowledgeDocument) {
   return document.sourceType === "default" || document.enabled !== false;
+}
+
+function chatQuestionHref(question: string) {
+  return `/chat?question=${encodeURIComponent(question)}`;
+}
+
+function documentQualityIssues(document: KnowledgeDocument, chunkCount: number) {
+  const issues: string[] = [];
+  if (document.content.trim().length < 160) issues.push(ui.docTooShort);
+  if (chunkCount < 2) issues.push(ui.fewChunks);
+  if ((document.tags ?? []).length < 2) issues.push(ui.missingTags);
+  if (!document.summary?.trim()) issues.push(ui.missingSummary);
+  return issues;
 }
 
 export function KnowledgeWorkspace() {
@@ -186,6 +215,12 @@ export function KnowledgeWorkspace() {
   const selectedDocument = allDocuments.find((document) => document.id === selectedDocumentId) ?? filteredDocuments[0] ?? allDocuments[0];
   const chunks = selectedDocument ? splitDocument(selectedDocument) : [];
   const isSelectedUserDocument = Boolean(selectedDocument && selectedDocument.sourceType !== "default");
+  const selectedSuggestedQuestions = selectedDocument ? suggestedQuestions(selectedDocument) : [];
+  const selectedQualityIssues = selectedDocument ? documentQualityIssues(selectedDocument, chunks.length) : [];
+  const libraryQualityIssues = enabledDocuments
+    .map((document) => ({ document, issues: documentQualityIssues(document, splitDocument(document).length) }))
+    .filter((item) => item.issues.length > 0)
+    .slice(0, 6);
 
   function handleAdd(document: ImportedKnowledgeDocument) {
     const nextDocuments = [document, ...userDocuments.filter((item) => item.id !== document.id)];
@@ -249,20 +284,195 @@ export function KnowledgeWorkspace() {
           {notice ? <p className="mt-3 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{notice}</p> : null}
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h3 className="font-semibold text-ink-900">{ui.builtinSection}</h3><p className="mt-1 text-sm text-ink-500">{ui.builtinDesc}</p></div><div className="grid gap-3 md:grid-cols-2">{enterpriseKnowledgePacks.map((pack) => (<article key={pack.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold text-ink-900">{pack.title}</h4><span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-500 ring-1 ring-slate-200">{ui.readonly}</span></div><p className="mt-2 text-sm leading-6 text-ink-600">{categoryIntro(pack.packId)}</p><p className="mt-2 text-xs text-ink-500">{pack.documents.length} {ui.docUnit} · {pack.suitableQuestions.slice(0, 2).join(" / ")}</p></article>))}</div></div>
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4"><h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p></div><DocumentForm onAdd={handleAdd} /></div>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-4"><h3 className="font-semibold text-ink-900">{ui.docList}</h3><p className="mt-1 text-sm text-ink-500">{ui.currentFilterPrefix}{filteredDocuments.length}{ui.currentFilterSuffix}</p></div>{filteredDocuments.map((document) => {
-          const documentChunks = splitDocument(document);
-          const enabled = isDocumentEnabled(document);
-          return (
-            <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0"><div className="flex flex-wrap items-start justify-between gap-3"><button type="button" onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center gap-2"><h4 className="break-words font-semibold text-ink-900">{document.title}</h4><span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span><span className={enabled ? "rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-ink-500 ring-1 ring-slate-200"}>{enabled ? ui.enabled : ui.disabled}</span>{document.sourceType === "default" ? <span className="rounded bg-slate-50 px-2 py-0.5 text-xs text-ink-500 ring-1 ring-slate-200">{ui.readonlyShort}</span> : null}</div><p className="mt-1 break-words text-sm text-ink-500">{document.summary ?? document.content.slice(0, 90)}</p><p className="mt-2 text-xs text-ink-400">{document.category} · {document.updatedAt} · {documentChunks.length} chunks · {(document.tags ?? []).join(" / ") || ui.noTags}</p></button>{document.sourceType !== "default" ? <div className="flex shrink-0 flex-wrap gap-2"><button type="button" onClick={() => handleToggleEnabled(document.id)} className="rounded-md border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50">{enabled ? ui.disable : ui.enable}</button><button type="button" onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.delete}</button></div> : null}</div></article>
-          );
-        })}{filteredDocuments.length === 0 ? <p className="p-5 text-sm text-ink-500">{ui.emptyDocs}</p> : null}</div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h3 className="font-semibold text-ink-900">{ui.builtinSection}</h3>
+            <p className="mt-1 text-sm text-ink-500">{ui.builtinDesc}</p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {enterpriseKnowledgePacks.map((pack) => {
+              const packChunks = pack.documents.reduce((sum, document) => sum + splitDocument(document).length, 0);
+              return (
+                <article key={pack.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="font-semibold text-ink-900">{pack.title}</h4>
+                    <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-500 ring-1 ring-slate-200">{ui.readonly}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-ink-600">{categoryIntro(pack.packId)}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-500">
+                    <span>{pack.documents.length} {ui.docUnit}</span>
+                    <span>{packChunks} chunks</span>
+                    <span>{ui.ragIncluded}</span>
+                  </div>
+                  <div className="mt-3 rounded-md bg-white p-3 ring-1 ring-slate-200">
+                    <p className="text-xs font-semibold text-ink-700">{ui.canAnswer}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {pack.suitableQuestions.slice(0, 3).map((question) => (
+                        <a key={question} href={chatQuestionHref(question)} className="rounded-md border border-brand-100 bg-brand-50 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100">{question}</a>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3>
+            <p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p>
+          </div>
+          <DocumentForm onAdd={handleAdd} />
+        </div>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-4">
+            <h3 className="font-semibold text-ink-900">{ui.docList}</h3>
+            <p className="mt-1 text-sm text-ink-500">{ui.currentFilterPrefix}{filteredDocuments.length}{ui.currentFilterSuffix}</p>
+          </div>
+          {filteredDocuments.map((document) => {
+            const documentChunks = splitDocument(document);
+            const enabled = isDocumentEnabled(document);
+            const qualityIssues = documentQualityIssues(document, documentChunks.length);
+            const questions = suggestedQuestions(document);
+            return (
+              <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <button type="button" onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="break-words font-semibold text-ink-900">{document.title}</h4>
+                      <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span>
+                      <span className={enabled ? "rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-ink-500 ring-1 ring-slate-200"}>{enabled ? ui.enabled : ui.disabled}</span>
+                      {document.sourceType === "default" ? <span className="rounded bg-slate-50 px-2 py-0.5 text-xs text-ink-500 ring-1 ring-slate-200">{ui.readonlyShort}</span> : null}
+                    </div>
+                    <p className="mt-2 break-words text-sm leading-6 text-ink-600">{document.summary ?? document.content.slice(0, 110)}</p>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-500">
+                      <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{document.category}</span>
+                      <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{documentChunks.length} chunks</span>
+                      <span className={enabled ? "rounded bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-100"}>{enabled ? ui.ragIncluded : ui.ragExcluded}</span>
+                      <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{document.updatedAt}</span>
+                    </div>
+                  </button>
+                  {document.sourceType !== "default" ? (
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      <button type="button" onClick={() => handleToggleEnabled(document.id)} className="rounded-md border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50">{enabled ? ui.disable : ui.enable}</button>
+                      <button type="button" onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.delete}</button>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(document.tags ?? []).length ? (document.tags ?? []).slice(0, 6).map((tag) => (
+                    <span key={tag} className="rounded bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">{tag}</span>
+                  )) : <span className="rounded bg-slate-50 px-2 py-1 text-xs text-ink-500 ring-1 ring-slate-200">{ui.noTags}</span>}
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.65fr)]">
+                  <div className="rounded-md bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-ink-700">{ui.canAnswer}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {questions.slice(0, 2).map((question) => (
+                        <a key={question} href={chatQuestionHref(question)} className="rounded-md border border-brand-100 bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50">{question}</a>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-ink-700">{ui.qualityPreview}</p>
+                    <p className="mt-1 text-xs leading-5 text-ink-500">{qualityIssues[0] ?? ui.noQualityIssues}</p>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          {filteredDocuments.length === 0 ? <p className="p-5 text-sm text-ink-500">{ui.emptyDocs}</p> : null}
+        </div>
       </section>
 
       <aside className="space-y-5 min-w-0">
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">{ui.docDetail}</p><h3 className="mt-1 break-words font-semibold text-ink-900">{selectedDocument?.title ?? ui.noDocument}</h3></div>{selectedDocument ? <span className={"rounded px-2 py-1 text-xs font-semibold ring-1 " + sourceBadgeClass(selectedDocument.sourceType)}>{sourceTypeLabel(selectedDocument.sourceType)}</span> : null}</div>{selectedDocument ? (<div className="mt-4 space-y-3 text-sm leading-6 text-ink-600"><p className="break-words">{selectedDocument.summary ?? selectedDocument.content.slice(0, 180)}</p><div className="grid gap-2 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2"><p><span className="text-ink-400">{ui.category}</span>{selectedDocument.category}</p><p><span className="text-ink-400">{ui.updatedAt}</span>{selectedDocument.updatedAt}</p><p><span className="text-ink-400">{ui.chunks}</span>{chunks.length}</p><p><span className="text-ink-400">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p><p><span className="text-ink-400">{ui.ragStatus}</span>{isDocumentEnabled(selectedDocument) ? ui.enabled : ui.disabled}</p><p><span className="text-ink-400">可删除：</span>{isSelectedUserDocument ? "是" : "否"}</p><p className="sm:col-span-2 break-words"><span className="text-ink-400">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p></div>{!isDocumentEnabled(selectedDocument) ? <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">{ui.disabledNote}</p> : null}<div className="rounded-md bg-brand-50 p-3"><p className="text-xs font-semibold text-brand-700">{ui.suggestedQuestions}</p><div className="mt-2 space-y-1">{suggestedQuestions(selectedDocument).map((item) => <p key={item} className="break-words text-xs text-brand-700">· {item}</p>)}</div></div>{isSelectedUserDocument ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => handleToggleEnabled(selectedDocument.id)} className="rounded-md border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50">{isDocumentEnabled(selectedDocument) ? ui.disable : ui.enable}</button><button type="button" onClick={() => handleDelete(selectedDocument.id)} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.deleteThisDoc}</button></div> : <p className="rounded-md bg-slate-50 p-3 text-xs text-ink-500">{ui.readonlyNote}</p>}</div>) : null}</section>
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{ui.qualityDiagnosis}</h3><div className="mt-3 grid gap-2 text-sm text-ink-600 sm:grid-cols-2"><p>文档总数：{allDocuments.length}</p><p>用户上传文档：{userDocuments.length}</p><p>启用文档：{enabledDocuments.length}</p><p>禁用用户文档：{disabledUserCount}</p><p>chunk 总数：{defaultChunkCount + userChunkCount}</p><p>参与检索 chunks：{activeChunkCount}</p><p>fallback 次数：{usageDiagnostics.fallbackCount}</p><p>无召回 / 低置信问题数：{usageDiagnostics.noRecallCount}</p><p className="sm:col-span-2">最近导入：{lastImportedAt ? new Date(lastImportedAt).toLocaleString() : ui.noUserDocs}</p></div><div className="mt-4 space-y-3 text-sm leading-6 text-ink-600"><div><p className="font-semibold text-ink-900">被引用最多的文档</p>{usageDiagnostics.mostCited.length ? usageDiagnostics.mostCited.map(([id, item]) => <p key={id} className="break-words">· {item.title}：{item.count} 次</p>) : <p className="text-ink-500">暂无引用记录</p>}</div><div><p className="font-semibold text-ink-900">从未被引用的启用文档</p>{usageDiagnostics.neverCited.length ? usageDiagnostics.neverCited.map((document) => <p key={document.id} className="break-words">· {document.title}</p>) : <p className="text-ink-500">暂无</p>}</div></div><p className="mt-3 text-xs leading-5 text-ink-500">诊断数据基于当前浏览器 localStorage 中的 Chat 运行历史和反馈记录，当前版本不接服务端数据库。</p></section>
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">{ui.docDetail}</p>
+              <h3 className="mt-1 break-words font-semibold text-ink-900">{selectedDocument?.title ?? ui.noDocument}</h3>
+            </div>
+            {selectedDocument ? <span className={"rounded px-2 py-1 text-xs font-semibold ring-1 " + sourceBadgeClass(selectedDocument.sourceType)}>{sourceTypeLabel(selectedDocument.sourceType)}</span> : null}
+          </div>
+          {selectedDocument ? (
+            <div className="mt-4 space-y-4 text-sm leading-6 text-ink-600">
+              <div className="rounded-md bg-slate-50 p-3">
+                <p className="text-xs font-semibold text-ink-700">{ui.documentSummary}</p>
+                <p className="mt-1 break-words">{selectedDocument.summary ?? selectedDocument.content.slice(0, 180)}</p>
+              </div>
+              <div className="grid gap-2 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2">
+                <p><span className="text-ink-400">{ui.category}</span>{selectedDocument.category}</p>
+                <p><span className="text-ink-400">{ui.updatedAt}</span>{selectedDocument.updatedAt}</p>
+                <p><span className="text-ink-400">{ui.chunks}</span>{chunks.length}</p>
+                <p><span className="text-ink-400">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p>
+                <p><span className="text-ink-400">{ui.ragStatus}</span>{isDocumentEnabled(selectedDocument) ? ui.enabled : ui.disabled}</p>
+                <p><span className="text-ink-400">可删除：</span>{isSelectedUserDocument ? "是" : "否"}</p>
+                <p className="sm:col-span-2 break-words"><span className="text-ink-400">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p>
+              </div>
+              {!isDocumentEnabled(selectedDocument) ? <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">{ui.disabledNote}</p> : null}
+              <div className="rounded-md bg-brand-50 p-3">
+                <p className="text-xs font-semibold text-brand-700">{ui.suggestedQuestions}</p>
+                <div className="mt-2 space-y-2">
+                  {selectedSuggestedQuestions.map((item) => (
+                    <div key={item} className="rounded-md bg-white p-2 ring-1 ring-brand-100">
+                      <p className="break-words text-xs text-brand-800">{item}</p>
+                      <a href={chatQuestionHref(item)} className="mt-1 inline-flex rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">{ui.testInChat}</a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className={selectedQualityIssues.length ? "rounded-md bg-amber-50 p-3 text-xs text-amber-800" : "rounded-md bg-emerald-50 p-3 text-xs text-emerald-800"}>
+                <p className="font-semibold">{selectedQualityIssues.length ? ui.qualityIssues : ui.qualityGood}</p>
+                {selectedQualityIssues.length ? (
+                  <ul className="mt-2 space-y-1">
+                    {selectedQualityIssues.map((issue) => <li key={issue} className="break-words">· {issue}</li>)}
+                  </ul>
+                ) : null}
+              </div>
+              {isSelectedUserDocument ? (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => handleToggleEnabled(selectedDocument.id)} className="rounded-md border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50">{isDocumentEnabled(selectedDocument) ? ui.disable : ui.enable}</button>
+                  <button type="button" onClick={() => handleDelete(selectedDocument.id)} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.deleteThisDoc}</button>
+                </div>
+              ) : <p className="rounded-md bg-slate-50 p-3 text-xs text-ink-500">{ui.readonlyNote}</p>}
+            </div>
+          ) : null}
+        </section>
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="font-semibold text-ink-900">{ui.qualityDiagnosis}</h3>
+          <p className="mt-1 text-sm text-ink-500">{ui.qualityOverviewDesc}</p>
+          <div className="mt-3 grid gap-2 text-sm text-ink-600 sm:grid-cols-2">
+            <p>文档总数：{allDocuments.length}</p>
+            <p>用户上传文档：{userDocuments.length}</p>
+            <p>启用文档：{enabledDocuments.length}</p>
+            <p>禁用用户文档：{disabledUserCount}</p>
+            <p>chunk 总数：{defaultChunkCount + userChunkCount}</p>
+            <p>参与检索 chunks：{activeChunkCount}</p>
+            <p>fallback 次数：{usageDiagnostics.fallbackCount}</p>
+            <p>无召回 / 低置信问题数：{usageDiagnostics.noRecallCount}</p>
+            <p className="sm:col-span-2">最近导入：{lastImportedAt ? new Date(lastImportedAt).toLocaleString() : ui.noUserDocs}</p>
+          </div>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-ink-600">
+            <div>
+              <p className="font-semibold text-ink-900">被引用最多的文档</p>
+              {usageDiagnostics.mostCited.length ? usageDiagnostics.mostCited.map(([id, item]) => <p key={id} className="break-words">· {item.title}：{item.count} 次</p>) : <p className="text-ink-500">暂无引用记录</p>}
+            </div>
+            <div>
+              <p className="font-semibold text-ink-900">从未被引用的启用文档</p>
+              {usageDiagnostics.neverCited.length ? usageDiagnostics.neverCited.map((document) => <p key={document.id} className="break-words">· {document.title}</p>) : <p className="text-ink-500">暂无</p>}
+            </div>
+            <div>
+              <p className="font-semibold text-ink-900">{ui.qualityOverview}</p>
+              {libraryQualityIssues.length ? libraryQualityIssues.map((item) => (
+                <div key={item.document.id} className="mt-2 rounded-md bg-amber-50 p-2 text-xs text-amber-800">
+                  <p className="break-words font-semibold">{item.document.title}</p>
+                  <p className="mt-1 break-words">{item.issues.slice(0, 2).join(" / ")}</p>
+                </div>
+              )) : <p className="text-ink-500">{ui.noQualityIssues}</p>}
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-ink-500">诊断数据基于当前浏览器 localStorage 中的 Chat 运行历史和反馈记录，当前版本不接服务端数据库。</p>
+        </section>
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{ui.chunksTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.chunksDesc}</p><ChunkList chunks={chunks} /></section><MockJsonPanel title={ui.citationExample} data={chunks.slice(0, 4).map((chunk) => ({ documentId: chunk.documentId, packId: chunk.packId, sourceTitle: chunk.sourceTitle, sourceType: chunk.sourceType, category: chunk.category, tags: chunk.tags, chunkIndex: chunk.chunkIndex, keywords: chunk.keywords.slice(0, 8) }))} />
       </aside>
     </div>
