@@ -217,7 +217,18 @@ export function AgentWorkspace() {
       const userDocuments = readUserKnowledgeDocuments();
       const enabledUserDocuments = userDocuments.filter((document) => document.enabled !== false);
       const response = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, mode, userDocuments: enabledUserDocuments }) });
-      if (!response.ok) throw new Error("API request failed: " + response.status);
+      if (!response.ok) {
+        let errorPayload: { errorType?: string; error?: string; message?: string } = {};
+        try {
+          errorPayload = (await response.json()) as typeof errorPayload;
+        } catch {
+          errorPayload = {};
+        }
+        if (response.status === 429 || errorPayload.errorType === "rate_limited" || errorPayload.error === "rate_limited") {
+          throw new Error(errorPayload.message || "请求过于频繁，请稍后再试。");
+        }
+        throw new Error(errorPayload.message || "API request failed: " + response.status);
+      }
       setResult((await response.json()) as AgentApiResponse);
       setFeedbackValues([]);
       setFeedbackReason("");

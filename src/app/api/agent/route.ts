@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { asAgentMode, asAgentQuestion, runAgentApiPipeline } from "@/lib/agent/api";
 import { sanitizeImportedKnowledgeDocument } from "@/lib/knowledge/storage";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
-import { recordAgentRun } from "@/lib/ops/storage";
+import { recordAgentError, recordAgentRun } from "@/lib/ops/storage";
 
 export const runtime = "nodejs";
 
@@ -26,10 +26,19 @@ export async function POST(request: Request) {
   if (requestedMode === "real") {
     const rateLimit = checkRealApiRateLimit(getClientIp(request));
     if (!rateLimit.allowed) {
+      await recordAgentError({
+        question,
+        requestedMode,
+        responseMode: "real_error_fallback",
+        errorType: "rate_limited",
+        httpStatus: 429,
+      });
       return NextResponse.json(
         {
           error: "rate_limited",
-          message: "Real API 请求过于频繁，请稍后再试；你仍可以切换到开发模拟模式进行离线验证。",
+          errorType: "rate_limited",
+          responseMode: "real_error_fallback",
+          message: "请求过于频繁，请稍后再试。你仍可以切换到开发模拟模式进行离线验证。",
           limit: rateLimit.limit,
           resetAt: new Date(rateLimit.resetAt).toISOString(),
         },

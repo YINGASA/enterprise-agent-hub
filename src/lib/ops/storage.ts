@@ -1,8 +1,9 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AgentApiResponse, ChatAnswerFeedbackValue, EvaluationRunResponse } from "@/types";
 
 const MAX_RECENT_ITEMS = 80;
+const DEFAULT_MAX_STORED_ITEMS = 200;
 
 export type OpsAgentRunRecord = {
   id: string;
@@ -60,7 +61,7 @@ export type OpsSummary = {
   latestFullMockEvaluation?: OpsEvaluationRecord;
   storage: {
     enabled: boolean;
-    directory: string;
+    retentionLimit: number;
   };
 };
 
@@ -76,6 +77,11 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function maxStoredItems() {
+  const raw = Number(process.env["EAH_OPS_MAX_RECORDS"] ?? DEFAULT_MAX_STORED_ITEMS);
+  return Number.isFinite(raw) && raw >= 20 ? Math.floor(raw) : DEFAULT_MAX_STORED_ITEMS;
+}
+
 function preview(value: string | undefined, maxLength: number) {
   const safe = (value ?? "").replace(/\s+/g, " ").trim();
   return safe.length > maxLength ? `${safe.slice(0, maxLength - 1)}...` : safe;
@@ -85,10 +91,22 @@ function isFallback(responseMode: string, intent?: string) {
   return responseMode === "fallback" || responseMode === "real_text_fallback" || responseMode === "real_error_fallback" || intent === "general_chat";
 }
 
+async function trimJsonLines(fileName: string, limit = maxStoredItems()) {
+  try {
+    const raw = await readFile(filePath(fileName), "utf8");
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    if (lines.length <= limit) return;
+    await writeFile(filePath(fileName), `${lines.slice(-limit).join("\n")}\n`, "utf8");
+  } catch {
+    // Ops retention is best-effort and must not break user-facing flows.
+  }
+}
+
 async function appendJsonLine(fileName: string, item: unknown) {
   try {
     await mkdir(dataDir(), { recursive: true });
     await appendFile(filePath(fileName), JSON.stringify(item) + "\n", "utf8");
+    await trimJsonLines(fileName);
   } catch {
     // Ops persistence should never break user-facing Agent flows.
   }
@@ -112,7 +130,7 @@ export async function recordAgentRun(result: AgentApiResponse) {
   const item: OpsAgentRunRecord = {
     id: makeId("run"),
     createdAt: new Date().toISOString(),
-    questionPreview: preview(result.question, 180),
+    questionPreview: preview(result.question, 96),
     responseMode: result.api.responseMode,
     requestedMode: result.api.requestedMode,
     scenario: result.route.scenario,
@@ -124,6 +142,30 @@ export async function recordAgentRun(result: AgentApiResponse) {
     httpStatus: result.api.httpStatus,
     durationMs: result.api.llmDurationMs,
     fallback: isFallback(result.api.responseMode, result.route.intent),
+  };
+  await appendJsonLine("agent-runs.jsonl", item);
+}
+
+export async function recordAgentError(input: {
+  question?: string;
+  requestedMode: string;
+  responseMode: string;
+  errorType: string;
+  httpStatus?: number;
+}) {
+  const item: OpsAgentRunRecord = {
+    id: makeId("run"),
+    createdAt: new Date().toISOString(),
+    questionPreview: preview(input.question, 96),
+    responseMode: input.responseMode,
+    requestedMode: input.requestedMode,
+    scenario: "unknown",
+    intent: "unknown",
+    toolsUsed: [],
+    sourcesCount: 0,
+    errorType: input.errorType,
+    httpStatus: input.httpStatus,
+    fallback: input.responseMode === "real_error_fallback" || input.errorType === "rate_limited",
   };
   await appendJsonLine("agent-runs.jsonl", item);
 }
@@ -140,7 +182,7 @@ export async function recordChatFeedback(input: {
   const item: OpsFeedbackRecord = {
     id: makeId("feedback"),
     createdAt: new Date().toISOString(),
-    questionPreview: preview(input.question, 180),
+    questionPreview: preview(input.question, 96),
     values: input.values.slice(0, 4),
     reasonPreview: input.reason ? preview(input.reason, 220) : undefined,
     responseMode: input.responseMode,
@@ -202,7 +244,7 @@ export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary>
     latestFullMockEvaluation: evaluations[0],
     storage: {
       enabled: true,
-      directory: dataDir(),
+      retentionLimit: maxStoredItems(),
     },
   };
 }

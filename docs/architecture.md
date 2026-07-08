@@ -174,6 +174,17 @@ The persistence layer is deliberately compact and safe. It does not store API ke
 `/ops` provides a lightweight operations dashboard protected by `EAH_OPS_TOKEN`. It shows LLM configured status, recent Agent run counts, Real / Mock / fallback ratios, recent error summaries, recent feedback, and the latest full Mock evaluation result. `/api/llm/status` remains safe and only returns `{ configured: boolean }`.
 
 Real API requests now pass through a small in-memory per-IP rate limiter. The default limit is 12 real requests per minute and can be adjusted with `EAH_REAL_API_RATE_LIMIT_PER_MINUTE`. Mock and evaluation flows are not rate-limited by this guard.
+
+### V1.10.1 Ops Security Notes
+
+V1.10.1 tightens the operations foundation for safer online use:
+
+- `EAH_OPS_TOKEN` protects `/ops` and `/api/ops/summary`. The token is typed in the page and sent only through the `x-ops-token` request header, not through the URL.
+- `EAH_REAL_API_RATE_LIMIT_PER_MINUTE` controls the Real API per-IP request limit. The default is 12 real requests per minute. Mock mode and full Mock evaluation are not affected.
+- `EAH_OPS_MAX_RECORDS` controls the maximum retained JSONL records per ops category. The default is 200, and old records are trimmed automatically.
+- `.runtime-data/` is ignored by git. Production can also set `EAH_OPS_DATA_DIR` to place runtime JSONL files outside the repo.
+- Ops summaries never return API keys, provider, model, baseUrl, full prompts, full answers, full user documents, raw LLM payloads, or stack traces.
+- Rate limited Real API requests return `errorType: "rate_limited"` with HTTP 429 so the UI can show a clear “请求过于频繁，请稍后再试” message instead of treating it as a model failure.
 ## V1.6 Chat Run History
 
 The Chat Workspace now has a frontend-only run-history layer. After an Agent Pipeline run, the user can save the result snapshot into browser localStorage. Each snapshot keeps the question, final answer, response mode, route, retriever metadata, RAG sources, tool calls, structured output, and API metadata.
