@@ -4,6 +4,9 @@ import type { AgentApiResponse, ChatAnswerFeedbackValue, EvaluationRunResponse }
 
 const MAX_RECENT_ITEMS = 80;
 const DEFAULT_MAX_STORED_ITEMS = 200;
+const MAX_SAFE_RECENT_RUNS = 12;
+const MAX_SAFE_RECENT_ERRORS = 8;
+const MAX_SAFE_NEGATIVE_FEEDBACK = 6;
 
 export type OpsAgentRunRecord = {
   id: string;
@@ -45,6 +48,29 @@ export type OpsEvaluationRecord = {
   durationMs: number;
 };
 
+export type OpsDistributionItem = {
+  key: string;
+  count: number;
+  rate: number;
+};
+
+export type OpsFeedbackModePerformance = {
+  responseMode: string;
+  total: number;
+  helpfulRate: number;
+  citationAccuracyRate: number;
+};
+
+export type OpsSafeRunSummary = Pick<
+  OpsAgentRunRecord,
+  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus"
+>;
+
+export type OpsSafeFeedbackSummary = Pick<
+  OpsFeedbackRecord,
+  "id" | "createdAt" | "questionPreview" | "values" | "reasonPreview" | "responseMode"
+>;
+
 export type OpsSummary = {
   generatedAt: string;
   llmConfigured: boolean;
@@ -55,9 +81,24 @@ export type OpsSummary = {
   realRate: number;
   mockRate: number;
   fallbackRate: number;
-  recentErrors: Array<Pick<OpsAgentRunRecord, "createdAt" | "responseMode" | "errorType" | "httpStatus" | "questionPreview">>;
-  recentRuns: OpsAgentRunRecord[];
-  recentFeedback: OpsFeedbackRecord[];
+  rateLimitedCount: number;
+  responseModeDistribution: OpsDistributionItem[];
+  errorTypeDistribution: OpsDistributionItem[];
+  scenarioDistribution: OpsDistributionItem[];
+  intentDistribution: OpsDistributionItem[];
+  toolDistribution: OpsDistributionItem[];
+  recentErrors: OpsSafeRunSummary[];
+  recentRuns: OpsSafeRunSummary[];
+  feedback: {
+    total: number;
+    helpfulCount: number;
+    helpfulRate: number;
+    citationRatedCount: number;
+    accurateCount: number;
+    citationAccuracyRate: number;
+    responseModePerformance: OpsFeedbackModePerformance[];
+    recentNegative: OpsSafeFeedbackSummary[];
+  };
   latestFullMockEvaluation?: OpsEvaluationRecord;
   storage: {
     enabled: boolean;
@@ -85,6 +126,48 @@ function maxStoredItems() {
 function preview(value: string | undefined, maxLength: number) {
   const safe = (value ?? "").replace(/\s+/g, " ").trim();
   return safe.length > maxLength ? `${safe.slice(0, maxLength - 1)}...` : safe;
+}
+
+function percentage(count: number, total: number) {
+  return total ? Math.round((count / total) * 100) : 0;
+}
+
+function distribution(values: string[], total = values.length): OpsDistributionItem[] {
+  const counts = values.reduce<Record<string, number>>((result, value) => {
+    const key = value || "unknown";
+    result[key] = (result[key] ?? 0) + 1;
+    return result;
+  }, {});
+
+  return Object.entries(counts)
+    .map(([key, count]) => ({ key, count, rate: percentage(count, total) }))
+    .sort((left, right) => right.count - left.count || left.key.localeCompare(right.key));
+}
+
+function safeRunSummary(item: OpsAgentRunRecord): OpsSafeRunSummary {
+  return {
+    id: item.id,
+    createdAt: item.createdAt,
+    questionPreview: preview(item.questionPreview, 72),
+    responseMode: item.responseMode,
+    scenario: item.scenario,
+    intent: item.intent,
+    toolsUsed: item.toolsUsed.slice(0, 8),
+    sourcesCount: item.sourcesCount,
+    errorType: item.errorType,
+    httpStatus: item.httpStatus,
+  };
+}
+
+function safeFeedbackSummary(item: OpsFeedbackRecord): OpsSafeFeedbackSummary {
+  return {
+    id: item.id,
+    createdAt: item.createdAt,
+    questionPreview: preview(item.questionPreview, 72),
+    values: item.values.slice(0, 4),
+    reasonPreview: item.reasonPreview ? preview(item.reasonPreview, 140) : undefined,
+    responseMode: item.responseMode,
+  };
 }
 
 function isFallback(responseMode: string, intent?: string) {
@@ -210,14 +293,28 @@ export async function recordEvaluationRun(result: EvaluationRunResponse) {
 
 export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary> {
   const runs = await readJsonLines<OpsAgentRunRecord>("agent-runs.jsonl", 200);
-  const feedback = await readJsonLines<OpsFeedbackRecord>("feedback.jsonl", 30);
+  const feedback = await readJsonLines<OpsFeedbackRecord>("feedback.jsonl", 200);
   const evaluations = await readJsonLines<OpsEvaluationRecord>("evaluations.jsonl", 20);
   const recentRuns = runs.slice(0, MAX_RECENT_ITEMS);
   const total = recentRuns.length;
   const realCount = recentRuns.filter((item) => item.responseMode === "real" || item.responseMode === "real_repaired").length;
   const mockCount = recentRuns.filter((item) => item.responseMode === "mock").length;
   const fallbackCount = recentRuns.filter((item) => item.fallback).length;
-  const rate = (count: number) => (total ? Math.round((count / total) * 100) : 0);
+  const rateLimitedCount = recentRuns.filter((item) => item.errorType === "rate_limited").length;
+  const helpfulCount = feedback.filter((item) => item.values.includes("positive")).length;
+  const citationRated = feedback.filter((item) => item.values.includes("accurate") || item.values.includes("inaccurate"));
+  const accurateCount = citationRated.filter((item) => item.values.includes("accurate")).length;
+  const feedbackModes = distribution(feedback.map((item) => item.responseMode));
+  const responseModePerformance = feedbackModes.map(({ key, count }) => {
+    const modeFeedback = feedback.filter((item) => item.responseMode === key);
+    const modeCitationRated = modeFeedback.filter((item) => item.values.includes("accurate") || item.values.includes("inaccurate"));
+    return {
+      responseMode: key,
+      total: count,
+      helpfulRate: percentage(modeFeedback.filter((item) => item.values.includes("positive")).length, count),
+      citationAccuracyRate: percentage(modeCitationRated.filter((item) => item.values.includes("accurate")).length, modeCitationRated.length),
+    };
+  });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -226,21 +323,33 @@ export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary>
     realCount,
     mockCount,
     fallbackCount,
-    realRate: rate(realCount),
-    mockRate: rate(mockCount),
-    fallbackRate: rate(fallbackCount),
+    realRate: percentage(realCount, total),
+    mockRate: percentage(mockCount, total),
+    fallbackRate: percentage(fallbackCount, total),
+    rateLimitedCount,
+    responseModeDistribution: distribution(recentRuns.map((item) => item.responseMode)),
+    errorTypeDistribution: distribution(recentRuns.filter((item) => item.errorType).map((item) => item.errorType ?? "unknown")),
+    scenarioDistribution: distribution(recentRuns.map((item) => item.scenario)),
+    intentDistribution: distribution(recentRuns.map((item) => item.intent)),
+    toolDistribution: distribution(recentRuns.flatMap((item) => item.toolsUsed)),
     recentErrors: recentRuns
       .filter((item) => item.errorType || item.responseMode === "real_error_fallback")
-      .slice(0, 10)
-      .map((item) => ({
-        createdAt: item.createdAt,
-        responseMode: item.responseMode,
-        errorType: item.errorType,
-        httpStatus: item.httpStatus,
-        questionPreview: item.questionPreview,
-      })),
-    recentRuns,
-    recentFeedback: feedback,
+      .slice(0, MAX_SAFE_RECENT_ERRORS)
+      .map(safeRunSummary),
+    recentRuns: recentRuns.slice(0, MAX_SAFE_RECENT_RUNS).map(safeRunSummary),
+    feedback: {
+      total: feedback.length,
+      helpfulCount,
+      helpfulRate: percentage(helpfulCount, feedback.length),
+      citationRatedCount: citationRated.length,
+      accurateCount,
+      citationAccuracyRate: percentage(accurateCount, citationRated.length),
+      responseModePerformance,
+      recentNegative: feedback
+        .filter((item) => item.values.includes("negative") || item.values.includes("inaccurate"))
+        .slice(0, MAX_SAFE_NEGATIVE_FEEDBACK)
+        .map(safeFeedbackSummary),
+    },
     latestFullMockEvaluation: evaluations[0],
     storage: {
       enabled: true,
