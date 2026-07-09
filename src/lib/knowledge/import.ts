@@ -11,6 +11,8 @@ type ImportInput = {
   content: string;
   sourceType: Extract<KnowledgeSourceType, "user_upload" | "user_paste">;
   originalFileName?: string;
+  suggestedQuestions?: string[];
+  enabled?: boolean;
 };
 
 function extensionOf(fileName: string) {
@@ -147,7 +149,8 @@ export function createImportedKnowledgeDocument(input: ImportInput): KnowledgeIm
     sourceType: input.sourceType,
     originalFileName: input.originalFileName,
     importedAt: now,
-    enabled: true,
+    enabled: input.enabled !== false,
+    suggestedQuestions: input.suggestedQuestions?.map((item) => item.trim()).filter(Boolean).slice(0, 5) ?? [],
   };
   return { ok: true, document };
 }

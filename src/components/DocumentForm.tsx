@@ -3,10 +3,12 @@
 import { useRef, useState } from "react";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { createImportedKnowledgeDocument, readKnowledgeFile, SUPPORTED_IMPORT_EXTENSIONS, titleFromMarkdown } from "@/lib/knowledge/import";
-import type { ImportedKnowledgeDocument, KnowledgeSourceType } from "@/types";
+import { findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
+import type { ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
 
 type DocumentFormProps = {
   onAdd: (document: ImportedKnowledgeDocument) => void;
+  existingDocuments: KnowledgeDocument[];
 };
 
 const categories = ["制度流程", "售后规则", "岗位说明", "AI 工程规范", "用户导入", "General"];
@@ -22,13 +24,16 @@ function titleFromFileName(fileName: string) {
   return fileName.replace(/\.[^.]+$/, "");
 }
 
-export function DocumentForm({ onAdd }: DocumentFormProps) {
+export function DocumentForm({ onAdd, existingDocuments }: DocumentFormProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [title, setTitle] = useState("");
   const [packId, setPackId] = useState<string>(knowledgePacks[0]?.id ?? "enterprise-policy");
   const [category, setCategory] = useState(categories[0]);
   const [tags, setTags] = useState("");
   const [content, setContent] = useState("");
+  const [suggestedQuestions, setSuggestedQuestions] = useState("");
+  const [sourceType, setSourceType] = useState<Extract<KnowledgeSourceType, "user_upload" | "user_paste">>("user_paste");
+  const [enabled, setEnabled] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -42,7 +47,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
 
     try {
       let parsedContent = content.trim();
-      let sourceType: Extract<KnowledgeSourceType, "user_upload" | "user_paste"> = "user_paste";
+      let resolvedSourceType = sourceType;
       let originalFileName: string | undefined;
       let resolvedTitle = title.trim();
 
@@ -53,7 +58,7 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
           return;
         }
         parsedContent = parsed.content;
-        sourceType = "user_upload";
+        resolvedSourceType = "user_upload";
         originalFileName = file.name;
         resolvedTitle = resolvedTitle || titleFromMarkdown(parsedContent) || titleFromFileName(file.name);
       }
@@ -64,8 +69,10 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         tags: parseTags(tags),
         packId,
         content: parsedContent,
-        sourceType,
+        sourceType: resolvedSourceType,
         originalFileName,
+        suggestedQuestions: suggestedQuestions.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+        enabled,
       });
 
       if (!result.ok) {
@@ -73,13 +80,21 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         return;
       }
 
+      const duplicates = findDuplicateKnowledgeDocuments(result.document, existingDocuments);
       onAdd(result.document);
-      setSuccess(`已成功导入：${result.document.title}`);
+      setSuccess(
+        duplicates.length
+          ? `已成功导入：${result.document.title}。检测到可能重复内容：${duplicates.map((item) => `${item.title}（${item.similarity}%）`).join("、")}，建议核对后决定是否保留。`
+          : `已成功导入：${result.document.title}`,
+      );
       setTitle("");
       setPackId(knowledgePacks[0]?.id ?? "enterprise-policy");
       setCategory(categories[0]);
       setTags("");
       setContent("");
+      setSuggestedQuestions("");
+      setSourceType("user_paste");
+      setEnabled(true);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
@@ -99,6 +114,24 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         <label className="block">
           <span className="text-sm font-medium text-ink-700">标题</span>
           <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="例如：公司笔记本电脑申请制度" />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-ink-700">来源类型</span>
+          <select
+            value={sourceType}
+            onChange={(event) => {
+              const nextType = event.target.value as Extract<KnowledgeSourceType, "user_upload" | "user_paste">;
+              setSourceType(nextType);
+              if (nextType === "user_paste") {
+                setFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }
+            }}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          >
+            <option value="user_paste">用户粘贴</option>
+            <option value="user_upload">本地文件</option>
+          </select>
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
@@ -120,17 +153,36 @@ export function DocumentForm({ onAdd }: DocumentFormProps) {
         </label>
         <label className="block">
           <span className="text-sm font-medium text-ink-700">粘贴文本导入</span>
-          <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={6} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="粘贴制度、SOP、FAQ、岗位 JD 或业务说明。若同时选择文件，将优先导入文件内容。" />
+          <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={6} disabled={sourceType === "user_upload"} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-100 disabled:text-ink-400" placeholder="粘贴制度、SOP、FAQ、岗位 JD 或业务说明。" />
         </label>
-        <label className="block rounded-md border border-dashed border-slate-300 bg-slate-50 p-3">
+        <label className={"block rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 " + (sourceType === "user_paste" ? "opacity-60" : "")}>
           <span className="text-sm font-medium text-ink-700">选择本地文件</span>
-          <input ref={fileInputRef} type="file" accept={SUPPORTED_IMPORT_EXTENSIONS.join(",")} onChange={(event) => {
+          <input ref={fileInputRef} type="file" disabled={sourceType === "user_paste"} accept={SUPPORTED_IMPORT_EXTENSIONS.join(",")} onChange={(event) => {
             const selected = event.target.files?.[0] ?? null;
             setFile(selected);
+            if (selected) setSourceType("user_upload");
             if (selected && !title.trim()) setTitle(titleFromFileName(selected.name));
-          }} className="mt-2 block w-full text-sm text-ink-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100" />
+          }} className="mt-2 block w-full text-sm text-ink-600 file:mr-3 file:rounded-md file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-100 disabled:cursor-not-allowed" />
           <p className="mt-2 text-xs text-ink-500">支持 .txt / .md / .json / .csv，单文件不超过 1MB。</p>
           {file ? <p className="mt-1 break-all text-xs text-ink-600">已选择：{file.name}</p> : null}
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-ink-700">建议测试问题</span>
+          <textarea
+            value={suggestedQuestions}
+            onChange={(event) => setSuggestedQuestions(event.target.value)}
+            rows={3}
+            className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            placeholder={"每行一个问题，例如：\n公司笔记本电脑申请适用于哪些人？\n申请审批通常需要多久？"}
+          />
+          <p className="mt-1 text-xs text-ink-500">最多保存 5 个，用于一键跳转聊天工作台验证 RAG。</p>
+        </label>
+        <label className="flex items-start gap-3 rounded-md bg-slate-50 p-3">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+          <span>
+            <span className="block text-sm font-medium text-ink-700">保存后启用参与 RAG</span>
+            <span className="mt-1 block text-xs leading-5 text-ink-500">关闭后文档仍会保存到本地知识库，但聊天工作台不会检索它。</span>
+          </span>
         </label>
         {error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p> : null}
         {success ? <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</p> : null}

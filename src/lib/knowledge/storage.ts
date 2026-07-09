@@ -43,6 +43,7 @@ export function sanitizeImportedKnowledgeDocument(value: unknown): ImportedKnowl
     originalFileName,
     importedAt,
     enabled: item.enabled !== false,
+    suggestedQuestions: asStringArray(item.suggestedQuestions).map((question) => question.trim()).filter(Boolean).slice(0, 5),
   };
 }
 

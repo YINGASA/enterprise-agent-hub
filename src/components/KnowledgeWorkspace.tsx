@@ -9,6 +9,7 @@ import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { loadChatFeedback } from "@/lib/chat/feedback";
 import { loadChatHistory } from "@/lib/chat/history";
+import { assessKnowledgeDocument, findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
 import { clearUserKnowledgeDocuments, readUserKnowledgeDocumentsWithStatus, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import { splitDocument } from "@/lib/rag";
 import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
@@ -128,6 +129,7 @@ function categoryIntro(packId: string) {
 }
 
 function suggestedQuestions(document: KnowledgeDocument) {
+  if (document.suggestedQuestions?.length) return document.suggestedQuestions;
   const tags = (document.tags ?? []).slice(0, 2).join("、");
   const subject = tags || document.title;
   return [
@@ -145,13 +147,14 @@ function chatQuestionHref(question: string) {
   return `/chat?question=${encodeURIComponent(question)}`;
 }
 
-function documentQualityIssues(document: KnowledgeDocument, chunkCount: number) {
-  const issues: string[] = [];
-  if (document.content.trim().length < 160) issues.push(ui.docTooShort);
-  if (chunkCount < 2) issues.push(ui.fewChunks);
-  if ((document.tags ?? []).length < 2) issues.push(ui.missingTags);
-  if (!document.summary?.trim()) issues.push(ui.missingSummary);
-  return issues;
+function documentQualityIssues(document: KnowledgeDocument) {
+  return assessKnowledgeDocument(document).issues;
+}
+
+function qualityBadgeClass(level: ReturnType<typeof assessKnowledgeDocument>["level"]) {
+  if (level === "excellent") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  if (level === "usable") return "bg-brand-50 text-brand-700 ring-brand-100";
+  return "bg-amber-50 text-amber-700 ring-amber-100";
 }
 
 export function KnowledgeWorkspace() {
@@ -216,13 +219,18 @@ export function KnowledgeWorkspace() {
   const chunks = selectedDocument ? splitDocument(selectedDocument) : [];
   const isSelectedUserDocument = Boolean(selectedDocument && selectedDocument.sourceType !== "default");
   const selectedSuggestedQuestions = selectedDocument ? suggestedQuestions(selectedDocument) : [];
-  const selectedQualityIssues = selectedDocument ? documentQualityIssues(selectedDocument, chunks.length) : [];
+  const selectedQualityIssues = selectedDocument ? documentQualityIssues(selectedDocument) : [];
+  const selectedQuality = selectedDocument ? assessKnowledgeDocument(selectedDocument) : null;
+  const selectedDuplicateMatches = selectedDocument
+    ? findDuplicateKnowledgeDocuments(selectedDocument, allDocuments.filter((document) => document.id !== selectedDocument.id))
+    : [];
   const libraryQualityIssues = enabledDocuments
-    .map((document) => ({ document, issues: documentQualityIssues(document, splitDocument(document).length) }))
+    .map((document) => ({ document, issues: documentQualityIssues(document) }))
     .filter((item) => item.issues.length > 0)
     .slice(0, 6);
 
   function handleAdd(document: ImportedKnowledgeDocument) {
+    const duplicates = findDuplicateKnowledgeDocuments(document, allDocuments);
     const nextDocuments = [document, ...userDocuments.filter((item) => item.id !== document.id)];
     const saved = writeUserKnowledgeDocuments(nextDocuments);
     const persistedDocuments = saved.ok ? saved.data : nextDocuments;
@@ -234,7 +242,7 @@ export function KnowledgeWorkspace() {
     setSelectedSourceType(document.sourceType);
     setNotice(
       saved.ok
-        ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，并加入 RAG 检索。`
+        ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，${document.enabled === false ? "当前未启用 RAG 检索" : "已加入 RAG 检索"}。${duplicates.length ? ` 检测到可能重复文档：${duplicates.map((item) => item.title).join("、")}。` : ""}`
         : `已导入到当前页面状态，但保存到 localStorage 失败：${saved.error}`,
     );
   }
@@ -322,7 +330,7 @@ export function KnowledgeWorkspace() {
             <h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3>
             <p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p>
           </div>
-          <DocumentForm onAdd={handleAdd} />
+          <DocumentForm onAdd={handleAdd} existingDocuments={allDocuments} />
         </div>
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
@@ -332,7 +340,8 @@ export function KnowledgeWorkspace() {
           {filteredDocuments.map((document) => {
             const documentChunks = splitDocument(document);
             const enabled = isDocumentEnabled(document);
-            const qualityIssues = documentQualityIssues(document, documentChunks.length);
+            const qualityIssues = documentQualityIssues(document);
+            const quality = assessKnowledgeDocument(document);
             const questions = suggestedQuestions(document);
             return (
               <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0">
@@ -342,6 +351,7 @@ export function KnowledgeWorkspace() {
                       <h4 className="break-words font-semibold text-ink-900">{document.title}</h4>
                       <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span>
                       <span className={enabled ? "rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-ink-500 ring-1 ring-slate-200"}>{enabled ? ui.enabled : ui.disabled}</span>
+                      <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + qualityBadgeClass(quality.level)}>质量 {quality.score} · {quality.label}</span>
                       {document.sourceType === "default" ? <span className="rounded bg-slate-50 px-2 py-0.5 text-xs text-ink-500 ring-1 ring-slate-200">{ui.readonlyShort}</span> : null}
                     </div>
                     <p className="mt-2 break-words text-sm leading-6 text-ink-600">{document.summary ?? document.content.slice(0, 110)}</p>
@@ -422,12 +432,36 @@ export function KnowledgeWorkspace() {
                 </div>
               </div>
               <div className={selectedQualityIssues.length ? "rounded-md bg-amber-50 p-3 text-xs text-amber-800" : "rounded-md bg-emerald-50 p-3 text-xs text-emerald-800"}>
-                <p className="font-semibold">{selectedQualityIssues.length ? ui.qualityIssues : ui.qualityGood}</p>
+                <p className="font-semibold">{selectedQuality ? `质量评分 ${selectedQuality.score}/100 · ${selectedQuality.label}` : ui.qualityDiagnosis}</p>
+                {selectedQuality ? (
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] sm:grid-cols-5">
+                    <span>内容 {selectedQuality.dimensions.content}/30</span>
+                    <span>标签 {selectedQuality.dimensions.tags}/20</span>
+                    <span>测试问题 {selectedQuality.dimensions.testQuestions}/20</span>
+                    <span>分块 {selectedQuality.dimensions.chunks}/20</span>
+                    <span>RAG {selectedQuality.dimensions.ragEnabled}/10</span>
+                  </div>
+                ) : null}
                 {selectedQualityIssues.length ? (
                   <ul className="mt-2 space-y-1">
                     {selectedQualityIssues.map((issue) => <li key={issue} className="break-words">· {issue}</li>)}
                   </ul>
                 ) : null}
+              </div>
+              {selectedDuplicateMatches.length ? (
+                <div className="rounded-md bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                  <p className="font-semibold">可能存在重复内容</p>
+                  {selectedDuplicateMatches.map((item) => (
+                    <p key={item.documentId} className="mt-1 break-words">· {item.title}：相似度 {item.similarity}%（{item.reasons.join("、")}）</p>
+                  ))}
+                  <p className="mt-2 text-amber-700">该提示不会阻止保存，请结合业务版本和适用范围判断是否保留。</p>
+                </div>
+              ) : null}
+              <div className="rounded-md border border-slate-200 p-3 text-xs leading-5 text-ink-600">
+                <p className="font-semibold text-ink-800">推荐测试路径</p>
+                <p className="mt-1">1. 确认文档已启用参与 RAG。</p>
+                <p>2. 点击上方“测试这个问题”，进入聊天工作台。</p>
+                <p>3. 检查回答来源是否命中当前文档，问题只会自动填入，不会自动运行。</p>
               </div>
               {isSelectedUserDocument ? (
                 <div className="flex flex-wrap gap-2">

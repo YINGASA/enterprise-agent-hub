@@ -52,6 +52,7 @@ export type KnowledgeDocument = {
   originalFileName?: string;
   importedAt?: string;
   enabled?: boolean;
+  suggestedQuestions?: string[];
 };
 
 export type KnowledgeSourceType = "default" | "user_upload" | "user_paste";
