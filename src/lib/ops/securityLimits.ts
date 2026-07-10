@@ -18,6 +18,12 @@ export const agentRequestLimits = {
   userDocumentTotalChars: 300_000,
 } as const;
 
+export const knowledgeStorageLimits = {
+  schemaVersion: 2,
+  backupVersion: 2,
+  ragTestHistoryLimit: 50,
+} as const;
+
 export const realApiLimits = {
   perMinute: positiveInteger(process.env["EAH_REAL_API_RATE_LIMIT_PER_MINUTE"], 12),
   maxBuckets: positiveInteger(process.env["EAH_REAL_API_RATE_LIMIT_MAX_BUCKETS"], 2_000),

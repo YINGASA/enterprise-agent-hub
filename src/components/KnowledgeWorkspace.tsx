@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
+import { KnowledgeBackupPanel } from "@/components/KnowledgeBackupPanel";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { RagTestBench } from "@/components/RagTestBench";
 import { documents as defaultDocuments } from "@/data/mock";
@@ -10,10 +11,10 @@ import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { loadChatFeedback } from "@/lib/chat/feedback";
 import { loadChatHistory } from "@/lib/chat/history";
-import { assessKnowledgeDocument, findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
+import { getKnowledgeDerived, invalidateKnowledgeDerived } from "@/lib/knowledge/derived";
+import { findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
 import { loadRagTestHistory } from "@/lib/knowledge/ragTestHistory";
-import { clearUserKnowledgeDocuments, readUserKnowledgeDocumentsWithStatus, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
-import { splitDocument } from "@/lib/rag";
+import { clearUserKnowledgeDocuments, deleteUserKnowledgeDocument, readUserKnowledgeDocumentsWithStatus, updateUserDocumentEnabled, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType, RagTestHistoryItem } from "@/types";
 
 const allPackOption = "all";
@@ -150,10 +151,10 @@ function chatQuestionHref(question: string) {
 }
 
 function documentQualityIssues(document: KnowledgeDocument) {
-  return assessKnowledgeDocument(document).issues;
+  return getKnowledgeDerived(document).quality.issues;
 }
 
-function qualityBadgeClass(level: ReturnType<typeof assessKnowledgeDocument>["level"]) {
+function qualityBadgeClass(level: ReturnType<typeof getKnowledgeDerived>["quality"]["level"]) {
   if (level === "excellent") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
   if (level === "usable") return "bg-brand-50 text-brand-700 ring-brand-100";
   return "bg-amber-50 text-amber-700 ring-amber-100";
@@ -193,9 +194,9 @@ export function KnowledgeWorkspace() {
   const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
   const enabledDocuments = useMemo<KnowledgeDocument[]>(() => allDocuments.filter(isDocumentEnabled), [allDocuments]);
   const categories = useMemo(() => Array.from(new Set(allDocuments.map((document) => document.category).filter(Boolean))).sort(), [allDocuments]);
-  const defaultChunkCount = useMemo(() => defaultDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), []);
-  const userChunkCount = useMemo(() => userDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), [userDocuments]);
-  const activeChunkCount = useMemo(() => enabledDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), [enabledDocuments]);
+  const defaultChunkCount = useMemo(() => defaultDocuments.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0), []);
+  const userChunkCount = useMemo(() => userDocuments.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0), [userDocuments]);
+  const activeChunkCount = useMemo(() => enabledDocuments.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0), [enabledDocuments]);
   const lastImportedAt = useMemo(() => {
     const sorted = userDocuments.map((document) => document.importedAt ?? document.createdAt).sort();
     return sorted[sorted.length - 1];
@@ -239,11 +240,11 @@ export function KnowledgeWorkspace() {
   });
 
   const selectedDocument = allDocuments.find((document) => document.id === selectedDocumentId) ?? filteredDocuments[0] ?? allDocuments[0];
-  const chunks = selectedDocument ? splitDocument(selectedDocument) : [];
+  const chunks = selectedDocument ? getKnowledgeDerived(selectedDocument).chunks : [];
   const isSelectedUserDocument = Boolean(selectedDocument && selectedDocument.sourceType !== "default");
   const selectedSuggestedQuestions = selectedDocument ? suggestedQuestions(selectedDocument) : [];
   const selectedQualityIssues = selectedDocument ? documentQualityIssues(selectedDocument) : [];
-  const selectedQuality = selectedDocument ? assessKnowledgeDocument(selectedDocument) : null;
+  const selectedQuality = selectedDocument ? getKnowledgeDerived(selectedDocument).quality : null;
   const selectedDuplicateMatches = selectedDocument
     ? findDuplicateKnowledgeDocuments(selectedDocument, allDocuments.filter((document) => document.id !== selectedDocument.id))
     : [];
@@ -256,9 +257,13 @@ export function KnowledgeWorkspace() {
     const duplicates = findDuplicateKnowledgeDocuments(document, allDocuments);
     const nextDocuments = [document, ...userDocuments.filter((item) => item.id !== document.id)];
     const saved = writeUserKnowledgeDocuments(nextDocuments);
-    const persistedDocuments = saved.ok ? saved.data : nextDocuments;
-    const chunkCount = splitDocument(document).length;
-    setUserDocuments(persistedDocuments);
+    if (!saved.ok) {
+      setNotice(`导入失败：${saved.error}`);
+      return;
+    }
+    invalidateKnowledgeDerived(document.id);
+    const chunkCount = getKnowledgeDerived(document).chunks.length;
+    setUserDocuments(saved.data);
     setSelectedDocumentId(document.id);
     setSelectedPack(document.packId ?? allPackOption);
     setSelectedCategory(allCategoryOption);
@@ -266,27 +271,35 @@ export function KnowledgeWorkspace() {
     setNotice(
       saved.ok
         ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，${document.enabled === false ? "当前未启用 RAG 检索" : "已加入 RAG 检索"}。${duplicates.length ? ` 检测到可能重复文档：${duplicates.map((item) => item.title).join("、")}。` : ""}`
-        : `已导入到当前页面状态，但保存到 localStorage 失败：${saved.error}`,
+        : "",
     );
   }
 
   function handleDelete(documentId: string) {
     const target = userDocuments.find((document) => document.id === documentId);
     if (!target) return;
-    const nextDocuments = userDocuments.filter((document) => document.id !== documentId);
-    const saved = writeUserKnowledgeDocuments(nextDocuments);
-    setUserDocuments(saved.ok ? saved.data : nextDocuments);
+    const saved = deleteUserKnowledgeDocument(userDocuments, documentId);
+    if (!saved.ok) {
+      setNotice(`删除失败：${saved.error}`);
+      return;
+    }
+    invalidateKnowledgeDerived(documentId);
+    setUserDocuments(saved.data);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
-    setNotice(saved.ok ? ui.deleted + target.title : `已从页面删除，但同步 localStorage 失败：${saved.error}`);
+    setNotice(ui.deleted + target.title);
   }
 
   function handleToggleEnabled(documentId: string) {
     const target = userDocuments.find((document) => document.id === documentId);
     if (!target) return;
-    const nextDocuments = userDocuments.map((document) => document.id === documentId ? { ...document, enabled: document.enabled === false } : document);
-    const saved = writeUserKnowledgeDocuments(nextDocuments);
-    setUserDocuments(saved.ok ? saved.data : nextDocuments);
-    setNotice(saved.ok ? `${target.title} 已${target.enabled === false ? "启用" : "禁用"} RAG 检索。` : `状态已更新，但同步 localStorage 失败：${saved.error}`);
+    const saved = updateUserDocumentEnabled(userDocuments, documentId, target.enabled === false);
+    if (!saved.ok) {
+      setNotice(`状态更新失败：${saved.error}`);
+      return;
+    }
+    invalidateKnowledgeDerived(documentId);
+    setUserDocuments(saved.data);
+    setNotice(`${target.title} 已${target.enabled === false ? "启用" : "禁用"} RAG 检索。`);
   }
 
   function handleClearUserDocuments() {
@@ -294,10 +307,15 @@ export function KnowledgeWorkspace() {
     const confirmed = window.confirm(ui.confirmClear);
     if (!confirmed) return;
     const cleared = clearUserKnowledgeDocuments();
-    setUserDocuments([]);
+    if (!cleared.ok) {
+      setNotice(`清空失败：${cleared.error}`);
+      return;
+    }
+    userDocuments.forEach((document) => invalidateKnowledgeDerived(document.id));
+    setUserDocuments(cleared.data);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
     setSelectedSourceType(allSourceOption);
-    setNotice(cleared.ok ? ui.cleared : `已清空页面状态，但同步 localStorage 失败：${cleared.error}`);
+    setNotice(ui.cleared);
   }
 
   return (
@@ -322,7 +340,7 @@ export function KnowledgeWorkspace() {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {enterpriseKnowledgePacks.map((pack) => {
-              const packChunks = pack.documents.reduce((sum, document) => sum + splitDocument(document).length, 0);
+              const packChunks = pack.documents.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0);
               return (
                 <article key={pack.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -355,6 +373,17 @@ export function KnowledgeWorkspace() {
           </div>
           <DocumentForm onAdd={handleAdd} existingDocuments={allDocuments} />
         </div>
+        <KnowledgeBackupPanel
+          documents={userDocuments}
+          onDocumentsChange={(documents) => {
+            userDocuments.forEach((document) => invalidateKnowledgeDerived(document.id));
+            documents.forEach((document) => invalidateKnowledgeDerived(document.id));
+            setUserDocuments(documents);
+            setSelectedDocumentId(documents[0]?.id ?? defaultDocuments[0]?.id ?? "");
+            setSelectedSourceType(allSourceOption);
+            setNotice("用户知识库备份已恢复，默认知识库未受影响。");
+          }}
+        />
         <RagTestBench documents={allDocuments} currentDocument={selectedDocument} suggestedQuestions={selectedSuggestedQuestions} presetQuestion={testBenchQuestion} onHistoryChange={setRagTestHistory} />
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
@@ -362,10 +391,11 @@ export function KnowledgeWorkspace() {
             <p className="mt-1 text-sm text-ink-500">{ui.currentFilterPrefix}{filteredDocuments.length}{ui.currentFilterSuffix}</p>
           </div>
           {filteredDocuments.map((document) => {
-            const documentChunks = splitDocument(document);
+            const derived = getKnowledgeDerived(document);
+            const documentChunks = derived.chunks;
             const enabled = isDocumentEnabled(document);
             const qualityIssues = documentQualityIssues(document);
-            const quality = assessKnowledgeDocument(document);
+            const quality = derived.quality;
             const questions = suggestedQuestions(document);
             const testStats = ragTestStatsByDocument.get(document.id);
             return (
