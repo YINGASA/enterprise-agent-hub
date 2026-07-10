@@ -1,28 +1,25 @@
-﻿import { NextResponse } from "next/server";
-import { asAgentMode, asAgentQuestion, runAgentApiPipeline } from "@/lib/agent/api";
-import { sanitizeImportedKnowledgeDocument } from "@/lib/knowledge/storage";
+import { NextResponse } from "next/server";
+import { runAgentApiPipeline } from "@/lib/agent/api";
+import { validateAgentRequest } from "@/lib/ops/agentRequest";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
 import { recordAgentError, recordAgentRun } from "@/lib/ops/storage";
 
 export const runtime = "nodejs";
 
-type AgentRequestBody = {
-  question?: unknown;
-  mode?: unknown;
-  userDocuments?: unknown;
-};
-
 export async function POST(request: Request) {
-  let body: AgentRequestBody = {};
+  let body: Record<string, unknown>;
   try {
-    body = (await request.json()) as AgentRequestBody;
+    body = (await request.json()) as Record<string, unknown>;
   } catch {
-    body = {};
+    return NextResponse.json({ error: "invalid_json", message: "请求体不是合法 JSON。" }, { status: 400 });
   }
 
-  const question = asAgentQuestion(body.question);
-  const requestedMode = asAgentMode(body.mode);
+  const validated = validateAgentRequest(body);
+  if ("status" in validated) {
+    return NextResponse.json({ error: "invalid_request", message: validated.message }, { status: validated.status });
+  }
 
+  const { question, mode: requestedMode, userDocuments } = validated;
   if (requestedMode === "real") {
     const rateLimit = checkRealApiRateLimit(getClientIp(request));
     if (!rateLimit.allowed) {
@@ -47,9 +44,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const userDocuments = Array.isArray(body.userDocuments)
-    ? body.userDocuments.map(sanitizeImportedKnowledgeDocument).filter((item): item is NonNullable<ReturnType<typeof sanitizeImportedKnowledgeDocument>> => Boolean(item))
-    : [];
   const response = await runAgentApiPipeline(question, requestedMode, userDocuments);
   await recordAgentRun(response);
   return NextResponse.json(response);

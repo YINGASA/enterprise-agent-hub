@@ -110,7 +110,7 @@ V1.0 adds a hybrid knowledge library:
 
 - Default Knowledge Packs remain bundled in source code and are read-only in the UI.
 - User documents can be pasted or imported from `.txt`, `.md`, `.json`, and `.csv` files.
-- Imported content is parsed in the browser and stored in `localStorage`; files are not uploaded to a server.
+- Imported content is parsed in the browser and stored in `localStorage`. When a chat request runs, enabled documents are sent to this application server for retrieval; in Real mode, only relevant retrieved snippets may be included in the configured model-service request.
 - The browser sends sanitized user documents to `/api/agent` when running chat, so the server-side Agent pipeline can retrieve across both default and user knowledge for that request.
 - `/api/evaluation` intentionally ignores browser `localStorage` and uses only default documents for stable evaluation results.
 
@@ -173,7 +173,7 @@ The persistence layer is deliberately compact and safe. It does not store API ke
 
 `/ops` provides a lightweight operations dashboard protected by `EAH_OPS_TOKEN`. It shows LLM configured status, recent Agent run counts, Real / Mock / fallback ratios, recent error summaries, recent feedback, and the latest full Mock evaluation result. `/api/llm/status` remains safe and only returns `{ configured: boolean }`.
 
-Real API requests now pass through a small in-memory per-IP rate limiter. The default limit is 12 real requests per minute and can be adjusted with `EAH_REAL_API_RATE_LIMIT_PER_MINUTE`. Mock and evaluation flows are not rate-limited by this guard.
+Real API requests now pass through a small in-memory rate limiter. The default limit is 12 real requests per minute and can be adjusted with `EAH_REAL_API_RATE_LIMIT_PER_MINUTE`. Mock mode and full Mock evaluation are not rate-limited; protected Real evaluation consumes the same limiter budget and is capped to a small sample.
 
 ### V1.10.1 Ops Security Notes
 
@@ -181,10 +181,13 @@ V1.10.1 tightens the operations foundation for safer online use:
 
 - `EAH_OPS_TOKEN` protects `/ops` and `/api/ops/summary`. The token is typed in the page and sent only through the `x-ops-token` request header, not through the URL.
 - `EAH_REAL_API_RATE_LIMIT_PER_MINUTE` controls the Real API per-IP request limit. The default is 12 real requests per minute. Mock mode and full Mock evaluation are not affected.
+- `EAH_REAL_API_RATE_LIMIT_MAX_BUCKETS` caps the in-memory limiter bucket count; expired buckets are periodically removed.
+- `EAH_TRUSTED_CLIENT_IP_HEADER` may be set only when a trusted proxy overwrites that header (for example `x-real-ip` or `x-forwarded-for`). Without it, the limiter safely uses a shared anonymous bucket instead of trusting spoofable forwarding headers.
 - `EAH_OPS_MAX_RECORDS` controls the maximum retained JSONL records per ops category. The default is 200, and old records are trimmed automatically.
 - `.runtime-data/` is ignored by git. Production can also set `EAH_OPS_DATA_DIR` to place runtime JSONL files outside the repo.
 - Ops summaries never return API keys, provider, model, baseUrl, full prompts, full answers, full user documents, raw LLM payloads, or stack traces.
 - Rate limited Real API requests return `errorType: "rate_limited"` with HTTP 429 so the UI can show a clear “请求过于频繁，请稍后再试” message instead of treating it as a model failure.
+- This in-memory limiter is suitable for a single application instance. Multi-instance production deployments should replace it with an atomic Redis or KV limiter.
 ## V1.6 Chat Run History
 
 The Chat Workspace now has a frontend-only run-history layer. After an Agent Pipeline run, the user can save the result snapshot into browser localStorage. Each snapshot keeps the question, final answer, response mode, route, retriever metadata, RAG sources, tool calls, structured output, and API metadata.

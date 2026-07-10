@@ -1,0 +1,80 @@
+import { sanitizeImportedKnowledgeDocument } from "@/lib/knowledge/storage";
+import { agentRequestLimits } from "@/lib/ops/securityLimits";
+import type { ImportedKnowledgeDocument, LlmMode } from "@/types";
+
+type AgentRequestBody = {
+  question?: unknown;
+  mode?: unknown;
+  userDocuments?: unknown;
+};
+
+export type ValidatedAgentRequest = {
+  question: string;
+  mode: LlmMode;
+  userDocuments: ImportedKnowledgeDocument[];
+};
+
+export type AgentRequestValidationError = {
+  status: 400 | 413;
+  message: string;
+};
+
+const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
+
+function tooLong(value: unknown, limit: number) {
+  return typeof value === "string" && value.length > limit;
+}
+
+function validateUserDocument(value: unknown): AgentRequestValidationError | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { status: 400, message: "用户文档格式不正确。" };
+
+  const document = value as Record<string, unknown>;
+  if (!isNonEmptyString(document.id) || !isNonEmptyString(document.title) || !isNonEmptyString(document.content)) {
+    return { status: 400, message: "用户文档需要包含 id、标题和正文。" };
+  }
+
+  const oversized =
+    tooLong(document.id, agentRequestLimits.documentIdChars) ||
+    tooLong(document.title, agentRequestLimits.documentTitleChars) ||
+    tooLong(document.category, agentRequestLimits.documentCategoryChars) ||
+    tooLong(document.content, agentRequestLimits.documentContentChars) ||
+    tooLong(document.summary, agentRequestLimits.documentSummaryChars);
+  if (oversized) return { status: 413, message: "用户文档字段长度超过允许范围。" };
+
+  if (document.tags !== undefined && (!Array.isArray(document.tags) || document.tags.length > agentRequestLimits.documentTags || document.tags.some((tag) => !isNonEmptyString(tag) || tooLong(tag, agentRequestLimits.documentTagChars)))) {
+    return { status: 413, message: "用户文档标签数量或长度超过允许范围。" };
+  }
+
+  if (document.suggestedQuestions !== undefined && (!Array.isArray(document.suggestedQuestions) || document.suggestedQuestions.length > agentRequestLimits.documentSuggestedQuestions || document.suggestedQuestions.some((question) => !isNonEmptyString(question) || tooLong(question, agentRequestLimits.documentSuggestedQuestionChars)))) {
+    return { status: 413, message: "建议测试问题数量或长度超过允许范围。" };
+  }
+
+  return null;
+}
+
+export function validateAgentRequest(body: AgentRequestBody): ValidatedAgentRequest | AgentRequestValidationError {
+  const rawQuestion = body.question;
+  if (!isNonEmptyString(rawQuestion)) return { status: 400, message: "请输入问题后再提交。" };
+  const question = rawQuestion.trim();
+  if (question.length > agentRequestLimits.questionChars) return { status: 413, message: "问题过长，请缩短后再提交。" };
+  if (body.mode !== "mock" && body.mode !== "real") return { status: 400, message: "请求模式不合法。" };
+  if (body.userDocuments !== undefined && !Array.isArray(body.userDocuments)) return { status: 400, message: "用户文档格式不正确。" };
+
+  const rawDocuments = body.userDocuments ?? [];
+  if (rawDocuments.length > agentRequestLimits.userDocuments) return { status: 413, message: "一次参与检索的用户文档数量超过限制。" };
+
+  let totalContentChars = 0;
+  const userDocuments: ImportedKnowledgeDocument[] = [];
+  for (const rawDocument of rawDocuments) {
+    const error = validateUserDocument(rawDocument);
+    if (error) return error;
+    const document = rawDocument as Record<string, unknown>;
+    totalContentChars += (document.content as string).length;
+    if (totalContentChars > agentRequestLimits.userDocumentTotalChars) return { status: 413, message: "本次用户文档总内容超过限制。" };
+    const sanitized = sanitizeImportedKnowledgeDocument(rawDocument);
+    if (!sanitized) return { status: 400, message: "用户文档无法解析。" };
+    userDocuments.push(sanitized);
+  }
+
+  return { question, mode: body.mode, userDocuments };
+}

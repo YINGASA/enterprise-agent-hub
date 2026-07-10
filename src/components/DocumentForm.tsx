@@ -107,7 +107,7 @@ export function DocumentForm({ onAdd, existingDocuments }: DocumentFormProps) {
       <div className="mb-4">
         <h2 className="font-semibold text-ink-900">导入知识文档</h2>
         <p className="mt-1 text-sm leading-6 text-ink-500">
-          支持粘贴文本或选择本地 txt / md / json / csv 文件，内容仅保存在当前浏览器 localStorage，不上传服务器。
+          支持粘贴文本或选择本地 txt / md / json / csv 文件。文档默认保存在当前浏览器 localStorage；发起聊天时，启用文档会发送到本应用服务端参与检索，Real 模式下仅相关命中片段可能发送给配置的模型服务。
         </p>
       </div>
       <div className="space-y-4">

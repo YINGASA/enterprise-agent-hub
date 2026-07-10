@@ -131,7 +131,7 @@ export default function AboutPage() {
         <h2 className="text-lg font-semibold text-ink-900">当前应用边界</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {[
-            "用户导入文档和 Chat 运行历史仍保存在当前浏览器 localStorage；V1.10 仅服务端记录运行摘要和反馈摘要，不保存完整知识库。",
+            "用户导入文档和 Chat 运行历史默认保存在当前浏览器 localStorage；发起聊天时，启用文档会发送到本应用服务端参与检索，Real 模式下仅相关命中片段可能发送给模型服务。V1.10 仅服务端记录运行摘要和反馈摘要，不保存完整知识库。",
             "服务端运行摘要默认写入运行用户的本地目录，可通过 EAH_OPS_DATA_DIR 调整；这不是生产级数据库或长期审计系统。",
             "当前 Hybrid RAG 与 Mock Embedding 是本地可解释检索实现，不等同于生产级 Embedding + Vector DB。",
             "默认业务数据仍为模拟数据，适合验证产品链路和工程结构，不代表真实企业系统。",

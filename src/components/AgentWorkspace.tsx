@@ -244,7 +244,7 @@ export function AgentWorkspace() {
     setIsCheckingHealth(true);
     setClientError("");
     try {
-      const response = await fetch("/api/llm/health", { method: "GET" });
+      const response = await fetch("/api/llm/health", { method: "POST" });
       setHealthResult((await response.json()) as LlmHealthResult);
     } catch (error) {
       setHealthResult({ configured: Boolean(llmStatus?.configured), healthy: false, errorType: "client_error", message: error instanceof Error ? error.message : "Unknown client error." });

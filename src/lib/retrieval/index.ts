@@ -36,8 +36,6 @@ function mergeChunks(primary: RetrievedChunk[], secondary: RetrievedChunk[], top
       };
       existing.score = rerankScore;
       existing.scoreReason = [...(existing.scoreReason ?? []), "mock embedding rerank boost"];
-    } else if ((item.embeddingScore ?? 0) >= 15) {
-      byId.set(item.chunk.id, { ...item, rerankReason: "mock embedding supplemental candidate" });
     }
   }
   return Array.from(byId.values()).sort((left, right) => right.score - left.score).slice(0, topK);
@@ -74,7 +72,7 @@ export function retrieveAuto(input: RetrieverInput): RetrieverResult {
   const merged = mergeChunks(hybrid.chunks, embedding.chunks, topK);
   const maxScore = merged.length ? Math.max(...merged.map((item) => item.score)) : 0;
   const averageScore = merged.length ? Math.round(merged.reduce((sum, item) => sum + item.score, 0) / merged.length) : 0;
-  const stillLow = hybrid.metadata.lowConfidenceRetrieval && maxScore < 10;
+  const stillLow = hybrid.metadata.lowConfidenceRetrieval;
   return {
     chunks: merged,
     metadata: {
@@ -82,7 +80,7 @@ export function retrieveAuto(input: RetrieverInput): RetrieverResult {
       selectedChunkCount: merged.length,
       maxScore,
       averageScore,
-      retrievalConfidence: stillLow ? "low" : hybrid.metadata.retrievalConfidence === "low" ? "medium" : hybrid.metadata.retrievalConfidence,
+      retrievalConfidence: hybrid.metadata.retrievalConfidence,
       lowConfidenceRetrieval: stillLow,
       lowConfidenceReason: stillLow ? hybrid.metadata.lowConfidenceReason : undefined,
       retrieverMode: "auto",

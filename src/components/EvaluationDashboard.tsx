@@ -144,7 +144,7 @@ export function EvaluationDashboard() {
 
     async function loadHealth() {
       try {
-        const response = await fetch("/api/llm/health", { method: "GET" });
+        const response = await fetch("/api/llm/health", { method: "POST" });
         const data = (await response.json()) as LlmHealthSnapshot;
         if (!cancelled) setLlmHealth(data);
       } catch (error) {
