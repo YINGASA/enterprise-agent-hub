@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run security regression tests
+        run: npm run test:run
+      - name: Run typecheck
+        run: npm run typecheck
+      - name: Run full Mock evaluation
+        run: npm run evaluation:mock
+      - name: Build production bundle
+        run: npm run build

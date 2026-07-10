@@ -159,7 +159,7 @@ export default function OpsPage() {
 
       {summary ? (
         <>
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-ink-500">LLM 配置状态</p>
               <p className="mt-2 text-2xl font-semibold text-ink-900">{summary.llmConfigured ? "已配置" : "未配置"}</p>
@@ -184,6 +184,13 @@ export default function OpsPage() {
               <p className="text-sm text-ink-500">最近 full Mock</p>
               <p className="mt-2 text-2xl font-semibold text-ink-900">{summary.latestFullMockEvaluation ? `${summary.latestFullMockEvaluation.passed}/${summary.latestFullMockEvaluation.total}` : "暂无数据"}</p>
               <p className="mt-2 text-xs text-ink-500">{summary.latestFullMockEvaluation ? `passRate ${summary.latestFullMockEvaluation.passRate}% · ${formatDate(summary.latestFullMockEvaluation.createdAt)}` : "运行 /evaluation full Mock 后会写入摘要。"}</p>
+            </article>
+            <article className={`rounded-lg border p-5 shadow-sm ${summary.storage.health.storageHealthy ? "border-emerald-200 bg-emerald-50/50" : "border-amber-200 bg-amber-50/50"}`}>
+              <p className="text-sm text-ink-600">运行摘要存储</p>
+              <p className="mt-2 text-2xl font-semibold text-ink-900">{summary.storage.health.storageHealthy ? "正常" : "降级"}</p>
+              <p className="mt-2 text-xs leading-5 text-ink-600">最近成功：{formatDate(summary.storage.health.lastSuccessAt)} · 保留上限：{summary.storage.retentionLimit} 条</p>
+              {!summary.storage.health.storageHealthy ? <p className="mt-1 text-xs text-amber-800">最近错误类型：{summary.storage.health.lastErrorType || "storage_write_failed"}</p> : null}
+              {summary.storage.health.pendingWrites > 0 ? <p className="mt-1 text-xs text-ink-500">待完成写入：{summary.storage.health.pendingWrites}</p> : null}
             </article>
           </section>
 

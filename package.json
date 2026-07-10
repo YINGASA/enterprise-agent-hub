@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "evaluation:mock": "vitest run src/lib/evaluation/__tests__/fullMockEvaluation.test.ts --reporter=verbose"
   },
   "dependencies": {
     "next": "^16.2.9",

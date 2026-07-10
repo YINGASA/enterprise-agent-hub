@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { feedbackLimits } from "@/lib/ops/securityLimits";
@@ -9,6 +9,20 @@ const DEFAULT_MAX_STORED_ITEMS = 200;
 const MAX_SAFE_RECENT_RUNS = 12;
 const MAX_SAFE_RECENT_ERRORS = 8;
 const MAX_SAFE_NEGATIVE_FEEDBACK = 6;
+
+export type OpsStorageHealth = {
+  storageHealthy: boolean;
+  lastSuccessAt?: string;
+  lastErrorAt?: string;
+  lastErrorType?: string;
+  pendingWrites: number;
+};
+
+const writeQueues = new Map<string, Promise<void>>();
+const storageHealth: OpsStorageHealth = {
+  storageHealthy: true,
+  pendingWrites: 0,
+};
 
 export type OpsAgentRunRecord = {
   id: string;
@@ -106,6 +120,7 @@ export type OpsSummary = {
   storage: {
     enabled: boolean;
     retentionLimit: number;
+    health: OpsStorageHealth;
   };
 };
 
@@ -177,33 +192,83 @@ function isFallback(responseMode: string, intent?: string) {
   return responseMode === "fallback" || responseMode === "real_text_fallback" || responseMode === "real_error_fallback" || intent === "general_chat";
 }
 
-async function trimJsonLines(fileName: string, limit = maxStoredItems()) {
+function safeErrorType(error: unknown) {
+  if (error instanceof Error && error.name) return error.name.slice(0, 80);
+  return "storage_write_failed";
+}
+
+function recordStorageSuccess() {
+  storageHealth.storageHealthy = true;
+  storageHealth.lastSuccessAt = new Date().toISOString();
+  storageHealth.lastErrorType = undefined;
+}
+
+function recordStorageFailure(error: unknown) {
+  storageHealth.storageHealthy = false;
+  storageHealth.lastErrorAt = new Date().toISOString();
+  storageHealth.lastErrorType = safeErrorType(error);
+}
+
+function publicStorageHealth(): OpsStorageHealth {
+  return { ...storageHealth };
+}
+
+export function getOpsStorageHealth() {
+  return publicStorageHealth();
+}
+
+async function readRawLines(fileName: string) {
   try {
     const raw = await readFile(filePath(fileName), "utf8");
-    const lines = raw.split(/\r?\n/).filter(Boolean);
-    if (lines.length <= limit) return;
-    await writeFile(filePath(fileName), `${lines.slice(-limit).join("\n")}\n`, "utf8");
-  } catch {
-    // Ops retention is best-effort and must not break user-facing flows.
+    return raw.split(/\r?\n/).filter(Boolean);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
   }
 }
 
-async function appendJsonLine(fileName: string, item: unknown) {
+async function writeJsonLinesAtomically(fileName: string, lines: string[]) {
+  const target = filePath(fileName);
+  const temp = `${target}.${randomUUID()}.tmp`;
   try {
     await mkdir(dataDir(), { recursive: true });
-    await appendFile(filePath(fileName), JSON.stringify(item) + "\n", "utf8");
-    await trimJsonLines(fileName);
-  } catch {
-    // Ops persistence should never break user-facing Agent flows.
+    await writeFile(temp, `${lines.join("\n")}\n`, "utf8");
+    await rename(temp, target);
+  } catch (error) {
+    await unlink(temp).catch(() => undefined);
+    throw error;
   }
+}
+
+function enqueueWrite(fileName: string, task: () => Promise<void>) {
+  const previous = writeQueues.get(fileName) ?? Promise.resolve();
+  storageHealth.pendingWrites += 1;
+  const current = previous.catch(() => undefined).then(task);
+  const settled = current
+    .then(() => recordStorageSuccess())
+    .catch((error) => recordStorageFailure(error))
+    .finally(() => {
+      storageHealth.pendingWrites = Math.max(0, storageHealth.pendingWrites - 1);
+      if (writeQueues.get(fileName) === settled) writeQueues.delete(fileName);
+    });
+  writeQueues.set(fileName, settled);
+  return settled;
+}
+
+async function appendJsonLine(fileName: string, item: unknown) {
+  const serialized = JSON.stringify(item);
+  await enqueueWrite(fileName, async () => {
+    const lines = await readRawLines(fileName);
+    const retained = [...lines, serialized].slice(-maxStoredItems());
+    await writeJsonLinesAtomically(fileName, retained);
+  });
 }
 
 async function readJsonLines<T>(fileName: string, limit = MAX_RECENT_ITEMS): Promise<T[]> {
   try {
-    const raw = await readFile(filePath(fileName), "utf8");
-    return raw
-      .split(/\r?\n/)
-      .filter(Boolean)
+    const pending = writeQueues.get(fileName);
+    if (pending) await pending;
+    return (await readRawLines(fileName))
       .slice(-limit)
       .map((line) => JSON.parse(line) as T)
       .reverse();
@@ -375,8 +440,9 @@ export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary>
     },
     latestFullMockEvaluation: evaluations[0],
     storage: {
-      enabled: true,
+      enabled: publicStorageHealth().storageHealthy,
       retentionLimit: maxStoredItems(),
+      health: publicStorageHealth(),
     },
   };
 }
