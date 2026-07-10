@@ -4,15 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
+import { RagTestBench } from "@/components/RagTestBench";
 import { documents as defaultDocuments } from "@/data/mock";
 import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { loadChatFeedback } from "@/lib/chat/feedback";
 import { loadChatHistory } from "@/lib/chat/history";
 import { assessKnowledgeDocument, findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
+import { loadRagTestHistory } from "@/lib/knowledge/ragTestHistory";
 import { clearUserKnowledgeDocuments, readUserKnowledgeDocumentsWithStatus, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import { splitDocument } from "@/lib/rag";
-import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
+import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType, RagTestHistoryItem } from "@/types";
 
 const allPackOption = "all";
 const allCategoryOption = "all";
@@ -157,6 +159,10 @@ function qualityBadgeClass(level: ReturnType<typeof assessKnowledgeDocument>["le
   return "bg-amber-50 text-amber-700 ring-amber-100";
 }
 
+function ragTestHitRate(stats?: { total: number; hits: number }) {
+  return stats?.total ? Math.round((stats.hits / stats.total) * 100) : 0;
+}
+
 export function KnowledgeWorkspace() {
   const [userDocuments, setUserDocuments] = useState<ImportedKnowledgeDocument[]>([]);
   const [selectedPack, setSelectedPack] = useState(allPackOption);
@@ -167,6 +173,8 @@ export function KnowledgeWorkspace() {
   const [notice, setNotice] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatRunHistoryItem[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<ChatAnswerFeedbackItem[]>([]);
+  const [ragTestHistory, setRagTestHistory] = useState<RagTestHistoryItem[]>([]);
+  const [testBenchQuestion, setTestBenchQuestion] = useState("");
 
   useEffect(() => {
     const loaded = readUserKnowledgeDocumentsWithStatus();
@@ -177,6 +185,9 @@ export function KnowledgeWorkspace() {
     setChatHistory(loadedHistory.data);
     const loadedFeedback = loadChatFeedback();
     setFeedbackItems(loadedFeedback.data);
+    const loadedRagTests = loadRagTestHistory();
+    setRagTestHistory(loadedRagTests.data);
+    if (!loadedRagTests.ok) setNotice(loadedRagTests.error);
   }, []);
 
   const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
@@ -207,6 +218,18 @@ export function KnowledgeWorkspace() {
       + feedbackItems.filter((item) => item.retrievalConfidence === "low").length;
     return { mostCited, neverCited, fallbackCount, noRecallCount };
   }, [chatHistory, enabledDocuments, feedbackItems]);
+  const ragTestStatsByDocument = useMemo(() => {
+    const stats = new Map<string, { total: number; hits: number; latest?: RagTestHistoryItem }>();
+    for (const item of ragTestHistory) {
+      if (!item.documentId) continue;
+      const current = stats.get(item.documentId) ?? { total: 0, hits: 0 };
+      current.total += 1;
+      current.hits += item.hit ? 1 : 0;
+      if (!current.latest || item.testedAt > current.latest.testedAt) current.latest = item;
+      stats.set(item.documentId, current);
+    }
+    return stats;
+  }, [ragTestHistory]);
 
   const filteredDocuments = allDocuments.filter((document) => {
     const packMatched = selectedPack === allPackOption || document.packId === selectedPack;
@@ -332,6 +355,7 @@ export function KnowledgeWorkspace() {
           </div>
           <DocumentForm onAdd={handleAdd} existingDocuments={allDocuments} />
         </div>
+        <RagTestBench documents={allDocuments} currentDocument={selectedDocument} suggestedQuestions={selectedSuggestedQuestions} presetQuestion={testBenchQuestion} onHistoryChange={setRagTestHistory} />
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
             <h3 className="font-semibold text-ink-900">{ui.docList}</h3>
@@ -343,6 +367,7 @@ export function KnowledgeWorkspace() {
             const qualityIssues = documentQualityIssues(document);
             const quality = assessKnowledgeDocument(document);
             const questions = suggestedQuestions(document);
+            const testStats = ragTestStatsByDocument.get(document.id);
             return (
               <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -360,6 +385,7 @@ export function KnowledgeWorkspace() {
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{documentChunks.length} chunks</span>
                       <span className={enabled ? "rounded bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-100"}>{enabled ? ui.ragIncluded : ui.ragExcluded}</span>
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{document.updatedAt}</span>
+                      <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">测试 {testStats?.total ?? 0} 次 · 命中 {testStats?.hits ?? 0} 次 · {ragTestHitRate(testStats)}%</span>
                     </div>
                   </button>
                   {document.sourceType !== "default" ? (
@@ -416,8 +442,10 @@ export function KnowledgeWorkspace() {
                 <p><span className="text-ink-400">{ui.chunks}</span>{chunks.length}</p>
                 <p><span className="text-ink-400">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p>
                 <p><span className="text-ink-400">{ui.ragStatus}</span>{isDocumentEnabled(selectedDocument) ? ui.enabled : ui.disabled}</p>
+                <p><span className="text-ink-400">检索测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.total ?? 0} 次 · 命中率 {ragTestHitRate(ragTestStatsByDocument.get(selectedDocument.id))}%</p>
                 <p><span className="text-ink-400">可删除：</span>{isSelectedUserDocument ? "是" : "否"}</p>
                 <p className="sm:col-span-2 break-words"><span className="text-ink-400">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p>
+                <p className="sm:col-span-2"><span className="text-ink-400">最近测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.latest ? `${new Date(ragTestStatsByDocument.get(selectedDocument.id)!.latest!.testedAt).toLocaleString()} · ${ragTestStatsByDocument.get(selectedDocument.id)!.latest!.hit ? "命中" : "未命中"}` : "暂无"}</p>
               </div>
               {!isDocumentEnabled(selectedDocument) ? <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">{ui.disabledNote}</p> : null}
               <div className="rounded-md bg-brand-50 p-3">
@@ -426,7 +454,7 @@ export function KnowledgeWorkspace() {
                   {selectedSuggestedQuestions.map((item) => (
                     <div key={item} className="rounded-md bg-white p-2 ring-1 ring-brand-100">
                       <p className="break-words text-xs text-brand-800">{item}</p>
-                      <a href={chatQuestionHref(item)} className="mt-1 inline-flex rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">{ui.testInChat}</a>
+                      <div className="mt-1 flex flex-wrap gap-2"><a href={chatQuestionHref(item)} className="inline-flex rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">{ui.testInChat}</a><button type="button" onClick={() => setTestBenchQuestion(item)} className="rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">测试当前文档</button></div>
                     </div>
                   ))}
                 </div>
@@ -484,6 +512,7 @@ export function KnowledgeWorkspace() {
             <p>参与检索 chunks：{activeChunkCount}</p>
             <p>fallback 次数：{usageDiagnostics.fallbackCount}</p>
             <p>无召回 / 低置信问题数：{usageDiagnostics.noRecallCount}</p>
+            <p>RAG 测试历史：{ragTestHistory.length} 条</p>
             <p className="sm:col-span-2">最近导入：{lastImportedAt ? new Date(lastImportedAt).toLocaleString() : ui.noUserDocs}</p>
           </div>
           <div className="mt-4 space-y-3 text-sm leading-6 text-ink-600">

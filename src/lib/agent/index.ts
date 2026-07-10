@@ -69,7 +69,7 @@ function isShortAmbiguousApplicationQuestion(question: string) {
   return hasAny(question, ["怎么申请", "我要申请", "想申请"]) && normalizedQuestionLength(question) <= 8 && !hasAny(question, ["电脑", "VPN", "权限", "账号", "软件", "采购", "合同", "项目"]);
 }
 
-function buildClarificationState(route: AgentRoute, question: string): ClarificationState {
+export function buildClarificationState(route: AgentRoute, question: string): ClarificationState {
   if (route.scenario === "enterprise" && route.intent === "knowledge_qa") {
     if (isShortAmbiguousExpenseQuestion(question)) {
       return {
