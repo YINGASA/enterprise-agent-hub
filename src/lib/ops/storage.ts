@@ -1,5 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { feedbackLimits } from "@/lib/ops/securityLimits";
 import type { AgentApiResponse, ChatAnswerFeedbackValue, EvaluationRunResponse } from "@/types";
 
 const MAX_RECENT_ITEMS = 80;
@@ -27,6 +29,7 @@ export type OpsAgentRunRecord = {
 
 export type OpsFeedbackRecord = {
   id: string;
+  runId: string;
   createdAt: string;
   questionPreview: string;
   values: ChatAnswerFeedbackValue[];
@@ -115,7 +118,7 @@ function filePath(name: string) {
 }
 
 function makeId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}-${randomUUID()}`;
 }
 
 function maxStoredItems() {
@@ -227,6 +230,7 @@ export async function recordAgentRun(result: AgentApiResponse) {
     fallback: isFallback(result.api.responseMode, result.route.intent),
   };
   await appendJsonLine("agent-runs.jsonl", item);
+  return item.id;
 }
 
 export async function recordAgentError(input: {
@@ -253,25 +257,44 @@ export async function recordAgentError(input: {
   await appendJsonLine("agent-runs.jsonl", item);
 }
 
+type FeedbackValidation =
+  | { ok: true; run: OpsAgentRunRecord }
+  | { ok: false; reason: "invalid" | "expired" | "duplicate" };
+
+function feedbackCategories(values: ChatAnswerFeedbackValue[]) {
+  return values.map((value) => (value === "positive" || value === "negative" ? "helpfulness" : "citation"));
+}
+
+export async function validateFeedbackRun(runId: string, values: ChatAnswerFeedbackValue[]): Promise<FeedbackValidation> {
+  const runs = await readJsonLines<OpsAgentRunRecord>("agent-runs.jsonl", maxStoredItems());
+  const run = runs.find((item) => item.id === runId);
+  if (!run) return { ok: false, reason: "invalid" };
+  const createdAt = Date.parse(run.createdAt);
+  if (!Number.isFinite(createdAt) || Date.now() - createdAt > feedbackLimits.runTtlMs) return { ok: false, reason: "expired" };
+
+  const feedback = await readJsonLines<OpsFeedbackRecord>("feedback.jsonl", maxStoredItems());
+  const requestedCategories = new Set(feedbackCategories(values));
+  const alreadyRatedCategories = new Set(feedback.filter((item) => item.runId === runId).flatMap((item) => feedbackCategories(item.values)));
+  if ([...requestedCategories].some((category) => alreadyRatedCategories.has(category))) return { ok: false, reason: "duplicate" };
+  return { ok: true, run };
+}
+
 export async function recordChatFeedback(input: {
-  question: string;
+  run: OpsAgentRunRecord;
   values: ChatAnswerFeedbackValue[];
   reason?: string;
-  responseMode: string;
-  scenario: string;
-  intent: string;
-  sourcesCount: number;
 }) {
   const item: OpsFeedbackRecord = {
     id: makeId("feedback"),
+    runId: input.run.id,
     createdAt: new Date().toISOString(),
-    questionPreview: preview(input.question, 96),
+    questionPreview: input.run.questionPreview,
     values: input.values.slice(0, 4),
     reasonPreview: input.reason ? preview(input.reason, 220) : undefined,
-    responseMode: input.responseMode,
-    scenario: input.scenario,
-    intent: input.intent,
-    sourcesCount: input.sourcesCount,
+    responseMode: input.run.responseMode,
+    scenario: input.run.scenario,
+    intent: input.run.intent,
+    sourcesCount: input.run.sourcesCount,
   };
   await appendJsonLine("feedback.jsonl", item);
 }

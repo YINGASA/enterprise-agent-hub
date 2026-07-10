@@ -26,4 +26,9 @@ export const realApiLimits = {
   evaluationMaxCases: 5,
 } as const;
 
+export const feedbackLimits = {
+  perMinute: positiveInteger(process.env["EAH_FEEDBACK_RATE_LIMIT_PER_MINUTE"], 20),
+  runTtlMs: 24 * 60 * 60 * 1_000,
+} as const;
+
 export const trustedClientIpHeader = process.env["EAH_TRUSTED_CLIENT_IP_HEADER"]?.trim().toLowerCase();

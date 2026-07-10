@@ -45,6 +45,6 @@ export async function POST(request: Request) {
   }
 
   const response = await runAgentApiPipeline(question, requestedMode, userDocuments);
-  await recordAgentRun(response);
-  return NextResponse.json(response);
+  const runId = await recordAgentRun(response);
+  return NextResponse.json({ ...response, runId });
 }

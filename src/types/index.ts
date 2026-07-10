@@ -440,6 +440,7 @@ export type AgentApiMetadata = {
 
 export type AgentApiResponse = AgentPipelineResult & {
   api: AgentApiMetadata;
+  runId?: string;
 };
 export type AgentExample = {
   question: string;

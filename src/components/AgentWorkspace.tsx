@@ -271,19 +271,23 @@ export function AgentWorkspace() {
     }
     setFeedbackMessage("已保存反馈到当前浏览器本地，并同步写入服务端运行摘要。");
     try {
-      await fetch("/api/ops/feedback", {
+      if (!result.runId) {
+        setFeedbackMessage("已保存到当前浏览器本地；本次运行缺少服务端标识，未写入服务端统计。");
+        return;
+      }
+      const response = await fetch("/api/ops/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          question: result.question,
+          runId: result.runId,
           values: feedbackValues,
           reason: feedbackReason,
-          responseMode: result.api.responseMode,
-          scenario: result.route.scenario,
-          intent: result.route.intent,
-          sourcesCount: result.ragAnswer?.sources.length ?? 0,
         }),
       });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { message?: string };
+        setFeedbackMessage(`已保存到当前浏览器本地；服务端统计未写入：${payload.message ?? "请求失败。"}`);
+      }
     } catch {
       setFeedbackMessage("已保存反馈到当前浏览器本地；服务端摘要暂时不可写入。");
     }

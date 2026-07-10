@@ -1,4 +1,4 @@
-import { realApiLimits, trustedClientIpHeader } from "@/lib/ops/securityLimits";
+import { feedbackLimits, realApiLimits, trustedClientIpHeader } from "@/lib/ops/securityLimits";
 
 type Bucket = {
   count: number;
@@ -6,19 +6,20 @@ type Bucket = {
 };
 
 const buckets = new Map<string, Bucket>();
+const feedbackBuckets = new Map<string, Bucket>();
 let lastCleanupAt = 0;
 
-function cleanupExpiredBuckets(now: number) {
-  if (now - lastCleanupAt < 30_000 && buckets.size < realApiLimits.maxBuckets) return;
+function cleanupExpiredBuckets(now: number, entries: Map<string, Bucket> = buckets) {
+  if (now - lastCleanupAt < 30_000 && entries.size < realApiLimits.maxBuckets) return;
   lastCleanupAt = now;
 
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
+  for (const [key, bucket] of entries) {
+    if (bucket.resetAt <= now) entries.delete(key);
   }
 
-  if (buckets.size <= realApiLimits.maxBuckets) return;
-  const oldest = [...buckets.entries()].sort((left, right) => left[1].resetAt - right[1].resetAt);
-  for (const [key] of oldest.slice(0, buckets.size - realApiLimits.maxBuckets)) buckets.delete(key);
+  if (entries.size <= realApiLimits.maxBuckets) return;
+  const oldest = [...entries.entries()].sort((left, right) => left[1].resetAt - right[1].resetAt);
+  for (const [key] of oldest.slice(0, entries.size - realApiLimits.maxBuckets)) entries.delete(key);
 }
 
 export function getClientIp(request: Request) {
@@ -49,5 +50,21 @@ export function checkRealApiRateLimit(key: string, cost = 1) {
 
   current.count += safeCost;
   buckets.set(key, current);
+  return { allowed: true, limit, remaining: Math.max(0, limit - current.count), resetAt: current.resetAt };
+}
+
+export function checkFeedbackRateLimit(key: string) {
+  const now = Date.now();
+  cleanupExpiredBuckets(now, feedbackBuckets);
+  const limit = feedbackLimits.perMinute;
+  const current = feedbackBuckets.get(key);
+  if (!current || current.resetAt <= now) {
+    const resetAt = now + 60_000;
+    feedbackBuckets.set(key, { count: 1, resetAt });
+    return { allowed: true, limit, remaining: Math.max(0, limit - 1), resetAt };
+  }
+  if (current.count >= limit) return { allowed: false, limit, remaining: 0, resetAt: current.resetAt };
+  current.count += 1;
+  feedbackBuckets.set(key, current);
   return { allowed: true, limit, remaining: Math.max(0, limit - current.count), resetAt: current.resetAt };
 }

@@ -118,7 +118,7 @@ function llmStepInput(result: LlmGenerateResult) {
   };
 }
 
-function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPipeline>): LlmMessage[] {
+export function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPipeline>): LlmMessage[] {
   return [
     {
       role: "system",
