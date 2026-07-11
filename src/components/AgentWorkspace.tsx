@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { ChatRunHistoryPanel } from "@/components/ChatRunHistoryPanel";
 import { SourceList } from "@/components/SourceList";
-import { saveChatFeedback } from "@/lib/chat/feedback";
-import { readUserKnowledgeDocuments } from "@/lib/knowledge/storage";
+import { AgentFeedbackPanel } from "@/components/agent-workspace/AgentFeedbackPanel";
+import { useAgentWorkspace } from "@/components/agent-workspace/useAgentWorkspace";
 import type { AgentApiResponse, ChatAnswerFeedbackValue, KnowledgeSourceType, LlmMode, ToolName } from "@/types";
 
 const exampleGroups = [
@@ -19,19 +18,6 @@ const exampleGroups = [
 ];
 
 const fallbackQuestion = exampleGroups[0].questions[0];
-
-type LlmStatus = {
-  configured: boolean;
-};
-
-type LlmHealthResult = {
-  configured: boolean;
-  healthy: boolean;
-  durationMs?: number;
-  statusCode?: number;
-  errorType?: string;
-  message?: string;
-};
 
 function responseModeLabel(mode: AgentApiResponse["api"]["responseMode"] | LlmMode) {
   const labels: Record<string, string> = { mock: "开发模拟模式", real: "真实模型生成", real_repaired: "真实模型生成 · JSON 修复", real_text_fallback: "真实模型生成 · 文本兜底", real_error_fallback: "Real API 失败，已使用兜底回答", fallback: "兜底模式" };
@@ -98,7 +84,6 @@ function toolBusinessSummary(tool: AgentApiResponse["toolResults"][number]) {
   if (tool.tool === "generateCustomerReply") return "根据售后上下文生成客服回复话术。";
   return "执行业务工具并返回结构化结果。";
 }
-function feedbackButtonClass(active: boolean) { return "rounded-md border px-3 py-2 text-xs font-semibold transition " + (active ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-ink-600 hover:bg-brand-50"); }
 function runtimeStatusClass(responseMode?: AgentApiResponse["api"]["responseMode"] | LlmMode) {
   if (responseMode === "real_error_fallback") return "bg-rose-50 text-rose-700 ring-rose-100";
   if (responseMode === "real" || responseMode === "real_repaired") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
@@ -107,22 +92,15 @@ function runtimeStatusClass(responseMode?: AgentApiResponse["api"]["responseMode
 }
 
 export function AgentWorkspace() {
-  const searchParams = useSearchParams();
-  const [question, setQuestion] = useState(fallbackQuestion);
-  const [mode, setMode] = useState<LlmMode>("mock");
-  const [result, setResult] = useState<AgentApiResponse | null>(null);
-  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
-  const [llmStatusError, setLlmStatusError] = useState("");
-  const [healthResult, setHealthResult] = useState<LlmHealthResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
-  const [clientError, setClientError] = useState("");
+  const workspace = useAgentWorkspace(fallbackQuestion);
+  const {
+    question, setQuestion, mode, setMode, result, llmStatus, llmStatusError, healthResult,
+    isLoading, isCheckingHealth, clientError, feedbackValues, feedbackReason, setFeedbackReason,
+    feedbackMessage, realApiUnavailable, runAgent, checkHealth, toggleFeedback, saveFeedback,
+  } = workspace;
   const [examplesPanelOpen, setExamplesPanelOpen] = useState(true);
   const [openGroups, setOpenGroups] = useState<string[]>(exampleGroups.filter((group) => group.defaultOpen).map((group) => group.title));
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
-  const [feedbackValues, setFeedbackValues] = useState<ChatAnswerFeedbackValue[]>([]);
-  const [feedbackReason, setFeedbackReason] = useState("");
-  const [feedbackMessage, setFeedbackMessage] = useState("");
 
   const selectedExample = useMemo(() => exampleGroups.flatMap((group) => group.questions).find((item) => item === question), [question]);
   const topTools = result?.toolResults.slice(0, 3) ?? [];
@@ -155,7 +133,6 @@ export function AgentWorkspace() {
   const loadingMessage = mode === "real" ? "正在执行 Router / RAG / Tools / LLM" : "正在执行开发模拟 Agent Pipeline";
   const missingFields = result?.structuredOutput.missingFields ?? [];
   const needsClarification = Boolean(result?.structuredOutput.needsClarification);
-  const realApiUnavailable = mode === "real" && llmStatus?.configured === false;
   const runButtonDisabled = isLoading || realApiUnavailable;
   const activeRuntimeLabel = mode === "real" ? "真实模型生成" : "开发模拟模式";
   const llmStatusText = llmStatus
@@ -174,124 +151,8 @@ export function AgentWorkspace() {
     { label: "生成回答", active: isLoading || Boolean(result), detail: result ? responseModeLabel(result.api.responseMode) : activeRuntimeLabel },
   ];
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadLlmStatus() {
-      try {
-        const response = await fetch("/api/llm/status", { method: "GET" });
-        if (!response.ok) throw new Error(`LLM status request failed: ${response.status}`);
-        const data = (await response.json()) as LlmStatus;
-        if (!cancelled) {
-          setLlmStatus(data);
-          setMode(data.configured ? "real" : "mock");
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setLlmStatusError(error instanceof Error ? error.message : "无法读取 Real API 配置状态。");
-        }
-      }
-    }
-
-    loadLlmStatus();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const questionFromUrl = searchParams.get("question");
-    if (questionFromUrl?.trim()) setQuestion(questionFromUrl.trim());
-  }, [searchParams]);
-
-  async function handleRun() {
-    if (realApiUnavailable) {
-      setClientError("当前未配置模型服务。请使用开发模拟模式，或在服务端配置模型服务后再使用真实模型生成。");
-      return;
-    }
-    setIsLoading(true);
-    setClientError("");
-    setExamplesPanelOpen(false);
-    try {
-      const userDocuments = readUserKnowledgeDocuments();
-      const enabledUserDocuments = userDocuments.filter((document) => document.enabled !== false);
-      const response = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, mode, userDocuments: enabledUserDocuments }) });
-      if (!response.ok) {
-        let errorPayload: { errorType?: string; error?: string; message?: string } = {};
-        try {
-          errorPayload = (await response.json()) as typeof errorPayload;
-        } catch {
-          errorPayload = {};
-        }
-        if (response.status === 429 || errorPayload.errorType === "rate_limited" || errorPayload.error === "rate_limited") {
-          throw new Error(errorPayload.message || "请求过于频繁，请稍后再试。");
-        }
-        throw new Error(errorPayload.message || "API request failed: " + response.status);
-      }
-      setResult((await response.json()) as AgentApiResponse);
-      setFeedbackValues([]);
-      setFeedbackReason("");
-      setFeedbackMessage("");
-    } catch (error) {
-      setClientError(error instanceof Error ? error.message : "Unknown client error.");
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleHealthCheck() {
-    setIsCheckingHealth(true);
-    setClientError("");
-    try {
-      const response = await fetch("/api/llm/health", { method: "POST" });
-      setHealthResult((await response.json()) as LlmHealthResult);
-    } catch (error) {
-      setHealthResult({ configured: Boolean(llmStatus?.configured), healthy: false, errorType: "client_error", message: error instanceof Error ? error.message : "Unknown client error." });
-    } finally {
-      setIsCheckingHealth(false);
-    }
-  }
-
   function toggleGroup(title: string) { setOpenGroups((current) => current.includes(title) ? current.filter((item) => item !== title) : [...current, title]); }
   function toggleMore(title: string) { setExpandedGroups((current) => current.includes(title) ? current.filter((item) => item !== title) : [...current, title]); }
-  function toggleFeedback(value: ChatAnswerFeedbackValue) {
-    setFeedbackValues((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-  }
-  async function handleSaveFeedback() {
-    if (!result) return;
-    if (!feedbackValues.length) {
-      setFeedbackMessage("请先选择至少一个反馈标签。");
-      return;
-    }
-    const saved = saveChatFeedback(result, feedbackValues, feedbackReason);
-    if (!saved.ok) {
-      setFeedbackMessage(saved.error);
-      return;
-    }
-    setFeedbackMessage("已保存反馈到当前浏览器本地，并同步写入服务端运行摘要。");
-    try {
-      if (!result.runId) {
-        setFeedbackMessage("已保存到当前浏览器本地；本次运行缺少服务端标识，未写入服务端统计。");
-        return;
-      }
-      const response = await fetch("/api/ops/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          runId: result.runId,
-          values: feedbackValues,
-          reason: feedbackReason,
-        }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { message?: string };
-        setFeedbackMessage(`已保存到当前浏览器本地；服务端统计未写入：${payload.message ?? "请求失败。"}`);
-      }
-    } catch {
-      setFeedbackMessage("已保存反馈到当前浏览器本地；服务端摘要暂时不可写入。");
-    }
-  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5 overflow-x-hidden">
@@ -307,17 +168,17 @@ export function AgentWorkspace() {
             <p className="mt-1 break-words">当前运行模式：{activeRuntimeLabel}</p>
             {realApiUnavailable ? <p className="mt-1 break-words">当前未启用 Real API，请使用开发模拟模式，或在部署环境配置模型服务后再切换。</p> : null}
           </div>
-          <details className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <details data-testid="agent-mode-options" className="rounded-md border border-slate-200 bg-slate-50 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-ink-700">高级选项：运行模式</summary>
             <div className="mt-3 grid max-w-md grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1 text-sm">
-              {(["real", "mock"] as LlmMode[]).map((item) => <button key={item} type="button" onClick={() => setMode(item)} disabled={item === "real" && llmStatus?.configured === false} className={modeButtonClass(mode === item)}><span className="block truncate">{item === "real" ? "真实模型生成" : "开发模拟模式"}</span></button>)}
+              {(["real", "mock"] as LlmMode[]).map((item) => <button key={item} type="button" data-testid={`agent-mode-${item}`} onClick={() => setMode(item)} disabled={item === "real" && llmStatus?.configured === false} className={modeButtonClass(mode === item)}><span className="block truncate">{item === "real" ? "真实模型生成" : "开发模拟模式"}</span></button>)}
             </div>
             <p className="mt-2 text-xs leading-5 text-ink-500">开发模拟模式用于离线演示、回归测试和故障兜底；真实模型生成是配置模型服务后的默认产品路径。</p>
           </details>
-          <textarea value={question} onChange={(event) => setQuestion(event.target.value)} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          <textarea data-testid="agent-question" value={question} onChange={(event) => setQuestion(event.target.value)} rows={5} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
           <div className="flex flex-col gap-3 sm:flex-row">
-            <button type="button" onClick={handleRun} disabled={runButtonDisabled} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? loadingMessage + "..." : realApiUnavailable ? "真实模型未配置，请切换开发模拟" : "生成回答"}</button>
-            <button type="button" onClick={handleHealthCheck} disabled={isCheckingHealth} className="min-h-10 rounded-md border border-brand-200 bg-brand-50 px-5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-ink-500">{isCheckingHealth ? "检查中..." : "检查 LLM 连接"}</button>
+            <button data-testid="agent-run" type="button" onClick={() => { setExamplesPanelOpen(false); void runAgent(); }} disabled={runButtonDisabled} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:text-white">{isLoading ? loadingMessage + "..." : realApiUnavailable ? "真实模型未配置，请切换开发模拟" : "生成回答"}</button>
+            <button type="button" onClick={() => void checkHealth()} disabled={isCheckingHealth} className="min-h-10 rounded-md border border-brand-200 bg-brand-50 px-5 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-ink-500">{isCheckingHealth ? "检查中..." : "检查 LLM 连接"}</button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {generationSteps.map((step) => (
@@ -341,7 +202,7 @@ export function AgentWorkspace() {
         </div>
         {clientError ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm text-rose-700">运行失败：{clientError}</p> : null}
         {realErrorFallback ? <p className="mb-4 break-words rounded-md bg-rose-50 p-3 text-sm leading-6 text-rose-700">Real API 请求失败，当前展示的是系统兜底回答，不代表真实模型生成结果。{result?.api.httpStatus === 403 ? "403 通常表示 Key、模型权限、账户额度或模型名称配置存在问题。" : result?.api.llmError ? ` ${result.api.llmError}` : ""}</p> : null}
-        {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}...</p></div> : <p className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
+        {isLoading ? <div className="space-y-3 rounded-md bg-slate-50 p-4"><div className="h-4 w-1/3 animate-pulse rounded bg-slate-200" /><div className="h-4 w-full animate-pulse rounded bg-slate-200" /><div className="h-4 w-5/6 animate-pulse rounded bg-slate-200" /><p className="text-sm text-ink-500">{loadingMessage}...</p></div> : <p data-testid="agent-answer" className="whitespace-pre-wrap break-words rounded-md bg-slate-50 p-4 text-base leading-8 text-ink-800">{result?.finalAnswer ?? "输入问题并运行 Agent Pipeline 后，回答会显示在这里。"}</p>}
         {needsClarification ? <div className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-900"><p className="font-semibold">{"\u9700\u8981\u8865\u5145\u4fe1\u606f"}</p>{missingFields.length ? <p className="mt-1 break-words">{"还需要你补充："}{missingFields.map(fieldLabel).join("、")}</p> : null}{result?.structuredOutput.clarificationQuestion ? <p className="mt-2 break-words"><span className="font-semibold">{"下一步请补充："}</span>{result.structuredOutput.clarificationQuestion}</p> : null}{result?.structuredOutput.dataBoundaryNote ? <p className="mt-1 break-words text-amber-800"><span className="font-semibold">{"回答边界："}</span>{result.structuredOutput.dataBoundaryNote}</p> : null}</div> : null}
         {result?.structuredOutput.usedDemoData ? <p className="mt-3 rounded-md bg-slate-100 p-3 text-sm leading-6 text-ink-700">{"\u5f53\u524d\u4f7f\u7528\u6f14\u793a\u6570\u636e\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba2\u5355\u3002"}</p> : null}
         {result && usedFallback && !needsClarification ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800">{"\u5f53\u524d\u56de\u7b54\u4e3a\u8fb9\u754c\u515c\u5e95\uff1a\u7cfb\u7edf\u4f1a\u8bf4\u660e\u4e0d\u786e\u5b9a\u6027\uff0c\u4e0d\u4f1a\u7f16\u9020\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u4e4b\u5916\u7684\u4fe1\u606f\u3002"}</p> : null}
@@ -372,27 +233,7 @@ export function AgentWorkspace() {
           </div>
         ) : null}
         {result ? <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">业务场景 / 任务意图</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{scenarioLabel(result.route.scenario)} / {intentLabel(result.route.intent)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">置信度 / 风险等级</p><p className="mt-1 text-sm font-semibold text-ink-900">{Math.round(result.route.confidence * 100)}% / {riskLabel(result.structuredOutput.riskLevel)}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">兜底回答 / 来源引用</p><p className="mt-1 text-sm font-semibold text-ink-900">{usedFallback ? "是" : "否"} / {reliableSources.length} 条</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">调用工具</p><p className="mt-1 break-words text-sm font-semibold text-ink-900">{formatTools(result.structuredOutput.toolsUsed)}</p></div></div> : null}
-        {result ? (
-          <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-sm font-semibold text-ink-900">回答反馈</h3>
-            <p className="mt-1 text-xs leading-5 text-ink-500">反馈仅保存在当前浏览器本地，用于统计回答帮助度和引用准确性。</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[
-                ["positive", "有帮助"],
-                ["negative", "没帮助"],
-                ["accurate", "引用准确"],
-                ["inaccurate", "引用不准确"],
-              ].map(([value, label]) => (
-                <button key={value} type="button" onClick={() => toggleFeedback(value as ChatAnswerFeedbackValue)} className={feedbackButtonClass(feedbackValues.includes(value as ChatAnswerFeedbackValue))}>{label}</button>
-              ))}
-            </div>
-            <textarea value={feedbackReason} onChange={(event) => setFeedbackReason(event.target.value)} rows={2} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="可选：补充这次回答哪里好或哪里需要改进" />
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={handleSaveFeedback} className="rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700">提交反馈</button>
-              {feedbackMessage ? <p className="break-words text-sm text-ink-600">{feedbackMessage}</p> : null}
-            </div>
-          </div>
-        ) : null}
+        {result ? <AgentFeedbackPanel values={feedbackValues} reason={feedbackReason} message={feedbackMessage} onToggle={toggleFeedback} onReasonChange={setFeedbackReason} onSubmit={() => void saveFeedback()} /> : null}
       </section>
 
       {result ? <section className="grid gap-5 lg:grid-cols-3"><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"\u77e5\u8bc6\u5e93\u4e0e RAG"}</h3><p className="mt-2 break-words text-sm text-ink-600">{"\u547d\u4e2d\u77e5\u8bc6\u5e93\u5305\uff1a"}{hitPacks.length ? hitPacks.map(packLabel).join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u547d\u4e2d\uff1a"}{defaultHitCount}{" \u7bc7 \u00b7 \u7528\u6237\u6587\u6863\u547d\u4e2d\uff1a"}{userHitCount}{" \u7bc7"}</p><p className="mt-2 break-words text-sm text-ink-600">{"Top \u6765\u6e90\u7c7b\u578b\uff1a"}{topSourceTypes.length ? topSourceTypes.join("\u3001") : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u6700\u9ad8\u5206\uff1a"}{maxRagScore}{" \u00b7 \u5e73\u5747\u5206\uff1a"}{averageRagScore}</p><p className="mt-2 text-sm text-ink-600">{"\u68c0\u7d22\u6a21\u5f0f\uff1a"}{retrieverModeLabel(retrieverMode)}</p><p className="mt-2 text-sm text-ink-600">{"\u662f\u5426\u542f\u7528\u91cd\u6392\uff1a"}{yesNo(rerankEnabled)}</p><p className="mt-2 break-words text-sm text-ink-600">{"\u91cd\u6392\u539f\u56e0\uff1a"}{retrievalMetadata?.rerankReason ?? "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"Embedding \u5206\u6570\uff1a"}{maxEmbeddingScore ? Math.round(maxEmbeddingScore * 10) / 10 : "\u65e0"}</p><p className="mt-2 text-sm text-ink-600">{"\u68c0\u7d22\u7f6e\u4fe1\u5ea6\uff1a"}{retrievalConfidenceLabel(retrievalConfidence)}</p><p className="mt-2 break-words text-sm text-ink-600">{"\u67e5\u8be2\u6269\u5c55\u8bcd\uff1a"}{expandedTerms.length ? expandedTerms.join(" / ") : "\u65e0"}</p>{lowConfidenceRag ? <p className="mt-2 rounded-md bg-amber-50 p-2 text-sm text-amber-800">{"\u5f53\u524d\u77e5\u8bc6\u5e93\u76f8\u5173\u4f9d\u636e\u4e0d\u8db3\uff0c\u56de\u7b54\u5c06\u4ee5\u901a\u7528\u5efa\u8bae\u6216\u6f84\u6e05\u4e3a\u4e3b\u3002"}</p> : null}<p className="mt-2 break-words text-sm text-ink-500">{"\u8bc4\u5206\u539f\u56e0\uff1a"}{scoreReasons.length ? scoreReasons.join(" / ") : "\u6682\u65e0"}</p><p className="mt-2 text-sm text-ink-500">{"\u56de\u7b54\u8fb9\u754c\uff1a\u65e0\u53ef\u9760\u6765\u6e90\u65f6\uff0c\u7cfb\u7edf\u4f1a\u63d0\u793a\u8865\u5145\u77e5\u8bc6\u5e93\u6216\u4e1a\u52a1\u5de5\u5177\u3002"}</p></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"来源引用 / 业务工具"}</h3><div className="mt-3 space-y-3 text-sm text-ink-600">{topSources.length ? topSources.map((source) => <p key={source.documentId} className="break-words rounded-md bg-slate-50 p-2">{source.title}{" \u00b7 "}{sourceTypeLabel(source.sourceType)}{" \u00b7 \u5207\u7247 "}{source.chunkIndexes.join(", ")}</p>) : <p>{"\u6682\u65e0\u6765\u6e90"}</p>}{topTools.length ? topTools.map((tool) => <div key={tool.executedAt + tool.tool} className="rounded-md bg-brand-50 p-3 ring-1 ring-brand-100"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold text-brand-800">{toolLabel(tool.tool)}</p><span className={tool.status === "success" ? "rounded bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700" : "rounded bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700"}>{toolStatusLabel(tool.status)}</span></div><p className="mt-1 break-words text-xs leading-5 text-brand-800">{toolBusinessSummary(tool)}</p>{tool.error ? <p className="mt-1 break-words text-xs text-rose-700">{tool.error}</p> : null}</div>) : <p>{"暂未调用业务工具。系统会在需要订单、商品、规则或工单信息时自动调用。"}</p>}</div></article><article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{"LLM \u72b6\u6001\u6458\u8981"}</h3><div className="mt-3 space-y-2 text-sm text-ink-600"><p>{"\u8bf7\u6c42\u6a21\u5f0f\uff1a"}{result.api.requestedMode === "real" ? "真实模型生成" : "开发模拟模式"}</p><p>{"\u54cd\u5e94\u6a21\u5f0f\uff1a"}{responseModeLabel(result.api.responseMode)}</p><p>{"模型服务："}{result.api.responseMode === "mock" ? "开发模拟模式" : result.api.responseMode === "real_error_fallback" ? "Real API 失败，已兜底" : result.api.responseMode === "fallback" ? "兜底模式" : "真实模型生成"}</p><p>{"\u8017\u65f6\uff1a"}{result.api.llmDurationMs ? result.api.llmDurationMs + "ms" : "\u65e0"}</p><p className="break-words">{"\u9519\u8bef\u7c7b\u578b\uff1a"}{result.api.errorType ?? "\u65e0"}</p></div></article></section> : null}

@@ -212,6 +212,10 @@ V1.12.2 treats Ops question text as sensitive telemetry. Server-side summaries m
 
 The local Playwright gate runs from an isolated temporary app directory that excludes `.env*`, runtime data, and user test documents. It verifies Knowledge Backup export/import preview, merge recovery, replace confirmation, invalid and oversized backups, plus browser migration and corruption recovery for Chat History, Feedback, Evaluation History, and RAG Test History. These test records stay in browser localStorage and are not posted to Agent, Evaluation, or Feedback APIs.
 
+## Agent Workspace Structure (V1.12.3)
+
+`src/components/AgentWorkspace.tsx` remains the stable Chat entry component and owns composition plus display-only derivations. `src/components/agent-workspace/useAgentWorkspace.ts` owns URL question prefill, LLM status and health state, the single Agent request path, result normalization, clarification and rate-limit errors, feedback runId submission, and unmount-safe async updates. `AgentFeedbackPanel.tsx` is a props-only presentation component; it neither accesses localStorage nor calls the Agent API. Chat History remains an independent consumer of the returned result and continues using the existing versioned Client Storage adapter key.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.
