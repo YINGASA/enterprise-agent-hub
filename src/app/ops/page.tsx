@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
+import { appVersion, buildCommit } from "@/lib/appVersion";
 import type { OpsDistributionItem, OpsSummary } from "@/lib/ops/storage";
 
 function percent(value: number) {
@@ -124,9 +125,10 @@ export default function OpsPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Operations"
-        title="Agent 运行分析"
+        title={`Agent 运行分析 · V${appVersion}`}
         description="查看在线调用质量、反馈表现、错误分布与最近 full Mock 评测结果。页面受服务端口令保护，仅返回聚合后的安全统计。"
       />
+      <p className="-mt-4 text-xs text-ink-500">当前运行版本：V{appVersion}{buildCommit ? ` · 构建 ${buildCommit}` : ""}</p>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold text-ink-900">访问口令</h2>

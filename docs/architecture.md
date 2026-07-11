@@ -194,6 +194,10 @@ The Chat Workspace now has a frontend-only run-history layer. After an Agent Pip
 
 The same snapshot can be rendered into Markdown or JSON reports for local review. This improves observability without adding a database or backend persistence layer. Later versions can replace localStorage with server-side audit logs, team workspaces, and searchable run history.
 
+## Dependency Audit Note (V1.11.6)
+
+V1.11.6 upgrades Next.js to 16.2.10, PostCSS to 8.5.16, and Vitest to 3.2.7 without changing React, TypeScript, or Tailwind major versions. The production dependency audit has no high or critical findings. It still reports two moderate findings from the PostCSS version transitively bundled by Next.js 16.2.10. The audit tool currently suggests an incompatible Next.js 9 downgrade, so this project does not use a forced fix, override, or downgrade. Recheck the audit when a compatible Next.js security release becomes available.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

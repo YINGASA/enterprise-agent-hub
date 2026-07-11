@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
+import { appVersionLabel, buildCommit } from "@/lib/appVersion";
 
 const capabilities = [
   "4 个系统内置 Knowledge Packs，覆盖企业制度、电商售后、招聘匹配和 AI 工程规范",
@@ -63,9 +64,10 @@ export default function AboutPage() {
     <div className="space-y-8 overflow-x-hidden">
       <PageHeader
         eyebrow="About"
-        title="Enterprise Agent Hub"
+        title={appVersionLabel}
         description="一个面向企业知识库问答与业务流程自动化的 AI Agent 工作台：真实模型优先生成，结合可解释 RAG、业务工具、评测回归、Trace 导出和本地知识库管理。"
       />
+      <p className="-mt-5 text-xs text-ink-500">当前运行版本：V1.11.6{buildCommit ? ` · 构建 ${buildCommit}` : ""}</p>
       <section className="rounded-lg border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm">
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>
