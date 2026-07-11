@@ -220,6 +220,10 @@ The local Playwright gate runs from an isolated temporary app directory that exc
 
 `src/components/KnowledgeWorkspace.tsx` remains the stable `/knowledge` composition entry. `src/components/knowledge-workspace/useKnowledgeWorkspace.ts` owns browser-local document initialization, selection and filters, import, enable/disable, deletion, clear, and backup-restore refresh actions. It calls the existing Knowledge Storage Adapter and invalidates derived caches only after successful writes. `DocumentForm`, `KnowledgeBackupPanel`, and `RagTestBench` remain separate boundaries: backup restore reports documents through an explicit callback, and the RAG Test Bench continues to use `ragTestHistory` without invoking a model or tool. Storage keys, backup JSON, migration behavior, and the 50-item RAG Test History cap are unchanged.
 
+## Domain Type Structure (V1.12.5)
+
+`src/types/index.ts` is a stable explicit type-only barrel. Definitions are grouped in `common`, `agent`, `knowledge`, `tools`, `feedback`, and `evaluation` modules. Type modules have no component or runtime dependencies; existing `@/types` imports remain compatible and no API, storage, backup, or JSONL schema changes are part of this release.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.
