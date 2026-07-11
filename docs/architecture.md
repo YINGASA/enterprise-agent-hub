@@ -202,6 +202,10 @@ V1.11.6 upgrades Next.js to 16.2.10, PostCSS to 8.5.16, and Vitest to 3.2.7 with
 
 V1.12.0 unifies Chat run history, local answer feedback, and evaluation history under the client storage adapter. RAG Test History keeps its existing V1 key, legacy-array compatibility, 50-record limit, and corruption recovery for now. It is intentionally deferred to V1.12.1 because its storage module has historical encoding constraints; this does not affect RAG Test Bench behavior.
 
+## Client Storage Scope (V1.12.1)
+
+V1.12.1 moves RAG Test History to the shared client storage adapter without changing its key or Test Bench contract. All four client histories now use versioned envelopes, legacy migration, record filtering, bounded retention, and safe corruption recovery.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

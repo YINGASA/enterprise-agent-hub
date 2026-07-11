@@ -49,6 +49,7 @@ const versions = [
   { version: "V1.9.3", title: "业务工具可用性打磨", body: "工具中心按业务场景组织，提供流程模板、示例输入、模拟结果和跳转 Chat 验证入口。" },
   { version: "V1.9.4", title: "Release Candidate 收口", body: "统一全站版本语境、演示路径、错误状态和 Real API / 开发模拟模式文案，准备进入外部测试。" },
   { version: "V1.10", title: "Production Readiness 基础", body: "增加服务端运行摘要持久化、Real API 频率限制和口令保护的 /ops 运行状态页，为后续数据库化打基础。" },
+  { version: "V1.12.1", title: "客户端存储迁移安全", body: "Chat History、Feedback、Evaluation History 与 RAG Test History 采用版本化本地存储，支持旧数据迁移、非法记录过滤、损坏恢复和容量控制。" },
 ];
 
 const engineeringHighlights = [

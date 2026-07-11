@@ -1,1 +1,1 @@
-export { loadRagTestHistory, RAG_TEST_HISTORY_STORAGE_KEY, saveRagTestHistoryItem } from "@/lib/knowledge/storage";
+export { clearRagTestHistory, loadRagTestHistory, RAG_TEST_HISTORY_STORAGE_KEY, saveRagTestHistoryItem } from "@/lib/knowledge/ragTestHistoryStorage";
