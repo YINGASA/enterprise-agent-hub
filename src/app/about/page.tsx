@@ -50,6 +50,7 @@ const versions = [
   { version: "V1.9.4", title: "Release Candidate 收口", body: "统一全站版本语境、演示路径、错误状态和 Real API / 开发模拟模式文案，准备进入外部测试。" },
   { version: "V1.10", title: "Production Readiness 基础", body: "增加服务端运行摘要持久化、Real API 频率限制和口令保护的 /ops 运行状态页，为后续数据库化打基础。" },
   { version: "V1.12.1", title: "客户端存储迁移安全", body: "Chat History、Feedback、Evaluation History 与 RAG Test History 采用版本化本地存储，支持旧数据迁移、非法记录过滤、损坏恢复和容量控制。" },
+  { version: "V1.12.2", title: "Ops 隐私与浏览器回归", body: "Ops 问题摘要统一截断并脱敏订单号、手机号、邮箱和长数字；Playwright 覆盖知识库备份恢复与客户端存储迁移。" },
 ];
 
 const engineeringHighlights = [
@@ -68,7 +69,7 @@ export default function AboutPage() {
         title={appVersionLabel}
         description="一个面向企业知识库问答与业务流程自动化的 AI Agent 工作台：真实模型优先生成，结合可解释 RAG、业务工具、评测回归、Trace 导出和本地知识库管理。"
       />
-      <p className="-mt-5 text-xs text-ink-500">当前运行版本：V1.11.6{buildCommit ? ` · 构建 ${buildCommit}` : ""}</p>
+      <p className="-mt-5 text-xs text-ink-500">当前运行版本：{appVersionLabel}{buildCommit ? ` · 构建 ${buildCommit}` : ""}</p>
       <section className="rounded-lg border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 shadow-sm">
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>

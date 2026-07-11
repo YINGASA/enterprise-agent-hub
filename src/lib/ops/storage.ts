@@ -146,6 +146,23 @@ function preview(value: string | undefined, maxLength: number) {
   return safe.length > maxLength ? `${safe.slice(0, maxLength - 1)}...` : safe;
 }
 
+export function sanitizeQuestionPreview(value: string | undefined, maxLength = 48) {
+  const masked = (value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[邮箱已脱敏]")
+    .replace(/(?<!\d)1[3-9]\d{9}(?!\d)/g, "[手机号已脱敏]")
+    .replace(/(?<!\d)\d{17}[\dXx](?!\d)/g, "[证件号已脱敏]")
+    .replace(/订单(?:号)?[\s:#：-]*[A-Z0-9-]{4,}/gi, "订单[已脱敏]")
+    .replace(/(?<!\d)\d{6,}(?!\d)/g, "[长数字已脱敏]");
+  if (!masked) return "[空问题]";
+  const limit = Math.max(8, maxLength);
+  if (masked.length > limit) return `${masked.slice(0, limit - 1)}…`;
+  if (masked.includes("已脱敏")) return `${masked}…[已截断]`;
+  const visibleLength = Math.max(1, Math.min(masked.length - 1, Math.ceil(masked.length / 2)));
+  return `${masked.slice(0, visibleLength)}…[已截断]`;
+}
+
 function percentage(count: number, total: number) {
   return total ? Math.round((count / total) * 100) : 0;
 }
@@ -166,7 +183,7 @@ function safeRunSummary(item: OpsAgentRunRecord): OpsSafeRunSummary {
   return {
     id: item.id,
     createdAt: item.createdAt,
-    questionPreview: preview(item.questionPreview, 72),
+    questionPreview: sanitizeQuestionPreview(item.questionPreview),
     responseMode: item.responseMode,
     scenario: item.scenario,
     intent: item.intent,
@@ -181,7 +198,7 @@ function safeFeedbackSummary(item: OpsFeedbackRecord): OpsSafeFeedbackSummary {
   return {
     id: item.id,
     createdAt: item.createdAt,
-    questionPreview: preview(item.questionPreview, 72),
+    questionPreview: sanitizeQuestionPreview(item.questionPreview),
     values: item.values.slice(0, 4),
     reasonPreview: item.reasonPreview ? preview(item.reasonPreview, 140) : undefined,
     responseMode: item.responseMode,
@@ -281,7 +298,7 @@ export async function recordAgentRun(result: AgentApiResponse) {
   const item: OpsAgentRunRecord = {
     id: makeId("run"),
     createdAt: new Date().toISOString(),
-    questionPreview: preview(result.question, 96),
+    questionPreview: sanitizeQuestionPreview(result.question),
     responseMode: result.api.responseMode,
     requestedMode: result.api.requestedMode,
     scenario: result.route.scenario,
@@ -308,7 +325,7 @@ export async function recordAgentError(input: {
   const item: OpsAgentRunRecord = {
     id: makeId("run"),
     createdAt: new Date().toISOString(),
-    questionPreview: preview(input.question, 96),
+    questionPreview: sanitizeQuestionPreview(input.question),
     responseMode: input.responseMode,
     requestedMode: input.requestedMode,
     scenario: "unknown",

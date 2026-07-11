@@ -79,6 +79,20 @@ describe("Ops JSONL storage reliability", () => {
     expect(files.some((name) => name.endsWith(".tmp"))).toBe(false);
   });
 
+  it("keeps aggregate dimensions while returning only sanitized question summaries", async () => {
+    const result = agentResult(1);
+    result.question = "订单10001请联系13800138000或user@example.com";
+    result.api.responseMode = "real";
+    result.route.scenario = "ecommerce";
+    result.route.intent = "policy_check";
+    await recordAgentRun(result);
+    const summary = await getOpsSummary(true);
+    expect(summary.recentRuns[0].questionPreview).not.toMatch(/10001|13800138000|user@example\.com/);
+    expect(summary.responseModeDistribution).toContainEqual(expect.objectContaining({ key: "real", count: 1 }));
+    expect(summary.scenarioDistribution).toContainEqual(expect.objectContaining({ key: "ecommerce", count: 1 }));
+    expect(summary.intentDistribution).toContainEqual(expect.objectContaining({ key: "policy_check", count: 1 }));
+  });
+
   it("records a safe degraded state on failure and recovers after a later successful write", async () => {
     const blockedPath = path.join(runtimeDir, "blocked");
     await writeFile(blockedPath, "not-a-directory", "utf8");

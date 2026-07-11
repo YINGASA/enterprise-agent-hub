@@ -1,6 +1,6 @@
 {
   "name": "enterprise-agent-hub",
-  "version": "1.12.1",
+  "version": "1.12.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,6 +11,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "evaluation:mock": "vitest run src/lib/evaluation/__tests__/fullMockEvaluation.test.ts --reporter=verbose",
+    "e2e": "node e2e/run.mjs",
     "audit:prod": "npm audit --omit=dev --registry=https://registry.npmjs.org"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "undici": "^8.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "22.15.32",
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.4",

@@ -1,8 +1,8 @@
 # Enterprise Agent Hub
 
-## V1.12.1 Quality Baseline
+## V1.12.2 Quality Baseline
 
-V1.12.1 unifies Chat History, Feedback, Evaluation History, and RAG Test History through a versioned Client Storage Adapter. It supports legacy-data migration, invalid-record filtering, corruption recovery, and bounded retention. The current baseline is 17 test files, 48 passing tests, and Full Mock Evaluation at 80/80.
+V1.12.2 adds privacy-safe Ops question summaries and local browser E2E coverage. Ops summaries now truncate every question and mask order numbers, phone numbers, email addresses, identity-style numbers, and long numeric strings. Playwright validates Knowledge Backup import preview, merge and replace confirmation, plus Client Storage migration and corruption recovery without sending local test data to the service. The current baseline is 18 unit-test files, 55 passing tests, 3/3 Playwright E2E scenarios, and Full Mock Evaluation at 80/80.
 
 The platform also includes Ops summaries, Real API rate and cost protection, feedback runId validation, automated tests and CI, RAG Test Bench, knowledge quality scoring, and backup/restore. Client knowledge and history remain browser-local; Ops uses lightweight local JSONL storage, and rate limiting is single-instance memory based. No real API keys, tokens, providers, model identifiers, or service URLs are stored in this repository.
 

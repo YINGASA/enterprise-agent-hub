@@ -77,25 +77,26 @@ export function KnowledgeBackupPanel({ documents, onDocumentsChange }: Props) {
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section data-testid="knowledge-backup-panel" className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="font-semibold text-ink-900">知识库备份与恢复</h3>
           <p className="mt-1 text-sm leading-6 text-ink-500">备份仅包含当前浏览器中的用户文档、启用状态、标签与建议测试问题；不会包含聊天记录、反馈、运维数据或模型配置。</p>
         </div>
-        <button type="button" onClick={downloadBackup} className="shrink-0 rounded-md border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50">导出知识库</button>
+        <button data-testid="knowledge-backup-export" type="button" onClick={downloadBackup} className="shrink-0 rounded-md border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50">导出知识库</button>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
         <label className="rounded-md border border-dashed border-slate-300 p-3 text-sm text-ink-600 hover:border-brand-300">
           <span className="block font-semibold text-ink-800">导入 JSON 备份</span>
           <span className="mt-1 block text-xs text-ink-500">支持 V2 格式，单个备份文件最大 2MB。</span>
-          <input type="file" accept="application/json,.json" className="mt-3 block w-full text-xs" onChange={(event) => void handleFile(event.target.files?.[0])} />
+          <input data-testid="knowledge-backup-file" type="file" accept="application/json,.json" className="mt-3 block w-full text-xs" onChange={(event) => void handleFile(event.target.files?.[0])} />
           {fileName ? <span className="mt-2 block break-words text-xs text-brand-700">已选择：{fileName}</span> : null}
         </label>
         <label className="text-sm text-ink-700">
           <span className="mb-2 block font-semibold">恢复模式</span>
           <select
+            data-testid="knowledge-backup-mode"
             value={mode}
             onChange={(event) => {
               const nextMode = event.target.value as "merge" | "replace";
@@ -113,12 +114,12 @@ export function KnowledgeBackupPanel({ documents, onDocumentsChange }: Props) {
 
       {preview ? (
         <div className={preview.ok ? "mt-4 rounded-md bg-slate-50 p-3 text-sm text-ink-700" : "mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800"}>
-          <p className="font-semibold">预览：共 {preview.counts.incoming} 篇，新增 {preview.counts.new} 篇，重复 {preview.counts.duplicate} 篇，冲突 {preview.counts.conflict} 篇，非法 {preview.counts.invalid} 篇。</p>
+          <p data-testid="knowledge-backup-preview" className="font-semibold">预览：共 {preview.counts.incoming} 篇，新增 {preview.counts.new} 篇，重复 {preview.counts.duplicate} 篇，冲突 {preview.counts.conflict} 篇，非法 {preview.counts.invalid} 篇。</p>
           {preview.errors.map((error) => <p key={error} className="mt-1 break-words">{error}</p>)}
-          {preview.ok ? <button type="button" onClick={applyRestore} className={mode === "replace" ? "mt-3 rounded-md bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700" : "mt-3 rounded-md bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700"}>{mode === "replace" ? "确认替换恢复" : "确认合并恢复"}</button> : null}
+          {preview.ok ? <button data-testid="knowledge-backup-apply" type="button" onClick={applyRestore} className={mode === "replace" ? "mt-3 rounded-md bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700" : "mt-3 rounded-md bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-700"}>{mode === "replace" ? "确认替换恢复" : "确认合并恢复"}</button> : null}
         </div>
       ) : null}
-      {notice ? <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-ink-600">{notice}</p> : null}
+      {notice ? <p data-testid="knowledge-backup-notice" className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-ink-600">{notice}</p> : null}
     </section>
   );
 }
