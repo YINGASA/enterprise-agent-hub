@@ -166,10 +166,10 @@ function getConfidence(selected: RetrievedChunk[], candidateCount: number): Pick
   return { retrievalConfidence, lowConfidenceRetrieval, lowConfidenceReason: lowConfidenceRetrieval ? "No sufficiently relevant knowledge base chunks were found for this query." : undefined, maxScore, averageScore };
 }
 
-export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3, preferredPackId?: KnowledgePackId): RetrievedChunk[] {
+export function scoreHybridCandidates(query: string, chunks: KnowledgeChunk[], preferredPackId?: KnowledgePackId): RetrievedChunk[] {
   const queryExpansion = expandQuery(query, { preferredPackId });
   if (!query.trim() || queryExpansion.expandedKeywords.length === 0) return [];
-  const candidates = chunks.map((chunk) => {
+  const candidates: Array<RetrievedChunk | null> = chunks.map((chunk) => {
     const titleText = chunk.sourceTitle;
     const categoryText = chunk.category;
     const tagsText = (chunk.tags ?? []).join(" ");
@@ -180,6 +180,8 @@ export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3
     const titleHits = countHits(uniqueMatches, titleText);
     const categoryHits = countHits(uniqueMatches, categoryText);
     const tagHits = countHits(uniqueMatches, tagsText);
+    const hasReliableSignal = uniqueMatches.length > 0 || titleHits > 0 || categoryHits > 0 || tagHits > 0 || phraseHits.length > 0;
+    if (!hasReliableSignal) return null;
     const keywordScore = uniqueMatches.length * 2;
     const titleScore = titleHits * 4;
     const tagScore = tagHits * 3;
@@ -191,7 +193,12 @@ export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3
     const totalScore = keywordScore + titleScore + tagScore + categoryScore + packScore + sourceScore + phraseScore + freshScore;
     const scoreBreakdown: RagScoreBreakdown = { keywordScore, titleScore, tagScore, categoryScore, packScore, sourceScore, phraseScore, freshnessScore: freshScore, totalScore };
     return { chunk, score: Math.round(totalScore), matchedKeywords: uniqueMatches, scoreReason: buildScoreReason(scoreBreakdown, uniqueMatches, phraseHits, preferredPackId, chunk.sourceType), scoreBreakdown } satisfies RetrievedChunk;
-  }).filter((item) => item.score >= 4).sort((left, right) => right.score - left.score);
+  });
+  return candidates.filter((item): item is RetrievedChunk => item !== null).sort((left, right) => right.score - left.score);
+}
+
+export function retrieveChunks(query: string, chunks: KnowledgeChunk[], topK = 3, preferredPackId?: KnowledgePackId): RetrievedChunk[] {
+  const candidates = scoreHybridCandidates(query, chunks, preferredPackId);
   return selectDiverse(candidates, topK);
 }
 
@@ -219,10 +226,10 @@ function filterReliableRetrievedChunks(retrievedChunks: RetrievedChunk[], metada
   return retrievedChunks.filter((item) => item.score >= threshold).slice(0, 4);
 }
 
-export function buildMetadata(query: string, selected: RetrievedChunk[], chunks: KnowledgeChunk[], options: RetrievalOptions): RagRetrievalMetadata {
+export function buildMetadata(query: string, selected: RetrievedChunk[], candidateCount: number, options: RetrievalOptions): RagRetrievalMetadata {
   const queryExpansion = expandQuery(query, options);
-  const confidence = getConfidence(selected, selected.length);
-  return { query: queryExpansion, topK: options.topK ?? 3, candidateCount: chunks.length, selectedChunkCount: selected.length, ...confidence };
+  const confidence = getConfidence(selected, candidateCount);
+  return { query: queryExpansion, topK: options.topK ?? 3, candidateCount, selectedChunkCount: selected.length, ...confidence };
 }
 
 
@@ -230,8 +237,9 @@ export function retrieveHybrid(input: RetrieverInput): RetrieverResult {
   const preferredPackId = (input.packId ?? (input.scenario ? scenarioPackMap[input.scenario] : undefined)) as KnowledgePackId | undefined;
   const chunks = input.documents.flatMap((document) => splitDocument(document));
   const topK = input.topK ?? 3;
-  const selected = retrieveChunks(input.query, chunks, topK, preferredPackId);
-  const metadata = buildMetadata(input.query, selected, chunks, { topK, preferredPackId, scenario: input.scenario });
+  const candidates = scoreHybridCandidates(input.query, chunks, preferredPackId);
+  const selected = selectDiverse(candidates, topK);
+  const metadata = buildMetadata(input.query, selected, candidates.length, { topK, preferredPackId, scenario: input.scenario });
   return {
     chunks: selected,
     metadata: {
@@ -257,7 +265,8 @@ export function runMockRagPipeline(question: string, documents: KnowledgeDocumen
   const preferredPackId = options.packId ?? (options.scenario ? scenarioPackMap[options.scenario] : undefined);
   const chunks = documents.flatMap((document) => splitDocument(document));
   const topK = options.topK ?? 3;
-  const retrievedChunks = retrieveChunks(question, chunks, topK, preferredPackId);
-  const metadata = buildMetadata(question, retrievedChunks, chunks, { topK, preferredPackId, scenario: options.scenario });
+  const candidates = scoreHybridCandidates(question, chunks, preferredPackId);
+  const retrievedChunks = selectDiverse(candidates, topK);
+  const metadata = buildMetadata(question, retrievedChunks, candidates.length, { topK, preferredPackId, scenario: options.scenario });
   return generateMockRagAnswer(question, retrievedChunks, metadata);
 }

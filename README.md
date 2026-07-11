@@ -1,5 +1,11 @@
 # Enterprise Agent Hub
 
+## V1.12.1 Quality Baseline
+
+V1.12.1 unifies Chat History, Feedback, Evaluation History, and RAG Test History through a versioned Client Storage Adapter. It supports legacy-data migration, invalid-record filtering, corruption recovery, and bounded retention. The current baseline is 17 test files, 48 passing tests, and Full Mock Evaluation at 80/80.
+
+The platform also includes Ops summaries, Real API rate and cost protection, feedback runId validation, automated tests and CI, RAG Test Bench, knowledge quality scoring, and backup/restore. Client knowledge and history remain browser-local; Ops uses lightweight local JSONL storage, and rate limiting is single-instance memory based. No real API keys, tokens, providers, model identifiers, or service URLs are stored in this repository.
+
 面向企业知识库与业务流程自动化的 AI Agent 产品原型。
 
 Enterprise Agent Hub 用于展示一个企业 AI Agent 从产品设计到工程实现的完整闭环：用户提出业务问题后，系统通过 Agent Router 判断场景与意图，结合 Hybrid RAG 检索、业务工具调用、Mock / Real API 双模式、结构化输出、fallback、评测面板和运行追踪，形成可解释、可评估、可复盘的 AI 应用体验。
@@ -72,7 +78,7 @@ V1.6.1 修复并强化了用户导入文档的浏览器本地持久化：
 - 清空用户文档只会清空用户导入内容，不会影响系统内置默认知识库。
 - `/chat` 会读取同一份用户文档，并把它们传给 Agent Pipeline 参与 RAG 检索。
 - 线上演示中，不同浏览器、不同设备、不同域名之间不会共享用户导入文档。
-- 当前不上传文件到服务器，也不使用数据库或对象存储。
+- 文件默认保存在浏览器 localStorage，不使用数据库或对象存储；发起聊天时，启用文档会发送到本应用服务端参与检索，Real 模式下仅相关命中片段可能发送给配置的模型服务。
 
 ## 本地运行方式
 

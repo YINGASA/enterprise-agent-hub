@@ -1,0 +1,11 @@
+import { afterEach, describe, expect, it } from "vitest";
+import { clearRagTestHistory, loadRagTestHistory, RAG_TEST_HISTORY_STORAGE_KEY } from "@/lib/knowledge/ragTestHistoryStorage";
+
+const entry = (id: string) => ({ version: 1, id, question: "test", testedAt: "2026-01-01T00:00:00.000Z", hit: true, confidence: "high", candidateCount: 1 });
+function install(throws = false) { const data = new Map<string, string>(); Object.defineProperty(globalThis, "window", { configurable: true, value: { localStorage: { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { if (throws) throw new DOMException("quota", "QuotaExceededError"); data.set(key, value); }, removeItem: (key: string) => data.delete(key) } } }); return data; }
+afterEach(() => Reflect.deleteProperty(globalThis, "window"));
+describe("RAG test history storage", () => {
+  it("migrates legacy, V1, and unversioned history while filtering invalid records", () => { const s=install(); s.set(RAG_TEST_HISTORY_STORAGE_KEY, JSON.stringify([entry("a"), { bad: true }])); expect(loadRagTestHistory()).toMatchObject({ ok:true, data:[expect.objectContaining({id:"a"})] }); expect(JSON.parse(s.get(RAG_TEST_HISTORY_STORAGE_KEY) ?? "{}")).toMatchObject({version:1}); s.set(RAG_TEST_HISTORY_STORAGE_KEY, JSON.stringify({version:1,data:[entry("b")] })); expect(loadRagTestHistory().data[0]?.id).toBe("b"); s.set(RAG_TEST_HISTORY_STORAGE_KEY, JSON.stringify({data:[entry("c")] })); expect(loadRagTestHistory().data[0]?.id).toBe("c"); });
+  it("recovers corrupt data, caps at 50, and clears", () => { const s=install(); s.set(RAG_TEST_HISTORY_STORAGE_KEY,"{"); expect(loadRagTestHistory().ok).toBe(false); s.set(RAG_TEST_HISTORY_STORAGE_KEY,JSON.stringify(Array.from({length:55},(_,i)=>entry(String(i))))); expect(loadRagTestHistory().data).toHaveLength(50); expect(clearRagTestHistory()).toMatchObject({ok:true,data:[]}); });
+  it("does not persist sources or chunks and handles quota errors", () => { const s=install(); s.set(RAG_TEST_HISTORY_STORAGE_KEY,JSON.stringify([Object.assign(entry("a"),{sources:["secret"],chunks:["secret"]})])); expect(JSON.stringify(loadRagTestHistory().data)).not.toContain("secret"); install(true); expect(clearRagTestHistory()).toMatchObject({ok:false}); });
+});

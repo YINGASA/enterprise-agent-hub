@@ -52,6 +52,7 @@ export type KnowledgeDocument = {
   originalFileName?: string;
   importedAt?: string;
   enabled?: boolean;
+  suggestedQuestions?: string[];
 };
 
 export type KnowledgeSourceType = "default" | "user_upload" | "user_paste";
@@ -128,6 +129,51 @@ export type RetrievedChunk = {
   scoreBreakdown?: RagScoreBreakdown;
   embeddingScore?: number;
   rerankReason?: string;
+};
+
+export type RagTestSource = {
+  sourceId: string;
+  documentId: string;
+  title: string;
+  sourceType: KnowledgeSourceType;
+  chunkIndex: number;
+  score: number;
+  confidence: RetrievalConfidence;
+  matchedSignals: string[];
+  scoreReason: string[];
+  contentPreview: string;
+  isUserDocument: boolean;
+};
+
+export type RagTestDiagnostic = {
+  question: string;
+  route: AgentRoute;
+  needsClarification: boolean;
+  clarificationQuestion?: string;
+  candidateCount: number;
+  reliableSourceCount: number;
+  retrievalConfidence: RetrievalConfidence;
+  fallback: boolean;
+  lowConfidenceReason?: string;
+  sources: RagTestSource[];
+  hitUserDocument: boolean;
+  currentDocumentId?: string;
+  hitCurrentDocument?: boolean;
+  currentDocumentIsTopSource?: boolean;
+  currentDocumentChunkIndex?: number;
+  currentDocumentMissReason?: string;
+};
+
+export type RagTestHistoryItem = {
+  version: 1;
+  id: string;
+  question: string;
+  documentId?: string;
+  testedAt: string;
+  hit: boolean;
+  topSourceId?: string;
+  confidence: RetrievalConfidence;
+  candidateCount: number;
 };
 
 export type RagAnswer = {
@@ -439,6 +485,7 @@ export type AgentApiMetadata = {
 
 export type AgentApiResponse = AgentPipelineResult & {
   api: AgentApiMetadata;
+  runId?: string;
 };
 export type AgentExample = {
   question: string;

@@ -217,7 +217,18 @@ export function AgentWorkspace() {
       const userDocuments = readUserKnowledgeDocuments();
       const enabledUserDocuments = userDocuments.filter((document) => document.enabled !== false);
       const response = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, mode, userDocuments: enabledUserDocuments }) });
-      if (!response.ok) throw new Error("API request failed: " + response.status);
+      if (!response.ok) {
+        let errorPayload: { errorType?: string; error?: string; message?: string } = {};
+        try {
+          errorPayload = (await response.json()) as typeof errorPayload;
+        } catch {
+          errorPayload = {};
+        }
+        if (response.status === 429 || errorPayload.errorType === "rate_limited" || errorPayload.error === "rate_limited") {
+          throw new Error(errorPayload.message || "请求过于频繁，请稍后再试。");
+        }
+        throw new Error(errorPayload.message || "API request failed: " + response.status);
+      }
       setResult((await response.json()) as AgentApiResponse);
       setFeedbackValues([]);
       setFeedbackReason("");
@@ -233,7 +244,7 @@ export function AgentWorkspace() {
     setIsCheckingHealth(true);
     setClientError("");
     try {
-      const response = await fetch("/api/llm/health", { method: "GET" });
+      const response = await fetch("/api/llm/health", { method: "POST" });
       setHealthResult((await response.json()) as LlmHealthResult);
     } catch (error) {
       setHealthResult({ configured: Boolean(llmStatus?.configured), healthy: false, errorType: "client_error", message: error instanceof Error ? error.message : "Unknown client error." });
@@ -247,14 +258,39 @@ export function AgentWorkspace() {
   function toggleFeedback(value: ChatAnswerFeedbackValue) {
     setFeedbackValues((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   }
-  function handleSaveFeedback() {
+  async function handleSaveFeedback() {
     if (!result) return;
     if (!feedbackValues.length) {
       setFeedbackMessage("请先选择至少一个反馈标签。");
       return;
     }
     const saved = saveChatFeedback(result, feedbackValues, feedbackReason);
-    setFeedbackMessage(saved.ok ? "已保存反馈到当前浏览器本地，用于后续质量诊断。" : saved.error);
+    if (!saved.ok) {
+      setFeedbackMessage(saved.error);
+      return;
+    }
+    setFeedbackMessage("已保存反馈到当前浏览器本地，并同步写入服务端运行摘要。");
+    try {
+      if (!result.runId) {
+        setFeedbackMessage("已保存到当前浏览器本地；本次运行缺少服务端标识，未写入服务端统计。");
+        return;
+      }
+      const response = await fetch("/api/ops/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          runId: result.runId,
+          values: feedbackValues,
+          reason: feedbackReason,
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { message?: string };
+        setFeedbackMessage(`已保存到当前浏览器本地；服务端统计未写入：${payload.message ?? "请求失败。"}`);
+      }
+    } catch {
+      setFeedbackMessage("已保存反馈到当前浏览器本地；服务端摘要暂时不可写入。");
+    }
   }
 
   return (

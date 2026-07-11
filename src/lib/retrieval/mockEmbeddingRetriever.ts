@@ -1,4 +1,4 @@
-import { buildMetadata, splitDocument } from "@/lib/retrieval/hybridRetriever";
+import { buildMetadata, scoreHybridCandidates, splitDocument } from "@/lib/retrieval/hybridRetriever";
 import type { RetrieverInput, RetrieverResult } from "@/lib/retrieval/types";
 import type { KnowledgeChunk, KnowledgePackId, RagScoreBreakdown, RetrievedChunk } from "@/types";
 
@@ -73,7 +73,9 @@ export function retrieveMockEmbedding(input: RetrieverInput): RetrieverResult {
   const chunks = input.documents.flatMap((document) => splitDocument(document));
   const topK = input.topK ?? 3;
   const queryVector = textToMockEmbedding(input.query);
-  const candidates = chunks.map((chunk) => {
+  const reliableCandidates = scoreHybridCandidates(input.query, chunks, input.packId as KnowledgePackId | undefined);
+  const reliableIds = new Set(reliableCandidates.map((item) => item.chunk.id));
+  const candidates = chunks.filter((chunk) => reliableIds.has(chunk.id)).map((chunk) => {
     const similarity = cosine(queryVector, textToMockEmbedding(chunkText(chunk)));
     const embeddingScore = Math.max(0, Math.round(similarity * 1000) / 10);
     const packBoost = input.packId && chunk.packId === input.packId ? 5 : 0;
@@ -104,7 +106,7 @@ export function retrieveMockEmbedding(input: RetrieverInput): RetrieverResult {
   }).filter((item) => item.score >= 8).sort((left, right) => right.score - left.score);
 
   const selected = selectDiverse(candidates, topK);
-  const metadata = buildMetadata(input.query, selected, chunks, { topK, preferredPackId: input.packId as KnowledgePackId | undefined, scenario: input.scenario });
+  const metadata = buildMetadata(input.query, selected, candidates.length, { topK, preferredPackId: input.packId as KnowledgePackId | undefined, scenario: input.scenario });
   return {
     chunks: selected,
     metadata: {

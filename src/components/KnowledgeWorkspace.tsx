@@ -3,15 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
+import { KnowledgeBackupPanel } from "@/components/KnowledgeBackupPanel";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
+import { RagTestBench } from "@/components/RagTestBench";
 import { documents as defaultDocuments } from "@/data/mock";
 import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import { loadChatFeedback } from "@/lib/chat/feedback";
 import { loadChatHistory } from "@/lib/chat/history";
-import { clearUserKnowledgeDocuments, readUserKnowledgeDocumentsWithStatus, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
-import { splitDocument } from "@/lib/rag";
-import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
+import { getKnowledgeDerived, invalidateKnowledgeDerived } from "@/lib/knowledge/derived";
+import { findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
+import { loadRagTestHistory } from "@/lib/knowledge/ragTestHistory";
+import { clearUserKnowledgeDocuments, deleteUserKnowledgeDocument, readUserKnowledgeDocumentsWithStatus, updateUserDocumentEnabled, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
+import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType, RagTestHistoryItem } from "@/types";
 
 const allPackOption = "all";
 const allCategoryOption = "all";
@@ -24,7 +28,7 @@ const ui = {
   userUpload: "\u7528\u6237\u4e0a\u4f20",
   userPaste: "\u7528\u6237\u7c98\u8d34",
   title: "\u771f\u5b9e\u77e5\u8bc6\u5e93\u7ba1\u7406",
-  intro: "\u7cfb\u7edf\u5185\u7f6e\u9ed8\u8ba4 Knowledge Packs \u53ea\u8bfb\u53ef\u68c0\u7d22\uff0c\u7528\u6237\u4e0a\u4f20\u548c\u7c98\u8d34\u6587\u6863\u4fdd\u5b58\u5728\u6d4f\u89c8\u5668 localStorage\uff0c\u5e76\u4e0e\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u4e00\u8d77\u53c2\u4e0e RAG\u3002",
+  intro: "\u7cfb\u7edf\u5185\u7f6e\u9ed8\u8ba4 Knowledge Packs \u53ea\u8bfb\u53ef\u68c0\u7d22\uff0c\u7528\u6237\u4e0a\u4f20\u548c\u7c98\u8d34\u6587\u6863\u9ed8\u8ba4\u4fdd\u5b58\u5728\u6d4f\u89c8\u5668 localStorage\uff0c\u53d1\u8d77\u804a\u5929\u65f6\u542f\u7528\u6587\u6863\u4f1a\u53d1\u9001\u7ed9\u672c\u5e94\u7528\u670d\u52a1\u7aef\u53c2\u4e0e RAG\u3002",
   clearUserDocs: "\u6e05\u7a7a\u7528\u6237\u6587\u6863",
   defaultDocCount: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u6587\u6863",
   userDocCount: "\u7528\u6237\u5bfc\u5165\u6587\u6863",
@@ -44,7 +48,7 @@ const ui = {
   readonly: "\u7cfb\u7edf\u5185\u7f6e / \u53ea\u8bfb",
   readonlyShort: "\u53ea\u8bfb",
   userImportTitle: "\u7528\u6237\u6587\u6863\u5bfc\u5165",
-  userImportDesc: "\u652f\u6301\u7c98\u8d34\u6587\u672c\u548c\u672c\u5730 .txt / .md / .json / .csv \u6587\u4ef6\u5bfc\u5165\uff0c\u5185\u5bb9\u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668 localStorage\u3002",
+  userImportDesc: "\u652f\u6301\u7c98\u8d34\u6587\u672c\u548c\u672c\u5730 .txt / .md / .json / .csv \u6587\u4ef6\u5bfc\u5165\uff0c\u9ed8\u8ba4\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668 localStorage\uff1bReal \u6a21\u5f0f\u4e0b\u4ec5\u76f8\u5173\u547d\u4e2d\u7247\u6bb5\u53ef\u80fd\u53d1\u9001\u81f3\u914d\u7f6e\u7684\u6a21\u578b\u670d\u52a1\u3002",
   docList: "\u6587\u6863\u5217\u8868",
   currentFilterPrefix: "\u5f53\u524d\u7b5b\u9009 ",
   currentFilterSuffix: " \u7bc7\u3002\u9ed8\u8ba4\u6587\u6863\u4e0d\u53ef\u5220\u9664\uff0c\u7528\u6237\u6587\u6863\u53ef\u5220\u9664\u3002",
@@ -128,6 +132,7 @@ function categoryIntro(packId: string) {
 }
 
 function suggestedQuestions(document: KnowledgeDocument) {
+  if (document.suggestedQuestions?.length) return document.suggestedQuestions;
   const tags = (document.tags ?? []).slice(0, 2).join("、");
   const subject = tags || document.title;
   return [
@@ -145,13 +150,18 @@ function chatQuestionHref(question: string) {
   return `/chat?question=${encodeURIComponent(question)}`;
 }
 
-function documentQualityIssues(document: KnowledgeDocument, chunkCount: number) {
-  const issues: string[] = [];
-  if (document.content.trim().length < 160) issues.push(ui.docTooShort);
-  if (chunkCount < 2) issues.push(ui.fewChunks);
-  if ((document.tags ?? []).length < 2) issues.push(ui.missingTags);
-  if (!document.summary?.trim()) issues.push(ui.missingSummary);
-  return issues;
+function documentQualityIssues(document: KnowledgeDocument) {
+  return getKnowledgeDerived(document).quality.issues;
+}
+
+function qualityBadgeClass(level: ReturnType<typeof getKnowledgeDerived>["quality"]["level"]) {
+  if (level === "excellent") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
+  if (level === "usable") return "bg-brand-50 text-brand-700 ring-brand-100";
+  return "bg-amber-50 text-amber-700 ring-amber-100";
+}
+
+function ragTestHitRate(stats?: { total: number; hits: number }) {
+  return stats?.total ? Math.round((stats.hits / stats.total) * 100) : 0;
 }
 
 export function KnowledgeWorkspace() {
@@ -164,6 +174,8 @@ export function KnowledgeWorkspace() {
   const [notice, setNotice] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatRunHistoryItem[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<ChatAnswerFeedbackItem[]>([]);
+  const [ragTestHistory, setRagTestHistory] = useState<RagTestHistoryItem[]>([]);
+  const [testBenchQuestion, setTestBenchQuestion] = useState("");
 
   useEffect(() => {
     const loaded = readUserKnowledgeDocumentsWithStatus();
@@ -174,14 +186,17 @@ export function KnowledgeWorkspace() {
     setChatHistory(loadedHistory.data);
     const loadedFeedback = loadChatFeedback();
     setFeedbackItems(loadedFeedback.data);
+    const loadedRagTests = loadRagTestHistory();
+    setRagTestHistory(loadedRagTests.data);
+    if (!loadedRagTests.ok) setNotice(loadedRagTests.error);
   }, []);
 
   const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
   const enabledDocuments = useMemo<KnowledgeDocument[]>(() => allDocuments.filter(isDocumentEnabled), [allDocuments]);
   const categories = useMemo(() => Array.from(new Set(allDocuments.map((document) => document.category).filter(Boolean))).sort(), [allDocuments]);
-  const defaultChunkCount = useMemo(() => defaultDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), []);
-  const userChunkCount = useMemo(() => userDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), [userDocuments]);
-  const activeChunkCount = useMemo(() => enabledDocuments.reduce((sum, document) => sum + splitDocument(document).length, 0), [enabledDocuments]);
+  const defaultChunkCount = useMemo(() => defaultDocuments.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0), []);
+  const userChunkCount = useMemo(() => userDocuments.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0), [userDocuments]);
+  const activeChunkCount = useMemo(() => enabledDocuments.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0), [enabledDocuments]);
   const lastImportedAt = useMemo(() => {
     const sorted = userDocuments.map((document) => document.importedAt ?? document.createdAt).sort();
     return sorted[sorted.length - 1];
@@ -204,6 +219,18 @@ export function KnowledgeWorkspace() {
       + feedbackItems.filter((item) => item.retrievalConfidence === "low").length;
     return { mostCited, neverCited, fallbackCount, noRecallCount };
   }, [chatHistory, enabledDocuments, feedbackItems]);
+  const ragTestStatsByDocument = useMemo(() => {
+    const stats = new Map<string, { total: number; hits: number; latest?: RagTestHistoryItem }>();
+    for (const item of ragTestHistory) {
+      if (!item.documentId) continue;
+      const current = stats.get(item.documentId) ?? { total: 0, hits: 0 };
+      current.total += 1;
+      current.hits += item.hit ? 1 : 0;
+      if (!current.latest || item.testedAt > current.latest.testedAt) current.latest = item;
+      stats.set(item.documentId, current);
+    }
+    return stats;
+  }, [ragTestHistory]);
 
   const filteredDocuments = allDocuments.filter((document) => {
     const packMatched = selectedPack === allPackOption || document.packId === selectedPack;
@@ -213,49 +240,66 @@ export function KnowledgeWorkspace() {
   });
 
   const selectedDocument = allDocuments.find((document) => document.id === selectedDocumentId) ?? filteredDocuments[0] ?? allDocuments[0];
-  const chunks = selectedDocument ? splitDocument(selectedDocument) : [];
+  const chunks = selectedDocument ? getKnowledgeDerived(selectedDocument).chunks : [];
   const isSelectedUserDocument = Boolean(selectedDocument && selectedDocument.sourceType !== "default");
   const selectedSuggestedQuestions = selectedDocument ? suggestedQuestions(selectedDocument) : [];
-  const selectedQualityIssues = selectedDocument ? documentQualityIssues(selectedDocument, chunks.length) : [];
+  const selectedQualityIssues = selectedDocument ? documentQualityIssues(selectedDocument) : [];
+  const selectedQuality = selectedDocument ? getKnowledgeDerived(selectedDocument).quality : null;
+  const selectedDuplicateMatches = selectedDocument
+    ? findDuplicateKnowledgeDocuments(selectedDocument, allDocuments.filter((document) => document.id !== selectedDocument.id))
+    : [];
   const libraryQualityIssues = enabledDocuments
-    .map((document) => ({ document, issues: documentQualityIssues(document, splitDocument(document).length) }))
+    .map((document) => ({ document, issues: documentQualityIssues(document) }))
     .filter((item) => item.issues.length > 0)
     .slice(0, 6);
 
   function handleAdd(document: ImportedKnowledgeDocument) {
+    const duplicates = findDuplicateKnowledgeDocuments(document, allDocuments);
     const nextDocuments = [document, ...userDocuments.filter((item) => item.id !== document.id)];
     const saved = writeUserKnowledgeDocuments(nextDocuments);
-    const persistedDocuments = saved.ok ? saved.data : nextDocuments;
-    const chunkCount = splitDocument(document).length;
-    setUserDocuments(persistedDocuments);
+    if (!saved.ok) {
+      setNotice(`导入失败：${saved.error}`);
+      return;
+    }
+    invalidateKnowledgeDerived(document.id);
+    const chunkCount = getKnowledgeDerived(document).chunks.length;
+    setUserDocuments(saved.data);
     setSelectedDocumentId(document.id);
     setSelectedPack(document.packId ?? allPackOption);
     setSelectedCategory(allCategoryOption);
     setSelectedSourceType(document.sourceType);
     setNotice(
       saved.ok
-        ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，并加入 RAG 检索。`
-        : `已导入到当前页面状态，但保存到 localStorage 失败：${saved.error}`,
+        ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，${document.enabled === false ? "当前未启用 RAG 检索" : "已加入 RAG 检索"}。${duplicates.length ? ` 检测到可能重复文档：${duplicates.map((item) => item.title).join("、")}。` : ""}`
+        : "",
     );
   }
 
   function handleDelete(documentId: string) {
     const target = userDocuments.find((document) => document.id === documentId);
     if (!target) return;
-    const nextDocuments = userDocuments.filter((document) => document.id !== documentId);
-    const saved = writeUserKnowledgeDocuments(nextDocuments);
-    setUserDocuments(saved.ok ? saved.data : nextDocuments);
+    const saved = deleteUserKnowledgeDocument(userDocuments, documentId);
+    if (!saved.ok) {
+      setNotice(`删除失败：${saved.error}`);
+      return;
+    }
+    invalidateKnowledgeDerived(documentId);
+    setUserDocuments(saved.data);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
-    setNotice(saved.ok ? ui.deleted + target.title : `已从页面删除，但同步 localStorage 失败：${saved.error}`);
+    setNotice(ui.deleted + target.title);
   }
 
   function handleToggleEnabled(documentId: string) {
     const target = userDocuments.find((document) => document.id === documentId);
     if (!target) return;
-    const nextDocuments = userDocuments.map((document) => document.id === documentId ? { ...document, enabled: document.enabled === false } : document);
-    const saved = writeUserKnowledgeDocuments(nextDocuments);
-    setUserDocuments(saved.ok ? saved.data : nextDocuments);
-    setNotice(saved.ok ? `${target.title} 已${target.enabled === false ? "启用" : "禁用"} RAG 检索。` : `状态已更新，但同步 localStorage 失败：${saved.error}`);
+    const saved = updateUserDocumentEnabled(userDocuments, documentId, target.enabled === false);
+    if (!saved.ok) {
+      setNotice(`状态更新失败：${saved.error}`);
+      return;
+    }
+    invalidateKnowledgeDerived(documentId);
+    setUserDocuments(saved.data);
+    setNotice(`${target.title} 已${target.enabled === false ? "启用" : "禁用"} RAG 检索。`);
   }
 
   function handleClearUserDocuments() {
@@ -263,10 +307,15 @@ export function KnowledgeWorkspace() {
     const confirmed = window.confirm(ui.confirmClear);
     if (!confirmed) return;
     const cleared = clearUserKnowledgeDocuments();
-    setUserDocuments([]);
+    if (!cleared.ok) {
+      setNotice(`清空失败：${cleared.error}`);
+      return;
+    }
+    userDocuments.forEach((document) => invalidateKnowledgeDerived(document.id));
+    setUserDocuments(cleared.data);
     setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
     setSelectedSourceType(allSourceOption);
-    setNotice(cleared.ok ? ui.cleared : `已清空页面状态，但同步 localStorage 失败：${cleared.error}`);
+    setNotice(ui.cleared);
   }
 
   return (
@@ -291,7 +340,7 @@ export function KnowledgeWorkspace() {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {enterpriseKnowledgePacks.map((pack) => {
-              const packChunks = pack.documents.reduce((sum, document) => sum + splitDocument(document).length, 0);
+              const packChunks = pack.documents.reduce((sum, document) => sum + getKnowledgeDerived(document).chunks.length, 0);
               return (
                 <article key={pack.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -322,18 +371,33 @@ export function KnowledgeWorkspace() {
             <h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3>
             <p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p>
           </div>
-          <DocumentForm onAdd={handleAdd} />
+          <DocumentForm onAdd={handleAdd} existingDocuments={allDocuments} />
         </div>
+        <KnowledgeBackupPanel
+          documents={userDocuments}
+          onDocumentsChange={(documents) => {
+            userDocuments.forEach((document) => invalidateKnowledgeDerived(document.id));
+            documents.forEach((document) => invalidateKnowledgeDerived(document.id));
+            setUserDocuments(documents);
+            setSelectedDocumentId(documents[0]?.id ?? defaultDocuments[0]?.id ?? "");
+            setSelectedSourceType(allSourceOption);
+            setNotice("用户知识库备份已恢复，默认知识库未受影响。");
+          }}
+        />
+        <RagTestBench documents={allDocuments} currentDocument={selectedDocument} suggestedQuestions={selectedSuggestedQuestions} presetQuestion={testBenchQuestion} onHistoryChange={setRagTestHistory} />
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-4">
             <h3 className="font-semibold text-ink-900">{ui.docList}</h3>
             <p className="mt-1 text-sm text-ink-500">{ui.currentFilterPrefix}{filteredDocuments.length}{ui.currentFilterSuffix}</p>
           </div>
           {filteredDocuments.map((document) => {
-            const documentChunks = splitDocument(document);
+            const derived = getKnowledgeDerived(document);
+            const documentChunks = derived.chunks;
             const enabled = isDocumentEnabled(document);
-            const qualityIssues = documentQualityIssues(document, documentChunks.length);
+            const qualityIssues = documentQualityIssues(document);
+            const quality = derived.quality;
             const questions = suggestedQuestions(document);
+            const testStats = ragTestStatsByDocument.get(document.id);
             return (
               <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -342,6 +406,7 @@ export function KnowledgeWorkspace() {
                       <h4 className="break-words font-semibold text-ink-900">{document.title}</h4>
                       <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span>
                       <span className={enabled ? "rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-ink-500 ring-1 ring-slate-200"}>{enabled ? ui.enabled : ui.disabled}</span>
+                      <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + qualityBadgeClass(quality.level)}>质量 {quality.score} · {quality.label}</span>
                       {document.sourceType === "default" ? <span className="rounded bg-slate-50 px-2 py-0.5 text-xs text-ink-500 ring-1 ring-slate-200">{ui.readonlyShort}</span> : null}
                     </div>
                     <p className="mt-2 break-words text-sm leading-6 text-ink-600">{document.summary ?? document.content.slice(0, 110)}</p>
@@ -350,6 +415,7 @@ export function KnowledgeWorkspace() {
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{documentChunks.length} chunks</span>
                       <span className={enabled ? "rounded bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-100"}>{enabled ? ui.ragIncluded : ui.ragExcluded}</span>
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{document.updatedAt}</span>
+                      <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">测试 {testStats?.total ?? 0} 次 · 命中 {testStats?.hits ?? 0} 次 · {ragTestHitRate(testStats)}%</span>
                     </div>
                   </button>
                   {document.sourceType !== "default" ? (
@@ -406,8 +472,10 @@ export function KnowledgeWorkspace() {
                 <p><span className="text-ink-400">{ui.chunks}</span>{chunks.length}</p>
                 <p><span className="text-ink-400">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p>
                 <p><span className="text-ink-400">{ui.ragStatus}</span>{isDocumentEnabled(selectedDocument) ? ui.enabled : ui.disabled}</p>
+                <p><span className="text-ink-400">检索测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.total ?? 0} 次 · 命中率 {ragTestHitRate(ragTestStatsByDocument.get(selectedDocument.id))}%</p>
                 <p><span className="text-ink-400">可删除：</span>{isSelectedUserDocument ? "是" : "否"}</p>
                 <p className="sm:col-span-2 break-words"><span className="text-ink-400">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p>
+                <p className="sm:col-span-2"><span className="text-ink-400">最近测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.latest ? `${new Date(ragTestStatsByDocument.get(selectedDocument.id)!.latest!.testedAt).toLocaleString()} · ${ragTestStatsByDocument.get(selectedDocument.id)!.latest!.hit ? "命中" : "未命中"}` : "暂无"}</p>
               </div>
               {!isDocumentEnabled(selectedDocument) ? <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">{ui.disabledNote}</p> : null}
               <div className="rounded-md bg-brand-50 p-3">
@@ -416,18 +484,42 @@ export function KnowledgeWorkspace() {
                   {selectedSuggestedQuestions.map((item) => (
                     <div key={item} className="rounded-md bg-white p-2 ring-1 ring-brand-100">
                       <p className="break-words text-xs text-brand-800">{item}</p>
-                      <a href={chatQuestionHref(item)} className="mt-1 inline-flex rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">{ui.testInChat}</a>
+                      <div className="mt-1 flex flex-wrap gap-2"><a href={chatQuestionHref(item)} className="inline-flex rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">{ui.testInChat}</a><button type="button" onClick={() => setTestBenchQuestion(item)} className="rounded-md border border-brand-100 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">测试当前文档</button></div>
                     </div>
                   ))}
                 </div>
               </div>
               <div className={selectedQualityIssues.length ? "rounded-md bg-amber-50 p-3 text-xs text-amber-800" : "rounded-md bg-emerald-50 p-3 text-xs text-emerald-800"}>
-                <p className="font-semibold">{selectedQualityIssues.length ? ui.qualityIssues : ui.qualityGood}</p>
+                <p className="font-semibold">{selectedQuality ? `质量评分 ${selectedQuality.score}/100 · ${selectedQuality.label}` : ui.qualityDiagnosis}</p>
+                {selectedQuality ? (
+                  <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] sm:grid-cols-5">
+                    <span>内容 {selectedQuality.dimensions.content}/30</span>
+                    <span>标签 {selectedQuality.dimensions.tags}/20</span>
+                    <span>测试问题 {selectedQuality.dimensions.testQuestions}/20</span>
+                    <span>分块 {selectedQuality.dimensions.chunks}/20</span>
+                    <span>RAG {selectedQuality.dimensions.ragEnabled}/10</span>
+                  </div>
+                ) : null}
                 {selectedQualityIssues.length ? (
                   <ul className="mt-2 space-y-1">
                     {selectedQualityIssues.map((issue) => <li key={issue} className="break-words">· {issue}</li>)}
                   </ul>
                 ) : null}
+              </div>
+              {selectedDuplicateMatches.length ? (
+                <div className="rounded-md bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                  <p className="font-semibold">可能存在重复内容</p>
+                  {selectedDuplicateMatches.map((item) => (
+                    <p key={item.documentId} className="mt-1 break-words">· {item.title}：相似度 {item.similarity}%（{item.reasons.join("、")}）</p>
+                  ))}
+                  <p className="mt-2 text-amber-700">该提示不会阻止保存，请结合业务版本和适用范围判断是否保留。</p>
+                </div>
+              ) : null}
+              <div className="rounded-md border border-slate-200 p-3 text-xs leading-5 text-ink-600">
+                <p className="font-semibold text-ink-800">推荐测试路径</p>
+                <p className="mt-1">1. 确认文档已启用参与 RAG。</p>
+                <p>2. 点击上方“测试这个问题”，进入聊天工作台。</p>
+                <p>3. 检查回答来源是否命中当前文档，问题只会自动填入，不会自动运行。</p>
               </div>
               {isSelectedUserDocument ? (
                 <div className="flex flex-wrap gap-2">
@@ -450,6 +542,7 @@ export function KnowledgeWorkspace() {
             <p>参与检索 chunks：{activeChunkCount}</p>
             <p>fallback 次数：{usageDiagnostics.fallbackCount}</p>
             <p>无召回 / 低置信问题数：{usageDiagnostics.noRecallCount}</p>
+            <p>RAG 测试历史：{ragTestHistory.length} 条</p>
             <p className="sm:col-span-2">最近导入：{lastImportedAt ? new Date(lastImportedAt).toLocaleString() : ui.noUserDocs}</p>
           </div>
           <div className="mt-4 space-y-3 text-sm leading-6 text-ink-600">

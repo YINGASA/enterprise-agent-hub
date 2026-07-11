@@ -78,7 +78,7 @@ Real API mode uses server-side API routes only:
 5. Server parses structured JSON.
 6. Server returns final answer, structured output, trace steps, and diagnostics.
 
-API keys are never exposed in browser code. For public demos, the Chat Workspace recommends Mock mode by default. A lightweight server-only status route reports whether Real API environment variables are configured without exposing secrets. When `AI_API_KEY` is missing, the UI keeps Real API visible as an optional capability but blocks the run action with a friendly message, so the deployed demo still works end to end through Mock mode.
+API keys are never exposed in browser code. V1.9 uses Real API as the primary runtime when model service environment variables are configured. A lightweight server-only status route reports whether Real API environment variables are configured without exposing secrets. When `AI_API_KEY` is missing, the UI falls back to development simulation mode with a friendly message, so the deployed app still works end to end through Mock mode.
 
 ## Fallback Flow
 
@@ -110,7 +110,7 @@ V1.0 adds a hybrid knowledge library:
 
 - Default Knowledge Packs remain bundled in source code and are read-only in the UI.
 - User documents can be pasted or imported from `.txt`, `.md`, `.json`, and `.csv` files.
-- Imported content is parsed in the browser and stored in `localStorage`; files are not uploaded to a server.
+- Imported content is parsed in the browser and stored in `localStorage`. When a chat request runs, enabled documents are sent to this application server for retrieval; in Real mode, only relevant retrieved snippets may be included in the configured model-service request.
 - The browser sends sanitized user documents to `/api/agent` when running chat, so the server-side Agent pipeline can retrieve across both default and user knowledge for that request.
 - `/api/evaluation` intentionally ignores browser `localStorage` and uses only default documents for stable evaluation results.
 
@@ -160,11 +160,51 @@ The retrieval layer now exposes a small adapter contract: `RetrieverInput`, `Ret
 `mockEmbeddingRetriever` is intentionally local and deterministic. It builds token-hash vectors and cosine scores so the UI and metadata can exercise embeddingScore, rerankScore, retrieverMode, rerankReason, and vectorReady fields without calling a real embedding API.
 
 The `auto` strategy preserves Hybrid Retrieval as the default. It attempts mock embedding rerank only for short queries or low-confidence Hybrid retrieval, so irrelevant vector-like matches do not become authoritative. This keeps offline demos stable while reserving a clean upgrade path to OpenAI / DeepSeek / BGE embeddings and pgvector / Qdrant / Chroma.
+
+## V1.10 Production Readiness Foundation
+
+V1.10 adds a lightweight server-side observability and persistence foundation without introducing a database. The server appends JSONL records under the runtime user's home directory by default, or under `EAH_OPS_DATA_DIR` when configured:
+
+- Agent run summaries: question preview, responseMode, scenario, intent, tools used, source count, retrieval confidence, error type, and timestamp.
+- Chat feedback summaries: feedback labels, optional reason preview, responseMode, scenario, intent, source count, and timestamp.
+- Full Mock evaluation summaries: total, passed, passRate, duration, and timestamp.
+
+The persistence layer is deliberately compact and safe. It does not store API keys, provider, model, baseUrl, full prompts, full answers, full user documents, or raw LLM payloads. If file writing fails in a serverless or read-only runtime, the Agent flow continues and only observability is degraded.
+
+`/ops` provides a lightweight operations dashboard protected by `EAH_OPS_TOKEN`. It shows LLM configured status, recent Agent run counts, Real / Mock / fallback ratios, recent error summaries, recent feedback, and the latest full Mock evaluation result. `/api/llm/status` remains safe and only returns `{ configured: boolean }`.
+
+Real API requests now pass through a small in-memory rate limiter. The default limit is 12 real requests per minute and can be adjusted with `EAH_REAL_API_RATE_LIMIT_PER_MINUTE`. Mock mode and full Mock evaluation are not rate-limited; protected Real evaluation consumes the same limiter budget and is capped to a small sample.
+
+### V1.10.1 Ops Security Notes
+
+V1.10.1 tightens the operations foundation for safer online use:
+
+- `EAH_OPS_TOKEN` protects `/ops` and `/api/ops/summary`. The token is typed in the page and sent only through the `x-ops-token` request header, not through the URL.
+- `EAH_REAL_API_RATE_LIMIT_PER_MINUTE` controls the Real API per-IP request limit. The default is 12 real requests per minute. Mock mode and full Mock evaluation are not affected.
+- `EAH_REAL_API_RATE_LIMIT_MAX_BUCKETS` caps the in-memory limiter bucket count; expired buckets are periodically removed.
+- `EAH_TRUSTED_CLIENT_IP_HEADER` may be set only when a trusted proxy overwrites that header (for example `x-real-ip` or `x-forwarded-for`). Without it, the limiter safely uses a shared anonymous bucket instead of trusting spoofable forwarding headers.
+- `EAH_OPS_MAX_RECORDS` controls the maximum retained JSONL records per ops category. The default is 200, and old records are trimmed automatically.
+- `.runtime-data/` is ignored by git. Production can also set `EAH_OPS_DATA_DIR` to place runtime JSONL files outside the repo.
+- Ops summaries never return API keys, provider, model, baseUrl, full prompts, full answers, full user documents, raw LLM payloads, or stack traces.
+- Rate limited Real API requests return `errorType: "rate_limited"` with HTTP 429 so the UI can show a clear “请求过于频繁，请稍后再试” message instead of treating it as a model failure.
+- This in-memory limiter is suitable for a single application instance. Multi-instance production deployments should replace it with an atomic Redis or KV limiter.
 ## V1.6 Chat Run History
 
 The Chat Workspace now has a frontend-only run-history layer. After an Agent Pipeline run, the user can save the result snapshot into browser localStorage. Each snapshot keeps the question, final answer, response mode, route, retriever metadata, RAG sources, tool calls, structured output, and API metadata.
 
 The same snapshot can be rendered into Markdown or JSON reports for local review. This improves observability without adding a database or backend persistence layer. Later versions can replace localStorage with server-side audit logs, team workspaces, and searchable run history.
+
+## Dependency Audit Note (V1.11.6)
+
+V1.11.6 upgrades Next.js to 16.2.10, PostCSS to 8.5.16, and Vitest to 3.2.7 without changing React, TypeScript, or Tailwind major versions. The production dependency audit has no high or critical findings. It still reports two moderate findings from the PostCSS version transitively bundled by Next.js 16.2.10. The audit tool currently suggests an incompatible Next.js 9 downgrade, so this project does not use a forced fix, override, or downgrade. Recheck the audit when a compatible Next.js security release becomes available.
+
+## Client Storage Scope (V1.12.0)
+
+V1.12.0 unifies Chat run history, local answer feedback, and evaluation history under the client storage adapter. RAG Test History keeps its existing V1 key, legacy-array compatibility, 50-record limit, and corruption recovery for now. It is intentionally deferred to V1.12.1 because its storage module has historical encoding constraints; this does not affect RAG Test Bench behavior.
+
+## Client Storage Scope (V1.12.1)
+
+V1.12.1 moves RAG Test History to the shared client storage adapter without changing its key or Test Bench contract. All four client histories now use versioned envelopes, legacy migration, record filtering, bounded retention, and safe corruption recovery.
 
 ## V1.6.1 Knowledge Import Persistence
 

@@ -1,12 +1,15 @@
-﻿import type { AgentApiResponse, ChatRunHistoryItem, ToolRunResult } from "@/types";
+import type { AgentApiResponse, ChatRunHistoryItem, ToolRunResult } from "@/types";
+import { clearClientStorageList, readClientStorageList, writeClientStorageList, type ClientStorageListOptions } from "@/lib/clientStorage";
 
-const STORAGE_KEY = "enterprise-agent-hub:chat-run-history";
+export const STORAGE_KEY = "enterprise-agent-hub:chat-run-history";
 const MAX_HISTORY_ITEMS = 30;
 
 type HistoryResult<T> = { ok: true; data: T } | { ok: false; error: string; data: T };
 
-function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+function isHistoryItem(item: unknown): item is ChatRunHistoryItem {
+  if (!item || typeof item !== "object") return false;
+  const value = item as Partial<ChatRunHistoryItem>;
+  return typeof value.id === "string" && typeof value.question === "string" && value.question.length <= 2_000 && typeof value.finalAnswer === "string" && value.finalAnswer.length <= 12_000 && typeof value.responseMode === "string" && typeof value.scenario === "string" && typeof value.intent === "string" && typeof value.createdAt === "string" && Number.isFinite(Date.parse(value.createdAt));
 }
 
 function compactDateStamp(date: Date) {
@@ -18,23 +21,9 @@ function makeId() {
   return "chat-" + compactDateStamp(new Date()) + "-" + Math.random().toString(36).slice(2, 8);
 }
 
-function isHistoryItem(item: unknown): item is ChatRunHistoryItem {
-  return Boolean(item && typeof item === "object" && "id" in item && "question" in item);
-}
-
-function readRawHistory(): ChatRunHistoryItem[] {
-  if (!canUseStorage()) return [];
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter(isHistoryItem).slice(0, MAX_HISTORY_ITEMS);
-}
-
-function writeRawHistory(items: ChatRunHistoryItem[]) {
-  if (!canUseStorage()) throw new Error("localStorage is not available in this browser.");
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)));
-}
+const storageOptions: ClientStorageListOptions<ChatRunHistoryItem> = { key: STORAGE_KEY, version: 1, maxItems: MAX_HISTORY_ITEMS, sanitize: (item) => isHistoryItem(item) ? item : null };
+function readRawHistory() { return readClientStorageList(storageOptions); }
+function writeRawHistory(items: ChatRunHistoryItem[]) { return writeClientStorageList(storageOptions, items); }
 
 function fallbackReason(result: AgentApiResponse) {
   if (result.api.fallbackReason) return result.api.fallbackReason;
@@ -72,24 +61,26 @@ export function createChatRunHistoryItem(result: AgentApiResponse): ChatRunHisto
     retrieverMode: retrievalMetadata?.retrieverMode,
     rerankReason: retrievalMetadata?.rerankReason,
     durationMs: result.steps.reduce((sum, step) => sum + step.durationMs, 0) + (result.api.llmDurationMs ?? 0),
-    resultSnapshot: result,
+    resultSnapshot: {
+      route: result.route,
+      ragAnswer: { retrievalMetadata: retrievalMetadata, sources: result.ragAnswer?.sources.map((source) => ({ title: source.title, category: source.category, score: source.score })) },
+      toolResults: result.toolResults.map((tool) => ({ tool: tool.tool, status: tool.status })),
+      steps: result.steps.map((step) => ({ type: step.type, name: step.name, status: step.status, durationMs: step.durationMs })),
+    },
   };
 }
 
 export function loadChatHistory(): HistoryResult<ChatRunHistoryItem[]> {
-  try {
-    return { ok: true, data: readRawHistory() };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "Failed to read chat history.", data: [] };
-  }
+  const result = readRawHistory();
+  return result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error ?? "读取聊天历史失败。", data: result.data };
 }
 
 export function saveChatRun(result: AgentApiResponse): HistoryResult<ChatRunHistoryItem[]> {
   try {
     const item = createChatRunHistoryItem(result);
-    const next = [item, ...readRawHistory().filter((historyItem) => historyItem.id !== item.id)].slice(0, MAX_HISTORY_ITEMS);
-    writeRawHistory(next);
-    return { ok: true, data: next };
+    const next = [item, ...readRawHistory().data.filter((historyItem) => historyItem.id !== item.id)];
+    const saved = writeRawHistory(next);
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, error: saved.error ?? "保存聊天历史失败。", data: saved.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to save chat history.", data: [] };
   }
@@ -97,9 +88,8 @@ export function saveChatRun(result: AgentApiResponse): HistoryResult<ChatRunHist
 
 export function deleteChatRun(id: string): HistoryResult<ChatRunHistoryItem[]> {
   try {
-    const next = readRawHistory().filter((item) => item.id !== id);
-    writeRawHistory(next);
-    return { ok: true, data: next };
+    const saved = writeRawHistory(readRawHistory().data.filter((item) => item.id !== id));
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, error: saved.error ?? "删除聊天历史失败。", data: saved.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to delete chat history.", data: [] };
   }
@@ -107,8 +97,8 @@ export function deleteChatRun(id: string): HistoryResult<ChatRunHistoryItem[]> {
 
 export function clearChatHistory(): HistoryResult<ChatRunHistoryItem[]> {
   try {
-    writeRawHistory([]);
-    return { ok: true, data: [] };
+    const saved = clearClientStorageList(storageOptions);
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, error: saved.error ?? "清空聊天历史失败。", data: saved.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to clear chat history.", data: [] };
   }

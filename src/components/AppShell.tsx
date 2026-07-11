@@ -8,6 +8,7 @@ const navItems = [
   { href: "/tools", label: "业务工具" },
   { href: "/scenarios", label: "场景模板" },
   { href: "/evaluation", label: "评测面板" },
+  { href: "/ops", label: "运行状态" },
   { href: "/about", label: "项目说明" },
 ];
 
