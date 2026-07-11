@@ -198,6 +198,10 @@ The same snapshot can be rendered into Markdown or JSON reports for local review
 
 V1.11.6 upgrades Next.js to 16.2.10, PostCSS to 8.5.16, and Vitest to 3.2.7 without changing React, TypeScript, or Tailwind major versions. The production dependency audit has no high or critical findings. It still reports two moderate findings from the PostCSS version transitively bundled by Next.js 16.2.10. The audit tool currently suggests an incompatible Next.js 9 downgrade, so this project does not use a forced fix, override, or downgrade. Recheck the audit when a compatible Next.js security release becomes available.
 
+## Client Storage Scope (V1.12.0)
+
+V1.12.0 unifies Chat run history, local answer feedback, and evaluation history under the client storage adapter. RAG Test History keeps its existing V1 key, legacy-array compatibility, 50-record limit, and corruption recovery for now. It is intentionally deferred to V1.12.1 because its storage module has historical encoding constraints; this does not affect RAG Test Bench behavior.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

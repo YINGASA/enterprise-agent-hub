@@ -1,13 +1,11 @@
-﻿import type { EvaluationRunHistoryItem, EvaluationRunResponse } from "@/types";
+import type { EvaluationRunHistoryItem, EvaluationRunResponse } from "@/types";
+import { clearClientStorageList, readClientStorageList, writeClientStorageList, type ClientStorageListOptions } from "@/lib/clientStorage";
 
-const STORAGE_KEY = "enterprise-agent-hub:evaluation-history";
+export const STORAGE_KEY = "enterprise-agent-hub:evaluation-history";
 const MAX_HISTORY_ITEMS = 20;
 
 type HistoryResult<T> = { ok: true; data: T } | { ok: false; error: string; data: T };
 
-function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
 
 function compactDateStamp(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -39,27 +37,24 @@ export function createEvaluationHistoryItem(result: EvaluationRunResponse): Eval
     averageRagScore: result.summary.averageRagScore,
     failureSummary,
     failureBuckets: result.summary.failureBuckets,
-    resultSnapshot: result,
+    resultSnapshot: { summary: result.summary, selectedSuite: result.selectedSuite, mode: result.mode, startedAt: result.startedAt, finishedAt: result.finishedAt },
   };
 }
 
-function readRawHistory(): EvaluationRunHistoryItem[] {
-  if (!canUseStorage()) return [];
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((item): item is EvaluationRunHistoryItem => Boolean(item && typeof item === "object" && "id" in item));
+function sanitizeHistoryItem(value: unknown): EvaluationRunHistoryItem | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<EvaluationRunHistoryItem>;
+  if (typeof item.id !== "string" || typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt)) || (item.mode !== "mock" && item.mode !== "real") || typeof item.suite !== "string" || typeof item.caseCount !== "number" || typeof item.passed !== "number" || typeof item.passRate !== "number" || item.caseCount < 0 || item.passed < 0 || item.passed > item.caseCount || item.passRate < 0 || item.passRate > 100) return null;
+  return { ...item, id: item.id.slice(0, 128), suite: item.suite.slice(0, 48), resultSnapshot: undefined } as EvaluationRunHistoryItem;
 }
-
-function writeRawHistory(items: EvaluationRunHistoryItem[]) {
-  if (!canUseStorage()) throw new Error("localStorage is not available in this browser.");
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)));
-}
+const storageOptions: ClientStorageListOptions<EvaluationRunHistoryItem> = { key: STORAGE_KEY, version: 1, maxItems: MAX_HISTORY_ITEMS, sanitize: sanitizeHistoryItem };
+function readRawHistory() { return readClientStorageList(storageOptions); }
+function writeRawHistory(items: EvaluationRunHistoryItem[]) { return writeClientStorageList(storageOptions, items); }
 
 export function loadEvaluationHistory(): HistoryResult<EvaluationRunHistoryItem[]> {
   try {
-    return { ok: true, data: readRawHistory().slice(0, MAX_HISTORY_ITEMS) };
+    const loaded = readRawHistory();
+    return loaded.ok ? { ok: true, data: loaded.data } : { ok: false, error: loaded.error ?? "读取评测历史失败。", data: loaded.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to read evaluation history.", data: [] };
   }
@@ -68,9 +63,8 @@ export function loadEvaluationHistory(): HistoryResult<EvaluationRunHistoryItem[
 export function saveEvaluationRun(result: EvaluationRunResponse): HistoryResult<EvaluationRunHistoryItem[]> {
   try {
     const item = createEvaluationHistoryItem(result);
-    const next = [item, ...readRawHistory().filter((historyItem) => historyItem.id !== item.id)].slice(0, MAX_HISTORY_ITEMS);
-    writeRawHistory(next);
-    return { ok: true, data: next };
+    const saved = writeRawHistory([item, ...readRawHistory().data.filter((historyItem) => historyItem.id !== item.id)]);
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, error: saved.error ?? "保存评测历史失败。", data: saved.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to save evaluation history.", data: [] };
   }
@@ -78,9 +72,8 @@ export function saveEvaluationRun(result: EvaluationRunResponse): HistoryResult<
 
 export function deleteEvaluationRun(id: string): HistoryResult<EvaluationRunHistoryItem[]> {
   try {
-    const next = readRawHistory().filter((item) => item.id !== id);
-    writeRawHistory(next);
-    return { ok: true, data: next };
+    const saved = writeRawHistory(readRawHistory().data.filter((item) => item.id !== id));
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, error: saved.error ?? "删除评测历史失败。", data: saved.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to delete evaluation history.", data: [] };
   }
@@ -88,8 +81,8 @@ export function deleteEvaluationRun(id: string): HistoryResult<EvaluationRunHist
 
 export function clearEvaluationHistory(): HistoryResult<EvaluationRunHistoryItem[]> {
   try {
-    writeRawHistory([]);
-    return { ok: true, data: [] };
+    const saved = clearClientStorageList(storageOptions);
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, error: saved.error ?? "清空评测历史失败。", data: saved.data };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to clear evaluation history.", data: [] };
   }
