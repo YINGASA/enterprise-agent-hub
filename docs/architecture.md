@@ -216,6 +216,10 @@ The local Playwright gate runs from an isolated temporary app directory that exc
 
 `src/components/AgentWorkspace.tsx` remains the stable Chat entry component and owns composition plus display-only derivations. `src/components/agent-workspace/useAgentWorkspace.ts` owns URL question prefill, LLM status and health state, the single Agent request path, result normalization, clarification and rate-limit errors, feedback runId submission, and unmount-safe async updates. `AgentFeedbackPanel.tsx` is a props-only presentation component; it neither accesses localStorage nor calls the Agent API. Chat History remains an independent consumer of the returned result and continues using the existing versioned Client Storage adapter key.
 
+## Knowledge Workspace Structure (V1.12.4)
+
+`src/components/KnowledgeWorkspace.tsx` remains the stable `/knowledge` composition entry. `src/components/knowledge-workspace/useKnowledgeWorkspace.ts` owns browser-local document initialization, selection and filters, import, enable/disable, deletion, clear, and backup-restore refresh actions. It calls the existing Knowledge Storage Adapter and invalidates derived caches only after successful writes. `DocumentForm`, `KnowledgeBackupPanel`, and `RagTestBench` remain separate boundaries: backup restore reports documents through an explicit callback, and the RAG Test Bench continues to use `ragTestHistory` without invoking a model or tool. Storage keys, backup JSON, migration behavior, and the 50-item RAG Test History cap are unchanged.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

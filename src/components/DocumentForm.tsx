@@ -113,7 +113,7 @@ export function DocumentForm({ onAdd, existingDocuments }: DocumentFormProps) {
       <div className="space-y-4">
         <label className="block">
           <span className="text-sm font-medium text-ink-700">标题</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="例如：公司笔记本电脑申请制度" />
+          <input data-testid="knowledge-document-title" value={title} onChange={(event) => setTitle(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder="例如：公司笔记本电脑申请制度" />
         </label>
         <label className="block">
           <span className="text-sm font-medium text-ink-700">来源类型</span>
@@ -153,7 +153,7 @@ export function DocumentForm({ onAdd, existingDocuments }: DocumentFormProps) {
         </label>
         <label className="block">
           <span className="text-sm font-medium text-ink-700">粘贴文本导入</span>
-          <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={6} disabled={sourceType === "user_upload"} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-100 disabled:text-ink-400" placeholder="粘贴制度、SOP、FAQ、岗位 JD 或业务说明。" />
+          <textarea data-testid="knowledge-document-content" value={content} onChange={(event) => setContent(event.target.value)} rows={6} disabled={sourceType === "user_upload"} className="mt-1 w-full resize-y rounded-md border border-slate-300 px-3 py-2 text-sm leading-6 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:bg-slate-100 disabled:text-ink-400" placeholder="粘贴制度、SOP、FAQ、岗位 JD 或业务说明。" />
         </label>
         <label className={"block rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 " + (sourceType === "user_paste" ? "opacity-60" : "")}>
           <span className="text-sm font-medium text-ink-700">选择本地文件</span>
@@ -186,7 +186,7 @@ export function DocumentForm({ onAdd, existingDocuments }: DocumentFormProps) {
         </label>
         {error ? <p className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p> : null}
         {success ? <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{success}</p> : null}
-        <button type="submit" disabled={isImporting} className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400">
+        <button data-testid="knowledge-document-submit" type="submit" disabled={isImporting} className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400">
           {isImporting ? "导入中..." : "导入到知识库"}
         </button>
       </div>

@@ -52,6 +52,7 @@ const versions = [
   { version: "V1.12.1", title: "客户端存储迁移安全", body: "Chat History、Feedback、Evaluation History 与 RAG Test History 采用版本化本地存储，支持旧数据迁移、非法记录过滤、损坏恢复和容量控制。" },
   { version: "V1.12.2", title: "Ops 隐私与浏览器回归", body: "Ops 问题摘要统一截断并脱敏订单号、手机号、邮箱和长数字；Playwright 覆盖知识库备份恢复与客户端存储迁移。" },
   { version: "V1.12.3", title: "Agent Workspace 结构拆分", body: "将请求状态、反馈提交与展示组合按职责分离，保持 Agent API、运行历史和页面交互兼容，并扩展 Chat Workspace 浏览器回归。" },
+  { version: "V1.12.4", title: "Knowledge Workspace 结构拆分", body: "将知识库本地状态、文档操作和展示组合按职责分离，保持知识存储、备份格式、RAG 测试与页面交互兼容。" },
 ];
 
 const engineeringHighlights = [
