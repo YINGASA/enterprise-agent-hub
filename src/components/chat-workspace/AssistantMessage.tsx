@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { AgentTracePanel } from "@/components/AgentTracePanel";
 import { AgentFeedbackPanel } from "@/components/agent-workspace/AgentFeedbackPanel";
+import { copyAnswerText } from "@/lib/chat/messageActions";
 import type { AgentApiResponse, ChatAnswerFeedbackValue, ConversationMessage, KnowledgeSourceType, ToolName } from "@/types";
 import type { MessageFeedbackDraft } from "@/components/chat-workspace/types";
 
@@ -9,6 +11,10 @@ type AssistantMessageProps = {
   message: ConversationMessage;
   result?: AgentApiResponse;
   feedback: MessageFeedbackDraft;
+  canRegenerate: boolean;
+  canSubmitFeedback: boolean;
+  revisionActive: boolean;
+  onRegenerate: (assistantMessageId: string) => void;
   onToggleFeedback: (messageId: string, value: ChatAnswerFeedbackValue) => void;
   onFeedbackReasonChange: (messageId: string, value: string) => void;
   onSubmitFeedback: (messageId: string) => void;
@@ -69,15 +75,42 @@ function privacySafeTrace(result: AgentApiResponse): AgentApiResponse {
       streamFallback: result.api.streamFallback,
       aborted: result.api.aborted,
       streamDeltaCount: result.api.streamDeltaCount,
+      requestAction: result.api.requestAction,
     },
   };
 }
 
-export function AssistantMessage({ message, result, feedback, onToggleFeedback, onFeedbackReasonChange, onSubmitFeedback }: AssistantMessageProps) {
+export function AssistantMessage({ message, result, feedback, canRegenerate, canSubmitFeedback, revisionActive, onRegenerate, onToggleFeedback, onFeedbackReasonChange, onSubmitFeedback }: AssistantMessageProps) {
   const details = message.details;
   const contextRounds = Math.max(1, Math.ceil((message.contextMessageCount ?? 0) / 2));
+  const [copyStatus, setCopyStatus] = useState("");
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyAttempt = useRef(0);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      copyAttempt.current += 1;
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
+
+  async function copyAnswer() {
+    const attempt = copyAttempt.current + 1;
+    copyAttempt.current = attempt;
+    const copied = await copyAnswerText(message.content);
+    if (!mounted.current || copyAttempt.current !== attempt) return;
+    setCopyStatus(copied.ok ? "已复制" : copied.error);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => {
+      if (mounted.current && copyAttempt.current === attempt) setCopyStatus("");
+    }, 2_000);
+  }
+
   return (
-    <article data-testid="conversation-message-assistant" data-message-id={message.id} className="flex min-w-0 justify-start">
+    <article data-testid="conversation-message-assistant" data-message-id={message.id} data-run-id={message.runId ?? ""} className="flex min-w-0 justify-start">
       <div className="min-w-0 max-w-[92%] sm:max-w-[86%] lg:max-w-[82%]">
         <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-500">
           <span className="font-semibold text-ink-700">Enterprise Agent</span>
@@ -91,6 +124,12 @@ export function AssistantMessage({ message, result, feedback, onToggleFeedback, 
           {message.contextApplied ? <p data-testid="assistant-context-meta" className="mt-3 text-xs text-ink-500">已参考最近 {contextRounds} 轮对话{message.contextTruncated ? "，较早内容已省略" : ""}</p> : null}
           {details?.needsClarification ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">当前回答需要你补充信息后才能继续判断。</p> : null}
 
+          <div className="mt-3 flex min-h-8 flex-wrap items-center gap-2 border-t border-slate-100 pt-3 text-xs">
+            <button type="button" data-testid="assistant-copy" aria-label="复制 Assistant 回答正文" onClick={() => void copyAnswer()} className="cursor-pointer rounded-md px-2 py-1.5 font-semibold text-ink-500 hover:bg-slate-100 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">复制回答</button>
+            {canRegenerate ? <button type="button" data-testid="assistant-regenerate" aria-label="重新生成最后一条回答" disabled={revisionActive} onClick={() => onRegenerate(message.id)} className="cursor-pointer rounded-md px-2 py-1.5 font-semibold text-ink-500 hover:bg-slate-100 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50">重新生成</button> : null}
+            <span data-testid="assistant-copy-status" aria-live="polite" className="text-ink-500">{copyStatus}</span>
+          </div>
+
           {(details?.sources?.length || details?.tools?.length || details?.steps?.length) ? (
             <details data-testid="assistant-details" className="mt-4 border-t border-slate-100 pt-3">
               <summary className="cursor-pointer text-sm font-semibold text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">查看依据、工具与执行过程</summary>
@@ -103,10 +142,10 @@ export function AssistantMessage({ message, result, feedback, onToggleFeedback, 
             </details>
           ) : null}
 
-          <details data-testid="assistant-feedback" className="mt-3 border-t border-slate-100 pt-3">
+          {canSubmitFeedback ? <details data-testid="assistant-feedback" className="mt-3 border-t border-slate-100 pt-3">
             <summary className="cursor-pointer text-xs font-semibold text-ink-500 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">评价本次回答</summary>
-            <AgentFeedbackPanel values={feedback.values} reason={feedback.reason} message={feedback.message} onToggle={(value) => onToggleFeedback(message.id, value)} onReasonChange={(value) => onFeedbackReasonChange(message.id, value)} onSubmit={() => onSubmitFeedback(message.id)} />
-          </details>
+            <AgentFeedbackPanel values={feedback.values} reason={feedback.reason} message={feedback.message} disabled={revisionActive} onToggle={(value) => onToggleFeedback(message.id, value)} onReasonChange={(value) => onFeedbackReasonChange(message.id, value)} onSubmit={() => onSubmitFeedback(message.id)} />
+          </details> : null}
         </div>
       </div>
     </article>

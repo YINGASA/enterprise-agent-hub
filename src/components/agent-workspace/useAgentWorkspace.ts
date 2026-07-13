@@ -10,6 +10,9 @@ import {
   createConversation,
   deleteConversation as deleteStoredConversation,
   loadConversationStore,
+  getLastCompletedTurn,
+  replaceLastCompletedAssistant,
+  replaceLastCompletedTurn,
   renameConversation as renameStoredConversation,
   selectConversation,
   type ConversationStore,
@@ -18,12 +21,20 @@ import { contextFromConversationMessages } from "@/lib/conversation/context";
 import { parseAgentStreamResponse } from "@/lib/agent/streamProtocol";
 import { appendStreamAnswerDelta, appendStreamPhase, completeStreamAnswer, createStreamAnswerAccumulator, shouldStopStreamingRequest } from "@/lib/agent/streamClientState";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
-import type { AgentApiResponse, AgentStreamEvent, ChatAnswerFeedbackValue, Conversation, ConversationMessage, LlmMode } from "@/types";
+import type { AgentApiResponse, AgentRequestAction, AgentStreamEvent, ChatAnswerFeedbackValue, Conversation, ConversationMessage, LlmMode } from "@/types";
 
 export type LlmStatus = { configured: boolean };
 export type LlmHealthResult = { configured: boolean; healthy: boolean; durationMs?: number; statusCode?: number; errorType?: string; message?: string };
 
 type AgentErrorPayload = { errorType?: string; error?: string; message?: string };
+type ExecuteTurnInput = {
+  action: AgentRequestAction;
+  question?: string;
+  targetUserMessageId?: string;
+  targetAssistantMessageId?: string;
+  transientUserMessageId?: string;
+  createdAt?: string;
+};
 
 const emptyFeedbackDraft = (): MessageFeedbackDraft => ({ values: [], reason: "", message: "" });
 const makeRequestId = () => `request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -134,8 +145,8 @@ export function useAgentWorkspace(initialQuestion = "") {
   const currentResult = latestAssistant ? resultsByMessageId[latestAssistant.id] ?? null : null;
   const realApiUnavailable = mode === "real" && llmStatus?.configured === false;
 
-  const runAgent = useCallback(async (retryQuestion?: string) => {
-    const submittedQuestion = (retryQuestion ?? question).trim();
+  const executeTurn = useCallback(async (input: ExecuteTurnInput) => {
+    const submittedQuestion = (input.question ?? question).trim();
     if (!submittedQuestion || inFlight.current) return;
     if (realApiUnavailable) {
       setClientError("当前未配置模型服务。请切换到开发模拟模式后再发送。");
@@ -146,17 +157,25 @@ export function useAgentWorkspace(initialQuestion = "") {
     if (!storeRef.current) commitStore(baseStore);
     let originConversation = draftConversationRef.current ?? baseStore.conversations.find((conversation) => conversation.id === baseStore.activeConversationId) ?? null;
     if (!originConversation) {
+      if (input.targetAssistantMessageId || input.targetUserMessageId) return;
       originConversation = createConversation();
       commitDraft(originConversation);
     }
+    const completedTurn = getLastCompletedTurn(originConversation);
+    const targetsRevision = Boolean(input.targetAssistantMessageId || input.targetUserMessageId);
+    if (targetsRevision && (!completedTurn
+      || completedTurn.userMessage.id !== input.targetUserMessageId
+      || completedTurn.assistantMessage.id !== input.targetAssistantMessageId)) return;
     const requestId = makeRequestId();
-    const retryingTurn = transientTurn && (transientTurn.status === "failed" || transientTurn.status === "stopped") && transientTurn.conversationId === originConversation.id && transientTurn.question === submittedQuestion ? transientTurn : null;
     const turn: TransientChatTurn = {
       requestId,
+      action: input.action,
       conversationId: originConversation.id,
-      userMessageId: retryingTurn?.userMessageId ?? makeMessageId(),
+      userMessageId: input.transientUserMessageId ?? input.targetUserMessageId ?? makeMessageId(),
+      targetUserMessageId: input.targetUserMessageId,
+      targetAssistantMessageId: input.targetAssistantMessageId,
       question: submittedQuestion,
-      createdAt: retryingTurn?.createdAt ?? new Date().toISOString(),
+      createdAt: input.createdAt ?? new Date().toISOString(),
       status: "pending",
       phases: [],
       partialAnswer: "",
@@ -174,9 +193,10 @@ export function useAgentWorkspace(initialQuestion = "") {
     setTransientTurn(turn);
 
     try {
-      const builtContext = contextFromConversationMessages(originConversation.messages);
+      const contextMessages = targetsRevision && completedTurn ? completedTurn.contextMessages : originConversation.messages;
+      const builtContext = contextFromConversationMessages(contextMessages);
       const enabledUserDocuments = readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
-      const requestBody = JSON.stringify({ question: submittedQuestion, mode, userDocuments: enabledUserDocuments, conversationContext: builtContext.context });
+      const requestBody = JSON.stringify({ question: submittedQuestion, mode, requestAction: input.action, userDocuments: enabledUserDocuments, conversationContext: builtContext.context });
       const streamReadingSupported = typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined";
       const response = await fetch(streamReadingSupported ? "/api/agent/stream" : "/api/agent", {
         method: "POST",
@@ -276,16 +296,30 @@ export function useAgentWorkspace(initialQuestion = "") {
         if (draftConversationRef.current?.id !== originConversation.id) return;
         workingStore = { ...latestStore, activeConversationId: originConversation.id, conversations: [originConversation, ...latestStore.conversations] };
       }
-      const saved = appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult);
-      if (!saved.ok) throw new Error("error" in saved && saved.error ? saved.error : "会话写入失败。");
+      const saved = input.targetAssistantMessageId
+        ? (input.action === "edit_resend" || (input.action === "retry" && input.targetUserMessageId && submittedQuestion !== completedTurn?.userMessage.content)
+          ? replaceLastCompletedTurn(workingStore, originConversation.id, submittedQuestion, completedResult, { userMessageId: input.targetUserMessageId!, assistantMessageId: input.targetAssistantMessageId })
+          : replaceLastCompletedAssistant(workingStore, originConversation.id, completedResult, input.targetAssistantMessageId))
+        : appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult);
+      if (!saved.ok) throw new Error("error" in saved && typeof saved.error === "string" ? saved.error : "会话写入失败。");
       const assistantMessage = findAssistantMessage(saved.data, originConversation.id, completedResult);
       if (!assistantMessage) throw new Error("回答已生成，但无法关联到当前会话。");
       commitStore(saved.data);
       if (draftConversationRef.current?.id === originConversation.id) commitDraft(null);
-      setResultsByMessageId((current) => ({ ...current, [assistantMessage.id]: completedResult }));
-      setFeedbackByMessageId((current) => ({ ...current, [assistantMessage.id]: emptyFeedbackDraft() }));
+      setResultsByMessageId((current) => {
+        const next = { ...current };
+        if (input.targetAssistantMessageId) delete next[input.targetAssistantMessageId];
+        next[assistantMessage.id] = completedResult;
+        return next;
+      });
+      setFeedbackByMessageId((current) => {
+        const next = { ...current };
+        if (input.targetAssistantMessageId) delete next[input.targetAssistantMessageId];
+        next[assistantMessage.id] = emptyFeedbackDraft();
+        return next;
+      });
       setTransientTurn(null);
-      setQuestion("");
+      if (!input.targetAssistantMessageId) setQuestion("");
     } catch (error) {
       if (controller.signal.aborted || requestEpoch !== conversationEpoch.current) return;
       const message = error instanceof Error ? error.message : "请求失败，请稍后重试。";
@@ -301,11 +335,38 @@ export function useAgentWorkspace(initialQuestion = "") {
         if (mounted.current) setIsLoading(false);
       }
     }
-  }, [commitDraft, commitStore, mode, question, realApiUnavailable, transientTurn]);
+  }, [commitDraft, commitStore, mode, question, realApiUnavailable]);
+
+  const runAgent = useCallback((retryQuestion?: string) => executeTurn({ action: retryQuestion ? "retry" : "send", question: retryQuestion }), [executeTurn]);
 
   const retryLastTurn = useCallback(() => {
-    if (transientTurn && (transientTurn.status === "failed" || transientTurn.status === "stopped") && transientTurn.retryable !== false) void runAgent(transientTurn.question);
-  }, [runAgent, transientTurn]);
+    if (!transientTurn || (transientTurn.status !== "failed" && transientTurn.status !== "stopped") || transientTurn.retryable === false) return;
+    void executeTurn({
+      action: "retry",
+      question: transientTurn.question,
+      targetUserMessageId: transientTurn.targetUserMessageId,
+      targetAssistantMessageId: transientTurn.targetAssistantMessageId,
+      transientUserMessageId: transientTurn.userMessageId,
+      createdAt: transientTurn.createdAt,
+    });
+  }, [executeTurn, transientTurn]);
+
+  const regenerateLastAnswer = useCallback((assistantMessageId: string) => {
+    const store = storeRef.current;
+    const conversation = store?.conversations.find((item) => item.id === store.activeConversationId);
+    const turn = conversation ? getLastCompletedTurn(conversation) : null;
+    if (!turn || turn.assistantMessage.id !== assistantMessageId) return;
+    void executeTurn({ action: "regenerate", question: turn.userMessage.content, targetUserMessageId: turn.userMessage.id, targetAssistantMessageId: turn.assistantMessage.id, createdAt: turn.userMessage.createdAt });
+  }, [executeTurn]);
+
+  const editAndResendLastQuestion = useCallback((userMessageId: string, nextQuestion: string) => {
+    const store = storeRef.current;
+    const conversation = store?.conversations.find((item) => item.id === store.activeConversationId);
+    const turn = conversation ? getLastCompletedTurn(conversation) : null;
+    const submittedQuestion = nextQuestion.trim();
+    if (!turn || turn.userMessage.id !== userMessageId || !submittedQuestion || submittedQuestion === turn.userMessage.content.trim()) return;
+    void executeTurn({ action: "edit_resend", question: submittedQuestion, targetUserMessageId: turn.userMessage.id, targetAssistantMessageId: turn.assistantMessage.id, createdAt: turn.userMessage.createdAt });
+  }, [executeTurn]);
 
   const stopGeneration = useCallback(() => {
     if (!inFlight.current || !shouldStopStreamingRequest(activeRequestId.current, completedRequestId.current)) return;
@@ -414,6 +475,9 @@ export function useAgentWorkspace(initialQuestion = "") {
     const message = conversation?.messages.find((item) => item.id === messageId);
     const draft = feedbackByMessageId[messageId] ?? emptyFeedbackDraft();
     if (!conversation || !message || message.role !== "assistant") return;
+    const activeConversation = store?.conversations.find((item) => item.id === store.activeConversationId);
+    const activeTurn = activeConversation ? getLastCompletedTurn(activeConversation) : null;
+    if (conversation.id !== activeConversation?.id || activeTurn?.assistantMessage.id !== messageId) return;
     if (!draft.values.length) {
       setFeedbackByMessageId((current) => ({ ...current, [messageId]: { ...draft, message: "请先选择至少一个反馈标签。" } }));
       return;
@@ -441,7 +505,7 @@ export function useAgentWorkspace(initialQuestion = "") {
 
   return {
     question, setQuestion, mode, setMode, result: currentResult, llmStatus, llmStatusError, healthResult,
-    isLoading, isCheckingHealth, clientError, realApiUnavailable, runAgent, retryLastTurn, stopGeneration, checkHealth,
+    isLoading, isCheckingHealth, clientError, realApiUnavailable, runAgent, retryLastTurn, regenerateLastAnswer, editAndResendLastQuestion, stopGeneration, checkHealth,
     conversationId, conversations: conversationStore?.conversations ?? [], conversationMessages,
     activeConversation, transientTurn, resultsByMessageId, feedbackByMessageId,
     newConversation, switchConversation, clearConversation, deleteConversation, renameConversation,

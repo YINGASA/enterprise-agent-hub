@@ -1,9 +1,12 @@
-import type { AgentApiResponse, AgentStreamPhase, ChatAnswerFeedbackValue } from "@/types";
+import type { AgentApiResponse, AgentRequestAction, AgentStreamPhase, ChatAnswerFeedbackValue } from "@/types";
 
 export type TransientChatTurn = {
   requestId: string;
+  action: AgentRequestAction;
   conversationId: string;
   userMessageId: string;
+  targetUserMessageId?: string;
+  targetAssistantMessageId?: string;
   question: string;
   createdAt: string;
   status: "pending" | "streaming" | "failed" | "stopped";

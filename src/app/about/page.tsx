@@ -57,6 +57,7 @@ const versions = [
   { version: "V2.0.0", title: "当前会话多轮上下文", body: "支持同一浏览器当前会话内连续追问、刷新恢复和新建对话隔离；Router、RAG 与工具仍以当前问题为主。" },
   { version: "V2.0.1", title: "连续聊天工作台", body: "聊天页升级为双栏会话工作台，支持连续消息流、固定输入区、会话标题与管理、回答详情归属、移动抽屉和安全异步切换。" },
   { version: "V2.0.2", title: "流式回答与生成控制", body: "新增独立 NDJSON 流式 Agent 接口、确定性 Mock 分块、Real SSE 安全解析、停止生成和失败重试；只有完成回答进入会话上下文。" },
+  { version: "V2.0.3", title: "消息操作与修订体验", body: "支持复制完整回答、重新生成最新回答和编辑重发最新问题；新结果完成前保留原轮次，成功后原子替换并隔离新旧 runId 与反馈。" },
 ];
 
 const engineeringHighlights = [

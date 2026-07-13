@@ -136,6 +136,8 @@ export type LlmGenerateResult = {
 
 export type AgentResponseMode = "mock" | "real" | "real_repaired" | "real_text_fallback" | "real_error_fallback" | "fallback";
 
+export type AgentRequestAction = "send" | "retry" | "regenerate" | "edit_resend";
+
 export type AgentApiMetadata = {
   requestedMode: LlmMode;
   responseMode: AgentResponseMode;
@@ -166,6 +168,7 @@ export type AgentApiMetadata = {
   streamFallback?: boolean;
   aborted?: boolean;
   streamDeltaCount?: number;
+  requestAction?: AgentRequestAction;
 };
 
 export type ConversationMessageRole = "user" | "assistant";

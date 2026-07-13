@@ -7,8 +7,11 @@ import {
   createConversation,
   deleteConversation,
   deleteCurrentConversation,
+  getLastCompletedTurn,
   loadConversationStore,
   renameConversation,
+  replaceLastCompletedAssistant,
+  replaceLastCompletedTurn,
   searchConversations,
   startNewConversation,
 } from "@/lib/conversation/storage";
@@ -171,5 +174,96 @@ describe("conversation storage", () => {
     expect(second.data.conversations).toHaveLength(2);
     expect(second.data.activeConversationId).toBe(draft.id);
     expect(second.data.conversations.find((conversation) => conversation.id === initial.activeConversationId)?.messages).toHaveLength(2);
+  });
+
+  it("identifies the tail completed turn and atomically replaces only its assistant", () => {
+    installStorage();
+    const initial = loadConversationStore().data;
+    const first = appendConversationTurn(initial, "first question", result("run-first")).data;
+    const second = appendConversationTurn(first, "second question", result("run-second")).data;
+    const conversation = second.conversations.find((item) => item.id === second.activeConversationId)!;
+    const originalTurn = getLastCompletedTurn(conversation)!;
+    expect(originalTurn.contextMessages).toHaveLength(2);
+    expect(originalTurn.userMessage.content).toBe("second question");
+    expect(originalTurn.assistantMessage.runId).toBe("run-second");
+
+    const replacementResult = result("run-regenerated");
+    replacementResult.finalAnswer = "Regenerated answer.";
+    replacementResult.structuredOutput.answer = replacementResult.finalAnswer;
+    const replaced = replaceLastCompletedAssistant(second, conversation.id, replacementResult, originalTurn.assistantMessage.id);
+    const replacedConversation = replaced.data.conversations.find((item) => item.id === conversation.id)!;
+    const replacedTurn = getLastCompletedTurn(replacedConversation)!;
+    expect(replaced.ok).toBe(true);
+    expect(replacedConversation.messages).toHaveLength(4);
+    expect(replacedTurn.userMessage.id).toBe(originalTurn.userMessage.id);
+    expect(replacedTurn.assistantMessage.id).not.toBe(originalTurn.assistantMessage.id);
+    expect(replacedTurn.assistantMessage).toMatchObject({ content: "Regenerated answer.", runId: "run-regenerated" });
+    expect(replacedConversation.messages.filter((message) => message.role === "user" && message.content === "second question")).toHaveLength(1);
+
+    expect(replaceLastCompletedAssistant(second, conversation.id, replacementResult, "stale-message")).toMatchObject({ ok: false, data: second });
+    expect(replaceLastCompletedAssistant(second, conversation.id, result("run-second"), originalTurn.assistantMessage.id)).toMatchObject({ ok: false, data: second });
+  });
+
+  it("atomically replaces the last turn and updates only a first auto title", () => {
+    installStorage();
+    const initial = loadConversationStore().data;
+    const first = appendConversationTurn(initial, "original first question", result("run-original")).data;
+    const originalConversation = first.conversations[0]!;
+    const originalTurn = getLastCompletedTurn(originalConversation)!;
+    const editedResult = result("run-edited");
+    editedResult.finalAnswer = "Edited answer.";
+    editedResult.structuredOutput.answer = editedResult.finalAnswer;
+    const edited = replaceLastCompletedTurn(first, originalConversation.id, "edited first question", editedResult, {
+      userMessageId: originalTurn.userMessage.id,
+      assistantMessageId: originalTurn.assistantMessage.id,
+    });
+    const editedConversation = edited.data.conversations[0]!;
+    const editedTurn = getLastCompletedTurn(editedConversation)!;
+    expect(edited.ok).toBe(true);
+    expect(editedConversation).toMatchObject({ title: "edited first quest…", titleSource: "auto" });
+    expect(editedConversation.messages).toHaveLength(2);
+    expect(editedTurn.userMessage).toMatchObject({ content: "edited first question" });
+    expect(editedTurn.userMessage.id).not.toBe(originalTurn.userMessage.id);
+    expect(editedTurn.assistantMessage).toMatchObject({ content: "Edited answer.", runId: "run-edited" });
+    expect(editedTurn.assistantMessage.id).not.toBe(originalTurn.assistantMessage.id);
+
+    const renamed = renameConversation(edited.data, editedConversation.id, "Manual title").data;
+    const manualTurn = getLastCompletedTurn(renamed.conversations[0]!)!;
+    const manualEdit = replaceLastCompletedTurn(renamed, editedConversation.id, "another first question", result("run-manual-edit"), {
+      userMessageId: manualTurn.userMessage.id,
+      assistantMessageId: manualTurn.assistantMessage.id,
+    });
+    expect(manualEdit.data.conversations[0]).toMatchObject({ title: "Manual title", titleSource: "manual" });
+
+    const continued = appendConversationTurn(edited.data, "second question", result("run-second")).data;
+    const continuedConversation = continued.conversations[0]!;
+    const continuedTurn = getLastCompletedTurn(continuedConversation)!;
+    const editedSecond = replaceLastCompletedTurn(continued, continuedConversation.id, "edited second question", result("run-second-edited"), {
+      userMessageId: continuedTurn.userMessage.id,
+      assistantMessageId: continuedTurn.assistantMessage.id,
+    });
+    expect(editedSecond.data.conversations[0]).toMatchObject({ title: editedConversation.title, titleSource: "auto" });
+  });
+
+  it("rejects invalid or stale replacement input without changing storage", () => {
+    const storage = installStorage();
+    storage.set(CONVERSATION_STORAGE_KEY, envelope({ activeConversationId: "c", conversations: [{ id: "c", title: "test", titleSource: "auto", createdAt: savedAt, updatedAt: savedAt, schemaVersion: 1, messages: [{ id: "u", role: "user", content: "unpaired", createdAt: savedAt }] }], legacyHistoryMigrated: true }));
+    const unpaired = loadConversationStore().data;
+    expect(getLastCompletedTurn(unpaired.conversations[0]!)).toBeNull();
+    expect(replaceLastCompletedAssistant(unpaired, "c", result("run-new"))).toMatchObject({ ok: false, data: unpaired });
+    expect(replaceLastCompletedTurn(unpaired, "c", "replacement", result("run-new"))).toMatchObject({ ok: false, data: unpaired });
+
+    const completed = appendConversationTurn(unpaired, "paired", result("run-paired")).data;
+    const before = JSON.stringify(completed);
+    const emptyAnswer = result("run-empty");
+    emptyAnswer.finalAnswer = " ";
+    emptyAnswer.structuredOutput.answer = " ";
+    expect(replaceLastCompletedAssistant(completed, "c", emptyAnswer).ok).toBe(false);
+    expect(replaceLastCompletedTurn(completed, "c", " ", result("run-edit")).ok).toBe(false);
+    const missingRunId = result();
+    delete missingRunId.runId;
+    expect(replaceLastCompletedAssistant(completed, "c", missingRunId).ok).toBe(false);
+    expect(replaceLastCompletedTurn(completed, "c", "replacement", missingRunId).ok).toBe(false);
+    expect(JSON.stringify(completed)).toBe(before);
   });
 });

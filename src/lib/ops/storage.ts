@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { feedbackLimits } from "@/lib/ops/securityLimits";
-import type { AgentApiResponse, ChatAnswerFeedbackValue, EvaluationRunResponse } from "@/types";
+import type { AgentApiResponse, AgentRequestAction, ChatAnswerFeedbackValue, EvaluationRunResponse } from "@/types";
 
 const MAX_RECENT_ITEMS = 80;
 const DEFAULT_MAX_STORED_ITEMS = 200;
@@ -46,6 +46,7 @@ export type OpsAgentRunRecord = {
   streamingUsed?: boolean;
   streamFallback?: boolean;
   aborted?: boolean;
+  requestAction?: AgentRequestAction;
 };
 
 export type OpsAgentRunStreamingMetadata = {
@@ -55,6 +56,7 @@ export type OpsAgentRunStreamingMetadata = {
   streamFallback?: boolean;
   aborted?: boolean;
   durationMs?: number;
+  requestAction?: AgentRequestAction;
 };
 
 export type OpsFeedbackRecord = {
@@ -96,7 +98,7 @@ export type OpsFeedbackModePerformance = {
 
 export type OpsSafeRunSummary = Pick<
   OpsAgentRunRecord,
-  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus" | "durationMs" | "contextApplied" | "contextMessageCount" | "contextTruncated" | "streamingRequested" | "streamingUsed" | "streamFallback" | "aborted"
+  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus" | "durationMs" | "contextApplied" | "contextMessageCount" | "contextTruncated" | "streamingRequested" | "streamingUsed" | "streamFallback" | "aborted" | "requestAction"
 >;
 
 export type OpsSafeFeedbackSummary = Pick<
@@ -183,6 +185,14 @@ export function sanitizeQuestionPreview(value: string | undefined, maxLength = 4
   return `${masked.slice(0, visibleLength)}…[已截断]`;
 }
 
+const AGENT_REQUEST_ACTIONS = new Set<AgentRequestAction>(["send", "retry", "regenerate", "edit_resend"]);
+
+export function sanitizeRequestAction(value: unknown): AgentRequestAction {
+  return typeof value === "string" && AGENT_REQUEST_ACTIONS.has(value as AgentRequestAction)
+    ? value as AgentRequestAction
+    : "send";
+}
+
 function percentage(count: number, total: number) {
   return total ? Math.round((count / total) * 100) : 0;
 }
@@ -219,6 +229,7 @@ function safeRunSummary(item: OpsAgentRunRecord): OpsSafeRunSummary {
     streamingUsed: item.streamingUsed === true,
     streamFallback: item.streamFallback === true,
     aborted: item.aborted === true,
+    requestAction: sanitizeRequestAction(item.requestAction),
   };
 }
 
@@ -365,6 +376,7 @@ export async function recordAgentRun(result: AgentApiResponse, streaming: OpsAge
     streamingUsed: streaming.streamingUsed === true,
     streamFallback: streaming.streamFallback === true,
     aborted: streaming.aborted === true,
+    requestAction: sanitizeRequestAction(streaming.requestAction ?? result.api.requestAction),
   };
   await appendAgentRunOnce(item);
   return item.id;
@@ -385,6 +397,7 @@ export async function recordAgentError(input: {
   streamingUsed?: boolean;
   streamFallback?: boolean;
   aborted?: boolean;
+  requestAction?: AgentRequestAction;
 }) {
   const item: OpsAgentRunRecord = {
     id: input.runId || createOpsAgentRunId(),
@@ -407,6 +420,7 @@ export async function recordAgentError(input: {
     streamingUsed: input.streamingUsed === true,
     streamFallback: input.streamFallback === true,
     aborted: input.aborted === true,
+    requestAction: sanitizeRequestAction(input.requestAction),
   };
   await appendAgentRunOnce(item);
   return item.id;
@@ -423,6 +437,7 @@ export async function recordAgentAbortedRun(input: {
   contextTruncated?: boolean;
   streamingUsed?: boolean;
   streamFallback?: boolean;
+  requestAction?: AgentRequestAction;
 }) {
   return recordAgentError({
     ...input,

@@ -12,6 +12,19 @@ const MAX_MESSAGES = 100;
 
 export type ConversationStore = { activeConversationId: string; conversations: Conversation[]; legacyHistoryMigrated: boolean };
 
+export type LastCompletedConversationTurn = {
+  userMessage: ConversationMessage & { role: "user" };
+  assistantMessage: ConversationMessage & { role: "assistant" };
+  userIndex: number;
+  assistantIndex: number;
+  contextMessages: ConversationMessage[];
+};
+
+export type ExpectedCompletedTurn = {
+  userMessageId: string;
+  assistantMessageId: string;
+};
+
 const responseModes = new Set<AgentResponseMode>(["mock", "real", "real_repaired", "real_text_fallback", "real_error_fallback", "fallback"]);
 const intents = new Set<AgentIntent>(["knowledge_qa", "policy_check", "order_query", "product_query", "after_sale_reply", "jd_match", "ticket_create", "general_chat"]);
 const scenarios = new Set<AgentScenario>(["enterprise", "ecommerce", "recruitment", "ai_engineering", "general"]);
@@ -219,6 +232,21 @@ export function deleteCurrentConversation(store: ConversationStore) {
   return deleteConversation(store, store.activeConversationId);
 }
 
+export function getLastCompletedTurn(conversation: Conversation): LastCompletedConversationTurn | null {
+  const assistantIndex = conversation.messages.length - 1;
+  const userIndex = assistantIndex - 1;
+  const assistantMessage = conversation.messages[assistantIndex];
+  const userMessage = conversation.messages[userIndex];
+  if (userMessage?.role !== "user" || assistantMessage?.role !== "assistant") return null;
+  return {
+    userMessage: userMessage as ConversationMessage & { role: "user" },
+    assistantMessage: assistantMessage as ConversationMessage & { role: "assistant" },
+    userIndex,
+    assistantIndex,
+    contextMessages: conversation.messages.slice(0, userIndex),
+  };
+}
+
 function compactAssistantDetails(result: AgentApiResponse): ConversationAssistantDetails {
   return {
     sources: result.ragAnswer?.sources.slice(0, 8).map((source) => ({
@@ -238,6 +266,98 @@ function compactAssistantDetails(result: AgentApiResponse): ConversationAssistan
   };
 }
 
+function createCompletedAssistantMessage(result: AgentApiResponse, createdAt = new Date().toISOString()): ConversationMessage & { role: "assistant" } {
+  return {
+    id: makeId("message"),
+    role: "assistant",
+    content: result.finalAnswer.trim().slice(0, MAX_MESSAGE_CHARACTERS),
+    createdAt,
+    runId: result.runId,
+    responseMode: result.api.responseMode,
+    intent: result.route.intent,
+    scenario: result.route.scenario,
+    contextApplied: result.api.contextApplied,
+    contextMessageCount: result.api.contextMessageCount,
+    contextTruncated: result.api.contextTruncated,
+    contextCharacterCount: result.api.contextCharacterCount,
+    details: compactAssistantDetails(result),
+  };
+}
+
+function validateReplacementResult(conversation: Conversation, result: AgentApiResponse) {
+  if (!result.finalAnswer.trim()) return "Completed answer is empty.";
+  if (typeof result.runId !== "string" || !result.runId.trim()) return "Replacement answer must have a new runId.";
+  if (conversation.messages.some((message) => message.role === "assistant" && message.runId === result.runId)) {
+    return "Replacement answer must use a new runId.";
+  }
+  return null;
+}
+
+function replaceConversationInStore(store: ConversationStore, conversation: Conversation) {
+  return writeStore({
+    ...store,
+    conversations: [conversation, ...store.conversations.filter((item) => item.id !== conversation.id)].slice(0, MAX_CONVERSATIONS),
+    legacyHistoryMigrated: true,
+  });
+}
+
+export function replaceLastCompletedAssistant(
+  store: ConversationStore,
+  conversationId: string,
+  result: AgentApiResponse,
+  expectedAssistantMessageId?: string,
+) {
+  const conversation = store.conversations.find((item) => item.id === conversationId);
+  if (!conversation) return { ok: false, data: store, error: "Conversation not found." };
+  const turn = getLastCompletedTurn(conversation);
+  if (!turn) return { ok: false, data: store, error: "Completed conversation turn not found." };
+  if (expectedAssistantMessageId && turn.assistantMessage.id !== expectedAssistantMessageId) {
+    return { ok: false, data: store, error: "Conversation turn changed before replacement." };
+  }
+  const validationError = validateReplacementResult(conversation, result);
+  if (validationError) return { ok: false, data: store, error: validationError };
+  const now = new Date().toISOString();
+  const updated: Conversation = {
+    ...conversation,
+    updatedAt: now,
+    messages: [...turn.contextMessages, turn.userMessage, createCompletedAssistantMessage(result, now)],
+  };
+  return replaceConversationInStore(store, updated);
+}
+
+export function replaceLastCompletedTurn(
+  store: ConversationStore,
+  conversationId: string,
+  nextQuestion: string,
+  result: AgentApiResponse,
+  expectedTurn?: ExpectedCompletedTurn,
+) {
+  const conversation = store.conversations.find((item) => item.id === conversationId);
+  if (!conversation) return { ok: false, data: store, error: "Conversation not found." };
+  const turn = getLastCompletedTurn(conversation);
+  if (!turn) return { ok: false, data: store, error: "Completed conversation turn not found." };
+  if (expectedTurn && (turn.userMessage.id !== expectedTurn.userMessageId || turn.assistantMessage.id !== expectedTurn.assistantMessageId)) {
+    return { ok: false, data: store, error: "Conversation turn changed before replacement." };
+  }
+  const question = nextQuestion.trim().slice(0, MAX_MESSAGE_CHARACTERS);
+  if (!question) return { ok: false, data: store, error: "Question is empty." };
+  const validationError = validateReplacementResult(conversation, result);
+  if (validationError) return { ok: false, data: store, error: validationError };
+  const now = new Date().toISOString();
+  const isFirstUserMessage = !turn.contextMessages.some((message) => message.role === "user");
+  const updated: Conversation = {
+    ...conversation,
+    title: conversation.titleSource === "auto" && isFirstUserMessage ? generateConversationTitle(question) : conversation.title,
+    updatedAt: now,
+    messages: [
+      ...turn.contextMessages,
+      { id: makeId("message"), role: "user", content: question, createdAt: now },
+      createCompletedAssistantMessage(result, now),
+    ],
+  };
+  return replaceConversationInStore(store, updated);
+}
+
 export function appendConversationTurnToConversation(store: ConversationStore, conversationId: string, question: string, result: AgentApiResponse) {
   const now = new Date().toISOString();
   const target = store.conversations.find((item) => item.id === conversationId);
@@ -247,21 +367,7 @@ export function appendConversationTurnToConversation(store: ConversationStore, c
   if (!result.runId && recent[0]?.role === "user" && recent[0].content === question.trim() && recent[1]?.role === "assistant" && recent[1].content === result.finalAnswer.trim()) return { ok: true, data: store };
   const turn: ConversationMessage[] = [
     { id: makeId("message"), role: "user", content: question.slice(0, MAX_MESSAGE_CHARACTERS), createdAt: now },
-    {
-      id: makeId("message"),
-      role: "assistant",
-      content: result.finalAnswer.slice(0, MAX_MESSAGE_CHARACTERS),
-      createdAt: new Date().toISOString(),
-      runId: result.runId,
-      responseMode: result.api.responseMode,
-      intent: result.route.intent,
-      scenario: result.route.scenario,
-      contextApplied: result.api.contextApplied,
-      contextMessageCount: result.api.contextMessageCount,
-      contextTruncated: result.api.contextTruncated,
-      contextCharacterCount: result.api.contextCharacterCount,
-      details: compactAssistantDetails(result),
-    },
+    createCompletedAssistantMessage(result),
   ];
   const messages = [...target.messages, ...turn].slice(-MAX_MESSAGES);
   const shouldGenerateTitle = target.titleSource !== "manual" && !target.messages.some((message) => message.role === "user");

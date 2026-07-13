@@ -244,6 +244,14 @@ Mock responses are split by a deterministic bounded rule and can be cancelled th
 
 The Chat controller batches answer deltas into the active transient Assistant placeholder. A request is bound to its origin conversation ID, request epoch, and AbortController; switching, clearing, deleting, stopping, or unmounting invalidates late events. Pending, stopped, and failed turns remain transient. Only `answer_completed` is appended through Conversation Storage, so partial output never becomes future context or browser-persisted history. Ops writes at most one safe final summary per run ID and stores only scalar streaming/context metadata, never deltas or raw stream payloads.
 
+## Message Action State Flow (V2.0.3)
+
+Every stored conversation identifies its editable target as the final adjacent completed `user` / `assistant` pair. Historical Assistant answers remain copyable, but regenerate and edit-resend are limited to that final pair. Both operations reuse the existing NDJSON parser and request controller with a safe `requestAction` scalar; the action is recorded in Ops and Trace but is never added to the model prompt or conversation context.
+
+Regenerate builds context only from messages before the target user message, keeps that user message unchanged, and atomically replaces the final Assistant after `answer_completed`. Edit-resend uses the same earlier context and atomically replaces both messages; a first auto-titled question refreshes the title while a manual title remains unchanged. The original stored turn and Feedback state stay visible during generation and are retained on failure, stop, navigation, or stale CAS failure. A successful replacement creates new message identity and runId, removes the old runtime result from the active UI, and starts with empty Feedback.
+
+Clipboard state is component-local and never stored. Copy actions receive only the Assistant message's plain safe `content`; run metadata, context counts, sources, tools, Trace, Feedback, and rendered HTML are excluded. Clipboard API is preferred, with a temporary plain-text selection fallback and non-blocking live status.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

@@ -16,6 +16,7 @@ vi.mock("@/lib/ops/storage", () => ({
   recordAgentRun,
   recordAgentError,
   recordAgentAbortedRun,
+  sanitizeRequestAction: (value: unknown) => ["send", "retry", "regenerate", "edit_resend"].includes(String(value)) ? value : "send",
 }));
 
 import { POST } from "@/app/api/agent/stream/route";
@@ -35,11 +36,11 @@ function agentResult(answer = "这是一个确定性的模拟流式回答，用�
   };
 }
 
-function request(mode: "mock" | "real" = "mock", signal?: AbortSignal) {
+function request(mode: "mock" | "real" = "mock", signal?: AbortSignal, requestAction: unknown = "send") {
   return new Request("http://test.local/api/agent/stream", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question: "测试问题", mode }),
+    body: JSON.stringify({ question: "测试问题", mode, requestAction }),
     signal,
   });
 }
@@ -71,6 +72,30 @@ describe("POST /api/agent/stream", () => {
     expect(completed).toMatchObject({ streamingRequested: true, streamingUsed: true, streamFallback: false, deltaCount: deltas.length, result: { runId: "run-stream-test" } });
     await vi.waitFor(() => expect(recordAgentRun).toHaveBeenCalledTimes(1));
     expect(recordAgentAbortedRun).not.toHaveBeenCalled();
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ api: expect.objectContaining({ requestAction: "send" }) }),
+      expect.objectContaining({ requestAction: "send" }),
+    );
+  });
+
+  it("records only a whitelisted message action and never passes it into the Agent pipeline", async () => {
+    const response = await POST(request("mock", undefined, "edit_resend"));
+    await readEvents(response);
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ api: expect.objectContaining({ requestAction: "edit_resend" }) }),
+      expect.objectContaining({ requestAction: "edit_resend" }),
+    );
+    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(6);
+
+    recordAgentRun.mockClear();
+    runAgentApiPipeline.mockClear();
+    const invalidResponse = await POST(request("mock", undefined, { action: "regenerate", previousAnswer: "private" }));
+    await readEvents(invalidResponse);
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ api: expect.objectContaining({ requestAction: "send" }) }),
+      expect.objectContaining({ requestAction: "send" }),
+    );
+    expect(JSON.stringify(recordAgentRun.mock.calls)).not.toContain("private");
   });
 
   it("keeps the response open until the completed run id is persisted", async () => {

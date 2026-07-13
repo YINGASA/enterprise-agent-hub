@@ -90,7 +90,9 @@ test("uses recent mock context in the continuous desktop chat layout and restore
   await expect(assistants).toHaveCount(2);
   await expect(assistants.last().getByTestId("assistant-answer")).toContainText("订单号");
   await expect(assistants.last().getByTestId("assistant-context-meta")).toContainText("已参考最近 1 轮对话");
-  const order = await page.getByTestId("conversation-messages").locator(":scope > article").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid")));
+  const order = await page.getByTestId("conversation-messages")
+    .locator('[data-testid="conversation-message-user"], [data-testid="conversation-message-assistant"]')
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid")));
   expect(order).toEqual(["conversation-message-user", "conversation-message-assistant", "conversation-message-user", "conversation-message-assistant"]);
   const userBox = await page.getByTestId("conversation-message-user").first().locator("p").last().boundingBox();
   const assistantBox = await assistants.first().getByTestId("assistant-answer").boundingBox();
@@ -370,6 +372,9 @@ test("uses a keyboard-accessible conversation drawer on mobile without horizonta
   await drawer.getByTestId("conversation-list-item").filter({ hasText: "移动会话二" }).getByTestId("conversation-select").click();
   await expect(page.getByTestId("conversation-drawer")).toHaveCount(0);
   await expect(page.getByTestId("chat-header")).toContainText("移动会话二");
+  await expect(page.getByTestId("conversation-message-assistant").getByTestId("assistant-copy")).toBeVisible();
+  await expect(page.getByTestId("conversation-message-assistant").getByTestId("assistant-regenerate")).toBeVisible();
+  await expect(page.getByTestId("conversation-message-user").getByTestId("user-edit")).toBeVisible();
   await page.getByTestId("conversation-drawer-open").click();
   const reopenedDrawer = page.getByTestId("conversation-drawer");
   await expect(reopenedDrawer.getByTestId("conversation-clear-mobile")).toBeVisible();
@@ -414,10 +419,11 @@ test("keeps sources, tools, trace and feedback with the assistant answer that pr
   await expect(assistants.first().getByTestId("assistant-tools")).toContainText("规则检索");
   await expect(assistants.first().getByTestId("assistant-trace-summary")).toContainText("第一轮规则检索");
   await expect(assistants.last()).not.toContainText("第一轮政策来源");
-  await assistants.first().getByTestId("assistant-feedback").locator("summary").click();
-  await assistants.first().getByTestId("agent-feedback-positive").click();
-  await assistants.first().getByTestId("agent-feedback-submit").click();
-  await expect.poll(() => feedbackRunId).toBe("details-run-one");
+  await expect(assistants.first().getByTestId("assistant-feedback")).toHaveCount(0);
+  await assistants.last().getByTestId("assistant-feedback").locator("summary").click();
+  await assistants.last().getByTestId("agent-feedback-positive").click();
+  await assistants.last().getByTestId("agent-feedback-submit").click();
+  await expect.poll(() => feedbackRunId).toBe("details-run-two");
 });
 
 test("does not revive a deleted conversation when its pending stream finishes", async ({ page }) => {
@@ -448,29 +454,221 @@ test("does not revive a deleted conversation when its pending stream finishes", 
 test("does not write late stream events into a conversation selected later", async ({ page }) => {
   const first = seedConversation("switch-one", "发起请求的会话", 1, "2026-07-13T05:00:00.000Z");
   const second = seedConversation("switch-two", "切换后的会话", 1, "2026-07-13T04:00:00.000Z");
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/agent/stream", async (route) => {
+    const question = String((JSON.parse(route.request().postData() ?? "{}") as { question?: string }).question ?? "");
+    await gate;
+    await fulfillMockStream(route, mockAgentResponse(question, "late-send-run", { finalAnswer: "不得串入切换后会话的回答。" })).catch(() => undefined);
+  });
   await seedConversationStore(page, [first, second], first.id);
   await page.goto("/chat");
   await selectMockMode(page);
   await page.getByTestId("agent-question").fill("订单10001可以退货吗？请详细说明退货材料、办理步骤、时间限制、例外条件和全部注意事项。");
   await page.getByTestId("agent-run").click();
   await expect(page.getByTestId("assistant-pending")).toBeVisible();
-  await page.waitForFunction(() => (document.querySelector<HTMLElement>("[data-testid='stream-answer']")?.innerText.length ?? 0) > 0, undefined, { polling: "raf" });
-  const partialAnswer = await page.getByTestId("stream-answer").innerText();
   await page.evaluate(() => {
     const target = [...document.querySelectorAll<HTMLElement>("[data-testid='conversation-list-item']")]
       .find((element) => element.innerText.includes("切换后的会话"));
     target?.querySelector<HTMLButtonElement>("[data-testid='conversation-select']")?.click();
   });
+  release?.();
   await expect(page.getByTestId("chat-header")).toContainText("切换后的会话");
   await expect(page.getByTestId("assistant-pending")).toHaveCount(0);
-  await expect(page.getByTestId("conversation-messages")).not.toContainText(partialAnswer);
+  await expect(page.getByTestId("conversation-messages")).not.toContainText("不得串入切换后会话的回答");
   await page.waitForTimeout(600);
   await expect.poll(async () => (await readConversationStore(page)).activeConversationId).toBe(second.id);
   const store = await readConversationStore(page);
   expect(store.conversations.find((conversation) => conversation.id === first.id)?.messages).toHaveLength(2);
   expect(store.conversations.find((conversation) => conversation.id === second.id)?.messages).toHaveLength(2);
-  expect(JSON.stringify(store)).not.toContain("请详细说明退货材料");
+  expect(JSON.stringify(store)).not.toMatch(/请详细说明退货材料|late-send-run/);
   await page.getByTestId("conversation-list-item").filter({ hasText: "发起请求的会话" }).getByTestId("conversation-select").click();
   await expect(page.getByTestId("assistant-pending")).toHaveCount(0);
   await expect(page.getByTestId("assistant-stopped")).toHaveCount(0);
+});
+
+test("copies only the visible completed Assistant answer", async ({ page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const answer = "可复制的回答正文。\n第二行保留换行。";
+  await page.route("**/api/agent/stream", async (route) => fulfillMockStream(route, mockAgentResponse("复制测试", "copy-run", {
+    finalAnswer: answer,
+    structuredOutput: { scenario: "general", intent: "general_chat", answer, evidence: [], toolsUsed: [], sources: [], confidence: 0.8, riskLevel: "low", nextAction: "结束" },
+  })));
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("复制测试");
+  await page.getByTestId("agent-run").click();
+
+  const assistant = page.getByTestId("conversation-message-assistant");
+  await assistant.getByTestId("assistant-copy").click();
+  await expect(assistant.getByTestId("assistant-copy-status")).toHaveText("已复制");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied.replace(/\r\n/g, "\n")).toBe(answer);
+  expect(copied).not.toMatch(/copy-run|Trace|responseMode|requestAction/);
+});
+
+test("regenerates only the latest completed answer with a new run and feedback target", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
+  let call = 0;
+  let feedbackRunId = "";
+  await page.route("**/api/agent/stream", async (route) => {
+    call += 1;
+    const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
+    requests.push(body);
+    const answer = call === 1 ? "原始回答。" : "重新生成后的回答。";
+    if (call > 1) await new Promise((resolve) => setTimeout(resolve, 80));
+    await fulfillMockStream(route, mockAgentResponse(String(body.question ?? ""), call === 1 ? "regen-old-run" : "regen-new-run", {
+      finalAnswer: answer,
+      structuredOutput: { scenario: "general", intent: "general_chat", answer, evidence: [], toolsUsed: [], sources: [], confidence: 0.8, riskLevel: "low", nextAction: "结束" },
+    }));
+  });
+  await page.route("**/api/ops/feedback", async (route) => {
+    feedbackRunId = String((JSON.parse(route.request().postData() ?? "{}") as { runId?: string }).runId ?? "");
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("请回答同一个问题");
+  await page.getByTestId("agent-run").click();
+  const assistant = page.getByTestId("conversation-message-assistant");
+  await expect(assistant).toHaveAttribute("data-run-id", "regen-old-run");
+
+  await assistant.getByTestId("assistant-regenerate").click();
+  await expect(page.getByTestId("revision-streaming")).toBeVisible();
+  await expect(assistant.getByTestId("assistant-answer")).toHaveText("重新生成后的回答。");
+  await expect(assistant).toHaveAttribute("data-run-id", "regen-new-run");
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(1);
+  expect(requests[1]?.requestAction).toBe("regenerate");
+  expect(requests[1]?.question).toBe("请回答同一个问题");
+  expect((requests[1]?.conversationContext as { messages?: unknown[] })?.messages ?? []).toHaveLength(0);
+
+  await assistant.getByTestId("assistant-feedback").locator("summary").click();
+  await assistant.getByTestId("agent-feedback-positive").click();
+  await assistant.getByTestId("agent-feedback-submit").click();
+  await expect.poll(() => feedbackRunId).toBe("regen-new-run");
+  const store = await readConversationStore(page);
+  expect(store.conversations.find((conversation) => conversation.id === store.activeConversationId)?.messages).toHaveLength(2);
+  expect(JSON.stringify(store)).not.toContain("regen-old-run");
+});
+
+test("restores the original answer and feedback after a stopped regeneration", async ({ page }) => {
+  let call = 0;
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/agent/stream", async (route) => {
+    call += 1;
+    if (call === 1) {
+      await fulfillMockStream(route, mockAgentResponse("停止重新生成", "regen-stable-run", { finalAnswer: "必须保留的原回答。" }));
+      return;
+    }
+    await gate;
+    await fulfillMockStream(route, mockAgentResponse("停止重新生成", "regen-aborted-run", { finalAnswer: "不应保存的新回答。" })).catch(() => undefined);
+  });
+  await page.route("**/api/ops/feedback", async (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) }));
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("停止重新生成");
+  await page.getByTestId("agent-run").click();
+  const assistant = page.getByTestId("conversation-message-assistant");
+  await assistant.getByTestId("assistant-feedback").locator("summary").click();
+  await assistant.getByTestId("agent-feedback-positive").click();
+  await assistant.getByTestId("agent-feedback-submit").click();
+  const feedbackBefore = await page.evaluate((key) => localStorage.getItem(key), feedbackKey);
+
+  await assistant.getByTestId("assistant-regenerate").click();
+  await expect(page.getByTestId("revision-streaming")).toBeVisible();
+  await page.getByTestId("stop-generation").click();
+  release?.();
+  await expect(page.getByTestId("revision-streaming").getByTestId("assistant-stopped")).toBeVisible();
+  await expect(assistant.getByTestId("assistant-answer")).toHaveText("必须保留的原回答。");
+  await expect(assistant).toHaveAttribute("data-run-id", "regen-stable-run");
+  expect(await page.evaluate((key) => localStorage.getItem(key), feedbackKey)).toBe(feedbackBefore);
+  await page.reload();
+  await expect(page.getByTestId("conversation-message-assistant").getByTestId("assistant-answer")).toHaveText("必须保留的原回答。");
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveAttribute("data-run-id", "regen-stable-run");
+});
+
+test("edits and resends the latest user question without duplicating the turn", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
+  let call = 0;
+  await page.route("**/api/agent/stream", async (route) => {
+    call += 1;
+    const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
+    requests.push(body);
+    const answer = call === 1 ? "旧问题的回答。" : "修改后问题的回答。";
+    if (call > 1) await new Promise((resolve) => setTimeout(resolve, 80));
+    await fulfillMockStream(route, mockAgentResponse(String(body.question ?? ""), call === 1 ? "edit-old-run" : "edit-new-run", {
+      finalAnswer: answer,
+      structuredOutput: { scenario: "general", intent: "general_chat", answer, evidence: [], toolsUsed: [], sources: [], confidence: 0.8, riskLevel: "low", nextAction: "结束" },
+    }));
+  });
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("原始用户问题");
+  await page.getByTestId("agent-run").click();
+  await page.getByTestId("user-edit").click();
+  await expect(page.getByTestId("user-edit-input")).toHaveValue("原始用户问题");
+  await page.getByTestId("user-edit-input").fill("修改后的用户问题");
+  await page.getByTestId("user-edit-submit").click();
+  await expect(page.getByTestId("revision-streaming")).toBeVisible();
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  await expect(page.getByTestId("conversation-message-user")).toContainText("修改后的用户问题");
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(1);
+  await expect(page.getByTestId("assistant-answer")).toHaveText("修改后问题的回答。");
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveAttribute("data-run-id", "edit-new-run");
+  expect(requests[1]?.requestAction).toBe("edit_resend");
+  expect(requests[1]?.question).toBe("修改后的用户问题");
+  expect((requests[1]?.conversationContext as { messages?: unknown[] })?.messages ?? []).toHaveLength(0);
+  expect(JSON.stringify(await readConversationStore(page))).not.toMatch(/原始用户问题|旧问题的回答|edit-old-run/);
+  await page.reload();
+  await expect(page.getByTestId("conversation-message-user")).toContainText("修改后的用户问题");
+  await expect(page.getByTestId("assistant-answer")).toHaveText("修改后问题的回答。");
+});
+
+test("cancels latest-question editing without changing messages or sending a request", async ({ page }) => {
+  let requestCount = 0;
+  await page.route("**/api/agent/stream", async (route) => {
+    requestCount += 1;
+    const question = String((JSON.parse(route.request().postData() ?? "{}") as { question?: string }).question ?? "");
+    await fulfillMockStream(route, mockAgentResponse(question, "edit-cancel-run"));
+  });
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("不可改变的原问题");
+  await page.getByTestId("agent-run").click();
+  const before = JSON.stringify(await readConversationStore(page));
+  await page.getByTestId("user-edit").click();
+  await page.getByTestId("user-edit-input").fill("取消的修改");
+  await page.getByTestId("user-edit-input").press("Escape");
+  await expect(page.getByTestId("user-edit-input")).toHaveCount(0);
+  await expect(page.getByTestId("conversation-message-user")).toContainText("不可改变的原问题");
+  await expect(page.getByTestId("assistant-answer")).toContainText("不可改变的原问题");
+  expect(requestCount).toBe(1);
+  expect(JSON.stringify(await readConversationStore(page))).toBe(before);
+});
+
+test("isolates a late regeneration from a conversation selected later", async ({ page }) => {
+  const first = seedConversation("revision-one", "重新生成会话", 1, "2026-07-13T06:00:00.000Z");
+  const second = seedConversation("revision-two", "隔离会话", 1, "2026-07-13T05:00:00.000Z");
+  await seedConversationStore(page, [first, second], first.id);
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/agent/stream", async (route) => {
+    await gate;
+    await fulfillMockStream(route, mockAgentResponse("重新生成会话 用户问题 1：请继续说明相关流程和限制条件。", "late-revision-run", { finalAnswer: "不得串入其他会话的新回答。" })).catch(() => undefined);
+  });
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("assistant-regenerate").click();
+  await expect(page.getByTestId("revision-streaming")).toBeVisible();
+  await page.getByTestId("conversation-list-item").filter({ hasText: "隔离会话" }).getByTestId("conversation-select").click();
+  release?.();
+  await expect(page.getByTestId("chat-header")).toContainText("隔离会话");
+  await expect(page.getByTestId("conversation-messages")).not.toContainText("不得串入其他会话的新回答");
+  await page.waitForTimeout(300);
+  const store = await readConversationStore(page);
+  expect(store.conversations.find((conversation) => conversation.id === first.id)?.messages).toHaveLength(2);
+  expect(store.conversations.find((conversation) => conversation.id === second.id)?.messages).toHaveLength(2);
+  expect(JSON.stringify(store)).not.toContain("late-revision-run");
 });

@@ -126,6 +126,7 @@ describe("Ops JSONL storage reliability", () => {
       streamingUsed: true,
       streamFallback: false,
       durationMs: 125.8,
+      requestAction: "regenerate",
     });
 
     const raw = await readFile(path.join(runtimeDir, "agent-runs.jsonl"), "utf8");
@@ -141,6 +142,7 @@ describe("Ops JSONL storage reliability", () => {
       contextApplied: true,
       contextMessageCount: 4,
       contextTruncated: true,
+      requestAction: "regenerate",
     });
     expect(raw).not.toMatch(/conversationContext|messages|answerDelta|upstreamSse|prompt|private history|private incremental answer|private raw event|private final prompt/);
     expect(summary.recentRuns[0]).toMatchObject({
@@ -149,7 +151,31 @@ describe("Ops JSONL storage reliability", () => {
       streamFallback: false,
       aborted: false,
       durationMs: 125,
+      requestAction: "regenerate",
     });
+  });
+
+  it("whitelists request actions without storing revisions or answer bodies", async () => {
+    const result = agentResult(4);
+    Object.assign(result, {
+      previousAnswer: "private previous answer",
+      editedQuestionBefore: "private original question",
+      editedQuestionAfter: "private revised question",
+      clipboardContent: "private copied answer",
+    });
+    await recordAgentRun(result, { runId: "run-action-safe", requestAction: "edit_resend" });
+    await recordAgentRun(agentResult(5), {
+      runId: "run-action-invalid",
+      requestAction: "regenerate_with_private_answer" as "send",
+    });
+
+    const raw = await readFile(path.join(runtimeDir, "agent-runs.jsonl"), "utf8");
+    const records = await parseJsonl("agent-runs.jsonl");
+    const summary = await getOpsSummary(false);
+    expect(records.find((record) => record.id === "run-action-safe")?.requestAction).toBe("edit_resend");
+    expect(records.find((record) => record.id === "run-action-invalid")?.requestAction).toBe("send");
+    expect(summary.recentRuns.map((record) => record.requestAction)).toEqual(["send", "edit_resend"]);
+    expect(raw).not.toMatch(/previousAnswer|editedQuestion|clipboardContent|private previous answer|private original question|private revised question|private copied answer/);
   });
 
   it("records an aborted stream once and keeps the first terminal outcome", async () => {

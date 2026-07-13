@@ -4,7 +4,7 @@ import { encodeAgentStreamEvent, streamMockAnswer } from "@/lib/agent/streamProt
 import { sanitizeAgentStreamResult } from "@/lib/agent/streamSafety";
 import { validateAgentRequest } from "@/lib/ops/agentRequest";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
-import { createOpsAgentRunId, recordAgentAbortedRun, recordAgentError, recordAgentRun } from "@/lib/ops/storage";
+import { createOpsAgentRunId, recordAgentAbortedRun, recordAgentError, recordAgentRun, sanitizeRequestAction } from "@/lib/ops/storage";
 import type { AgentApiResponse, AgentStreamEvent, AgentStreamMetadata } from "@/types";
 
 export const runtime = "nodejs";
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
   if ("status" in validated) return NextResponse.json({ error: "invalid_request", message: validated.message }, { status: validated.status });
 
   const { question, mode: requestedMode, userDocuments, conversationContext, contextMeta } = validated;
+  const requestAction = sanitizeRequestAction(body["requestAction"]);
   const runId = createOpsAgentRunId();
   if (requestedMode === "real") {
     const rateLimit = checkRealApiRateLimit(getClientIp(request));
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
         contextMessageCount: contextMeta.contextMessageCount,
         contextTruncated: contextMeta.contextTruncated,
         streamingRequested: true,
+        requestAction,
       });
       return streamErrorResponse({ type: "run_error", code: "rate_limited", message: "请求过于频繁，请稍后再试。", retryable: true });
     }
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
           contextTruncated: contextMeta.contextTruncated,
           streamingUsed: streamMetadata.streamingUsed || deltaIndex > 0,
           streamFallback: streamMetadata.streamFallback,
+          requestAction,
         });
       };
 
@@ -157,6 +160,7 @@ export async function POST(request: Request) {
             streamFallback: streamMetadata.streamFallback,
             aborted: false,
             streamDeltaCount: deltaIndex,
+            requestAction,
           },
         };
         if (!emit({ type: "phase", phase: "complete" })) {
@@ -183,6 +187,7 @@ export async function POST(request: Request) {
             streamingUsed: streamMetadata.streamingUsed,
             streamFallback: streamMetadata.streamFallback,
             durationMs: Date.now() - startedAt,
+            requestAction,
           });
         } finally {
           closed = true;
@@ -212,6 +217,7 @@ export async function POST(request: Request) {
           streamingRequested: true,
           streamingUsed: streamMetadata.streamingUsed || deltaIndex > 0,
           streamFallback: streamMetadata.streamFallback,
+          requestAction,
         });
         if (!closed) {
           emit({ type: "run_error", code: "server_error", message: "生成过程中断，请重试。", retryable: true });

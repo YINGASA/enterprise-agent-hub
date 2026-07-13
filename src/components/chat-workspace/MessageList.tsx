@@ -2,6 +2,7 @@
 
 import { AssistantMessage } from "@/components/chat-workspace/AssistantMessage";
 import { EmptyConversation } from "@/components/chat-workspace/EmptyConversation";
+import { UserMessage } from "@/components/chat-workspace/UserMessage";
 import { useChatScroll } from "@/components/chat-workspace/useChatScroll";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
 import type { ChatAnswerFeedbackValue, ConversationMessage } from "@/types";
@@ -15,6 +16,8 @@ type MessageListProps = {
   examples: string[];
   onSelectExample: (question: string) => void;
   onRetry: () => void;
+  onRegenerate: (assistantMessageId: string) => void;
+  onEditResend: (userMessageId: string, question: string) => void;
   onToggleFeedback: (messageId: string, value: ChatAnswerFeedbackValue) => void;
   onFeedbackReasonChange: (messageId: string, value: string) => void;
   onSubmitFeedback: (messageId: string) => void;
@@ -22,23 +25,7 @@ type MessageListProps = {
 
 const emptyFeedback: MessageFeedbackDraft = { values: [], reason: "", message: "" };
 
-function formatTime(value: string) {
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
-}
-
-function UserMessage({ message }: { message: ConversationMessage }) {
-  return (
-    <article data-testid="conversation-message-user" data-message-id={message.id} className="flex min-w-0 justify-end">
-      <div className="min-w-0 max-w-[78%] sm:max-w-[72%]">
-        <div className="mb-1 text-right text-xs text-ink-500"><time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time></div>
-        <p className="whitespace-pre-wrap break-words rounded-2xl rounded-tr-md bg-brand-600 px-4 py-3 text-sm leading-7 text-white shadow-sm">{message.content}</p>
-      </div>
-    </article>
-  );
-}
-
-function PendingAssistant({ turn, onRetry }: { turn: TransientChatTurn; onRetry: () => void }) {
+function PendingAssistant({ turn, onRetry, revision = false }: { turn: TransientChatTurn; onRetry: () => void; revision?: boolean }) {
   const retryButton = turn.retryable === false ? null : (
     <button type="button" data-testid="agent-retry" onClick={onRetry} className="mt-3 cursor-pointer rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
       <span data-testid="retry-generation">重试</span>
@@ -48,7 +35,7 @@ function PendingAssistant({ turn, onRetry }: { turn: TransientChatTurn; onRetry:
     return (
       <article data-testid="assistant-error" role="alert" className="flex justify-start">
         <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-rose-200 bg-white p-4 shadow-sm">
-          <p className="font-semibold text-rose-800">本次发送失败</p>
+          <p className="font-semibold text-rose-800">{revision ? "本次修改未完成，原回答已保留" : "本次发送失败"}</p>
           {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-3 whitespace-pre-wrap break-words border-l-2 border-slate-200 pl-3 text-sm leading-6 text-ink-600">{turn.partialAnswer}</p> : null}
           <p className="mt-2 break-words text-sm leading-6 text-rose-700">{turn.error ?? "请求失败，请稍后重试。"}</p>
           {retryButton}
@@ -75,7 +62,7 @@ function PendingAssistant({ turn, onRetry }: { turn: TransientChatTurn; onRetry:
   return (
     <article data-testid="assistant-pending" aria-live="polite" className="flex justify-start">
       <div data-testid="assistant-streaming" className="w-full max-w-2xl rounded-2xl rounded-tl-md border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-sm font-semibold text-ink-700">{turn.partialAnswer ? "正在生成回答" : "Agent 正在处理"}</p>
+        <p className="text-sm font-semibold text-ink-700">{turn.action === "regenerate" ? "正在重新生成回答" : turn.action === "edit_resend" ? "正在根据修改后的问题生成回答" : turn.partialAnswer ? "正在生成回答" : "Agent 正在处理"}</p>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-500 sm:grid-cols-5">
           {phaseOrder.map((phase, index) => {
             const active = phase === turn.phase;
@@ -92,6 +79,12 @@ function PendingAssistant({ turn, onRetry }: { turn: TransientChatTurn; onRetry:
 
 export function MessageList(props: MessageListProps) {
   const transientForConversation = props.transientTurn?.conversationId === props.conversationId ? props.transientTurn : null;
+  const revisionTurn = transientForConversation?.targetAssistantMessageId ? transientForConversation : null;
+  const generationActive = transientForConversation?.status === "pending" || transientForConversation?.status === "streaming";
+  const lastAssistantIndex = props.messages.at(-1)?.role === "assistant" ? props.messages.length - 1 : -1;
+  const lastUserIndex = lastAssistantIndex > 0 && props.messages[lastAssistantIndex - 1]?.role === "user" ? lastAssistantIndex - 1 : -1;
+  const lastAssistantId = lastAssistantIndex >= 0 ? props.messages[lastAssistantIndex]?.id : undefined;
+  const lastUserId = lastUserIndex >= 0 ? props.messages[lastUserIndex]?.id : undefined;
   const scroll = useChatScroll({
     conversationId: props.conversationId,
     messageCount: props.messages.length,
@@ -105,11 +98,16 @@ export function MessageList(props: MessageListProps) {
           {!props.messages.length && !transientForConversation ? <EmptyConversation examples={props.examples} onSelectExample={props.onSelectExample} /> : null}
           {props.messages.map((message) => {
             if (message.role === "user") {
-              return <UserMessage key={message.id} message={message} />;
+              const showEditedQuestion = revisionTurn?.action === "edit_resend"
+                && revisionTurn.targetUserMessageId === message.id
+                && (revisionTurn.status === "pending" || revisionTurn.status === "streaming");
+              const displayedMessage = showEditedQuestion ? { ...message, content: revisionTurn.question } : message;
+              return <UserMessage key={message.id} message={displayedMessage} canEdit={message.id === lastUserId} disabled={generationActive} onEditResend={props.onEditResend} />;
             }
-            return <AssistantMessage key={message.id} message={message} result={props.resultsByMessageId[message.id]} feedback={props.feedbackByMessageId[message.id] ?? emptyFeedback} onToggleFeedback={props.onToggleFeedback} onFeedbackReasonChange={props.onFeedbackReasonChange} onSubmitFeedback={props.onSubmitFeedback} />;
+            const targetedRevision = revisionTurn?.targetAssistantMessageId === message.id ? revisionTurn : null;
+            return <div key={message.id} className="contents"><AssistantMessage message={message} result={props.resultsByMessageId[message.id]} feedback={props.feedbackByMessageId[message.id] ?? emptyFeedback} canRegenerate={message.id === lastAssistantId} canSubmitFeedback={message.id === lastAssistantId} revisionActive={generationActive} onRegenerate={props.onRegenerate} onToggleFeedback={props.onToggleFeedback} onFeedbackReasonChange={props.onFeedbackReasonChange} onSubmitFeedback={props.onSubmitFeedback} />{targetedRevision ? <div data-testid="revision-streaming"><PendingAssistant turn={targetedRevision} onRetry={props.onRetry} revision /></div> : null}</div>;
           })}
-          {transientForConversation ? <><UserMessage message={{ id: transientForConversation.userMessageId, role: "user", content: transientForConversation.question, createdAt: transientForConversation.createdAt }} /><PendingAssistant turn={transientForConversation} onRetry={props.onRetry} /></> : null}
+          {transientForConversation && !revisionTurn ? <><UserMessage message={{ id: transientForConversation.userMessageId, role: "user", content: transientForConversation.question, createdAt: transientForConversation.createdAt }} /><PendingAssistant turn={transientForConversation} onRetry={props.onRetry} /></> : null}
           <div aria-hidden="true" className="h-1 shrink-0" />
         </div>
       </div>

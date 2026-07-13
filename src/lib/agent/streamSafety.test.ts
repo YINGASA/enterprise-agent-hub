@@ -17,7 +17,7 @@ describe("stream completion safety", () => {
       finalAnswer: "安全回答",
       structuredOutput: { scenario: "general", intent: "general_chat", answer: "安全回答", evidence: [], toolsUsed: [], sources: [], confidence: 1, riskLevel: "low", nextAction: "none" },
       createdAt: new Date(0).toISOString(), mode: "mock-agent",
-      api: { requestedMode: "real", responseMode: "real", provider: "openai-compatible", model: "private-model", requestUrl: "https://private.invalid", rawContentPreview: "private raw", streamingRequested: true, streamingUsed: true, streamFallback: false, streamDeltaCount: 2 },
+      api: { requestedMode: "real", responseMode: "real", provider: "openai-compatible", model: "private-model", requestUrl: "https://private.invalid", rawContentPreview: "private raw", streamingRequested: true, streamingUsed: true, streamFallback: false, streamDeltaCount: 2, requestAction: "regenerate" },
     } satisfies AgentApiResponse;
     const safe = sanitizeAgentStreamResult(result);
     expect(safe.ragAnswer?.retrievedChunks).toEqual([]);
@@ -28,6 +28,6 @@ describe("stream completion safety", () => {
     expect(safe.steps[0]).toMatchObject({ input: {}, output: {} });
     expect(safe.api).not.toHaveProperty("provider");
     expect(safe.api).not.toHaveProperty("rawContentPreview");
-    expect(safe.api).toMatchObject({ streamingRequested: true, streamingUsed: true, streamDeltaCount: 2 });
+    expect(safe.api).toMatchObject({ streamingRequested: true, streamingUsed: true, streamDeltaCount: 2, requestAction: "regenerate" });
   });
 });

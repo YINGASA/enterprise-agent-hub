@@ -102,6 +102,8 @@ export function AgentWorkspace() {
           examples={recommendedQuestions}
           onSelectExample={workspace.setQuestion}
           onRetry={workspace.retryLastTurn}
+          onRegenerate={workspace.regenerateLastAnswer}
+          onEditResend={workspace.editAndResendLastQuestion}
           onToggleFeedback={workspace.toggleFeedback}
           onFeedbackReasonChange={workspace.setFeedbackReason}
           onSubmitFeedback={(messageId) => void workspace.saveFeedback(messageId)}

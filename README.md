@@ -1,8 +1,8 @@
 # Enterprise Agent Hub
 
-## V2.0.2 Quality Baseline
+## V2.0.3 Quality Baseline
 
-V2.0.2 adds structured streaming answers and generation controls while preserving the V2.0.1 Chat Workspace, Conversation storage, context algorithm, and JSON Agent API. `/api/agent/stream` emits typed NDJSON events for safe phases, answer deltas, completion, errors, and aborts; the existing `/api/agent` remains compatible. Mock streaming is deterministic, Real OpenAI-compatible SSE is parsed server-side, unsupported streaming safely falls back to one complete response, and only completed Assistant answers enter conversation context. The release baseline is 27 unit-test files with 98/98 passing tests, 18/18 Playwright E2E scenarios, and Full Mock Evaluation at 80/80 with a 100% pass rate.
+V2.0.3 adds lightweight completed-message actions while preserving the V2.0.2 NDJSON stream, Conversation schema, and bounded context algorithm. Users can copy any completed Assistant answer, regenerate only the latest completed answer, or edit and resend only the latest paired user question. Regenerate and edit-resend keep the original stored turn until a new streamed answer completes, atomically replace the last turn, create a new runId, and reset Feedback for the new answer. The release baseline is 28 unit-test files with 108/108 passing tests, 24/24 Playwright E2E scenarios, and Full Mock Evaluation at 80/80 with a 100% pass rate.
 
 The platform also includes Ops summaries, Real API rate and cost protection, feedback runId validation, automated tests and CI, RAG Test Bench, knowledge quality scoring, and backup/restore. Client knowledge and history remain browser-local; Ops uses lightweight local JSONL storage, and rate limiting is single-instance memory based. No real API keys, tokens, providers, model identifiers, or service URLs are stored in this repository.
 

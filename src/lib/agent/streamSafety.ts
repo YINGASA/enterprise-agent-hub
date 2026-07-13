@@ -17,6 +17,7 @@ function sanitizeApi(api: AgentApiMetadata): AgentApiMetadata {
     streamFallback: api.streamFallback,
     aborted: api.aborted,
     streamDeltaCount: api.streamDeltaCount,
+    requestAction: api.requestAction,
   };
 }
 
