@@ -129,6 +129,7 @@ function snapshotPreview(run: ChatRunHistoryItem) {
 export function ChatRunHistoryPanel({ currentResult }: ChatRunHistoryPanelProps) {
   const [history, setHistory] = useState<ChatRunHistoryItem[]>([]);
   const [message, setMessage] = useState("");
+  const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
   const [expandedId, setExpandedId] = useState("");
   const [preview, setPreview] = useState<PreviewState>(null);
 
@@ -158,11 +159,11 @@ export function ChatRunHistoryPanel({ currentResult }: ChatRunHistoryPanelProps)
   }
 
   function handleClear() {
-    if (!window.confirm(text.confirmClear)) return;
     const next = clearChatHistory();
     setHistory(next.data);
     setExpandedId("");
     setMessage(next.ok ? text.cleared : next.error);
+    setClearConfirmationOpen(false);
   }
 
   function openMarkdownPreview(run: ChatRunHistoryItem) {
@@ -186,12 +187,13 @@ export function ChatRunHistoryPanel({ currentResult }: ChatRunHistoryPanelProps)
           <button type="button" onClick={() => currentRun && openJsonPreview(currentRun)} disabled={!currentRun} className={secondaryButtonClass()}>{text.previewJson}</button>
           <button type="button" onClick={() => currentRun && triggerMarkdownDownload(currentRun)} disabled={!currentRun} className={secondaryButtonClass()}>{text.exportMarkdown}</button>
           <button type="button" onClick={() => currentRun && triggerJsonDownload(currentRun)} disabled={!currentRun} className={secondaryButtonClass()}>{text.exportJson}</button>
-          {history.length ? <button type="button" onClick={handleClear} className={secondaryButtonClass()}>{text.clear}</button> : null}
+          {history.length ? <button type="button" onClick={() => setClearConfirmationOpen(true)} className={secondaryButtonClass()}>{text.clear}</button> : null}
         </div>
       </div>
 
       {message ? <p className="rounded-md bg-brand-50 p-3 text-sm text-brand-700">{message}</p> : null}
       {preview ? <ChatRunReportPreview kind={preview.kind} title={preview.title} content={preview.content} onClose={() => setPreview(null)} onDownload={() => preview.kind === "markdown" ? triggerMarkdownDownload(preview.run) : triggerJsonDownload(preview.run)} /> : null}
+      {clearConfirmationOpen ? <div role="alertdialog" aria-labelledby="chat-history-clear-title" aria-describedby="chat-history-clear-description" className="rounded-lg border border-rose-200 bg-rose-50 p-4"><p id="chat-history-clear-title" className="font-semibold text-rose-900">清空 Chat 运行历史？</p><p id="chat-history-clear-description" className="mt-1 text-sm text-rose-800">{text.confirmClear}</p><div className="mt-3 flex gap-2"><button type="button" autoFocus onClick={() => setClearConfirmationOpen(false)} className={secondaryButtonClass()}>取消</button><button type="button" onClick={handleClear} className="min-h-10 rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">确认清空</button></div></div> : null}
 
       {history.length === 0 ? <p className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm text-ink-500">{text.empty}</p> : <div className="space-y-3">
         {history.map((item) => (

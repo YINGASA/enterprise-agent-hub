@@ -226,9 +226,15 @@ The local Playwright gate runs from an isolated temporary app directory that exc
 
 ## Conversation Context Flow (V2.0.0)
 
-The browser stores compact conversations under `enterprise-agent-hub:conversations` through the shared Client Storage Adapter. A conversation contains only user/assistant text and limited assistant metadata; sources, chunks, tool payloads, traces, prompts, feedback, and Ops records are excluded. On first use, valid legacy Chat Run History is copied into a default conversation without changing the legacy key.
+The browser stores compact conversations under `enterprise-agent-hub:conversations` through the shared Client Storage Adapter. A conversation contains user/assistant text, title metadata, context counts, and a strict assistant-detail whitelist. Source and chunk bodies, tool inputs or raw results, full trace input/output, prompts, feedback bodies, and Ops records remain excluded; only source references, tool names/statuses, and step names/statuses/durations may be retained for message-level display. On first use, valid legacy Chat Run History is copied into a default conversation without changing the legacy key.
 
 For each successful turn, the client builds a bounded recent-message window and sends it as optional `conversationContext`. The server applies the same sanitizer again: at most 6 user rounds, 12 messages, 6,000 historical characters, and 2,000 characters per message. Router, RAG retrieval, and tool parsing operate on the current `question`; bounded history is used only for deterministic Mock follow-up resolution and as explicitly marked untrusted user/assistant history before the current-question payload in the Real prompt. Ops persists only context-used, message-count, and truncated metadata.
+
+## Chat Workspace Flow (V2.0.1)
+
+`src/components/AgentWorkspace.tsx` remains the stable `/chat` entry and now composes focused modules under `src/components/chat-workspace/`: conversation sidebar, header, message list, Assistant details, bottom Composer, confirmation/history dialogs, and scroll control. The AppShell supplies a viewport-bounded flex area; the message list owns vertical scrolling while the Composer stays as a non-scrolling footer inside the chat pane.
+
+New conversations use an in-memory draft and are materialized only after the first successful response. Conversation titles are generated locally from the first user question, can be manually renamed, and are searched only in browser state. Assistant context metadata and compact source/tool/step summaries are persisted with that message; full runtime results remain memory-only. Pending and failed turns are transient and do not enter effective context. Every request captures its origin conversation ID and an AbortController epoch, so switching or deleting a conversation invalidates the response and a removed conversation cannot be recreated by a late request.
 
 ## V1.6.1 Knowledge Import Persistence
 

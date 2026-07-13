@@ -1,5 +1,5 @@
 import type { AgentScenario } from "./common";
-import type { KnowledgePackId, RagAnswer } from "./knowledge";
+import type { KnowledgePackId, KnowledgeSourceType, RagAnswer, RetrievalConfidence } from "./knowledge";
 import type { ToolName, ToolRunResult } from "./tools";
 
 export type AgentIntent =
@@ -173,10 +173,34 @@ export type ConversationMessage = {
   responseMode?: AgentResponseMode;
   intent?: AgentIntent;
   scenario?: AgentScenario;
+  contextApplied?: boolean;
+  contextMessageCount?: number;
+  contextTruncated?: boolean;
+  contextCharacterCount?: number;
+  details?: ConversationAssistantDetails;
+};
+
+export type ConversationAssistantDetails = {
+  sources?: Array<{
+    documentId: string;
+    title: string;
+    category: string;
+    sourceType?: KnowledgeSourceType;
+    score?: number;
+    chunkIndexes: number[];
+  }>;
+  tools?: Array<Pick<ToolRunResult, "tool" | "status">>;
+  steps?: Array<Pick<AgentStep, "id" | "name" | "type" | "status" | "durationMs">>;
+  retrievalConfidence?: RetrievalConfidence;
+  confidence?: number;
+  riskLevel?: AgentStructuredOutput["riskLevel"];
+  needsClarification?: boolean;
 };
 
 export type Conversation = {
   id: string;
+  title: string;
+  titleSource: "auto" | "manual";
   createdAt: string;
   updatedAt: string;
   messages: ConversationMessage[];

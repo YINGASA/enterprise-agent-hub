@@ -1,4 +1,4 @@
-import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatAnswerFeedbackValue, ChatFeedbackSummary } from "@/types";
+import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatAnswerFeedbackValue, ChatFeedbackSummary, ConversationMessage } from "@/types";
 import { clearClientStorageList, readClientStorageList, writeClientStorageList, type ClientStorageListOptions } from "@/lib/clientStorage";
 
 export const STORAGE_KEY = "enterprise-agent-hub:chat-answer-feedback";
@@ -56,6 +56,31 @@ export function saveChatFeedback(result: AgentApiResponse, values: ChatAnswerFee
   try {
     const item = createChatAnswerFeedbackItem(result, values, reason);
     const next = [item, ...readRawFeedback().data.filter((entry) => entry.id !== item.id)];
+    const saved = writeRawFeedback(next);
+    return saved.ok ? { ok: true, data: saved.data } : { ok: false, data: saved.data, error: saved.error ?? "保存反馈失败。" };
+  } catch (error) {
+    return { ok: false, data: [], error: error instanceof Error ? error.message : "保存反馈失败。" };
+  }
+}
+
+export function saveConversationMessageFeedback(question: string, message: ConversationMessage, values: ChatAnswerFeedbackValue[], reason = ""): FeedbackResult<ChatAnswerFeedbackItem[]> {
+  if (message.role !== "assistant") return { ok: false, data: loadChatFeedback().data, error: "只能对 Agent 回答提交反馈。" };
+  try {
+    const item: ChatAnswerFeedbackItem = {
+      id: makeId(),
+      createdAt: new Date().toISOString(),
+      question: question.slice(0, 2_000),
+      answerPreview: message.content.slice(0, 240),
+      values,
+      reason: reason.trim() || undefined,
+      scenario: message.scenario ?? "unknown",
+      intent: message.intent ?? "unknown",
+      responseMode: message.responseMode ?? "unknown",
+      sourceTitles: message.details?.sources?.map((source) => source.title).slice(0, 5) ?? [],
+      retrievalConfidence: message.details?.retrievalConfidence,
+      fallback: message.responseMode === "fallback" || message.responseMode === "real_text_fallback" || message.responseMode === "real_error_fallback" || message.intent === "general_chat",
+    };
+    const next = [item, ...readRawFeedback().data];
     const saved = writeRawFeedback(next);
     return saved.ok ? { ok: true, data: saved.data } : { ok: false, data: saved.data, error: saved.error ?? "保存反馈失败。" };
   } catch (error) {

@@ -55,6 +55,7 @@ const versions = [
   { version: "V1.12.4", title: "Knowledge Workspace 结构拆分", body: "将知识库本地状态、文档操作和展示组合按职责分离，保持知识存储、备份格式、RAG 测试与页面交互兼容。" },
   { version: "V1.12.5", title: "领域类型结构", body: "将共享 TypeScript 类型按 Agent、Knowledge、Tools、Evaluation 和反馈领域拆分，保持 @/types 公共导入与所有数据协议兼容。" },
   { version: "V2.0.0", title: "当前会话多轮上下文", body: "支持同一浏览器当前会话内连续追问、刷新恢复和新建对话隔离；Router、RAG 与工具仍以当前问题为主。" },
+  { version: "V2.0.1", title: "连续聊天工作台", body: "聊天页升级为双栏会话工作台，支持连续消息流、固定输入区、会话标题与管理、回答详情归属、移动抽屉和安全异步切换。" },
 ];
 
 const engineeringHighlights = [
