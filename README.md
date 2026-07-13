@@ -1,8 +1,8 @@
 # Enterprise Agent Hub
 
-## V1.12.5 Quality Baseline
+## V2.0.0 Quality Baseline
 
-V1.12.5 splits shared TypeScript definitions into explicit domain modules while preserving the stable `@/types` barrel, public type names, API JSON, browser storage, backup, and JSONL formats. The release baseline is 18 unit-test files, 55 passing tests, 7/7 Playwright E2E scenarios, and Full Mock Evaluation at 80/80.
+V2.0.0 adds browser-local, current-conversation multi-turn context while preserving the single-question API contract. Successful turns are stored as compact user/assistant messages, restored after refresh, and isolated by conversation ID. The server revalidates a window of at most 6 rounds, 12 messages, and 6,000 historical characters. Router, RAG, and tool parameters continue to use the current question; only Mock follow-up resolution and Real generation receive bounded history. The release baseline is 21 unit-test files, 71 passing tests, 9/9 Playwright E2E scenarios, and Full Mock Evaluation at 80/80.
 
 The platform also includes Ops summaries, Real API rate and cost protection, feedback runId validation, automated tests and CI, RAG Test Bench, knowledge quality scoring, and backup/restore. Client knowledge and history remain browser-local; Ops uses lightweight local JSONL storage, and rate limiting is single-instance memory based. No real API keys, tokens, providers, model identifiers, or service URLs are stored in this repository.
 

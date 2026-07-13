@@ -35,9 +35,15 @@ describe("POST /api/agent", () => {
   });
 
   it("returns a server-generated run id for valid mock runs", async () => {
-    const response = await POST(request(JSON.stringify({ question: "测试", mode: "mock" })));
+    const response = await POST(request(JSON.stringify({ question: "测试" })));
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ runId: "run-test" });
-    expect(runAgentApiPipeline).toHaveBeenCalledWith("测试", "mock", []);
+    expect(runAgentApiPipeline).toHaveBeenCalledWith(
+      "测试",
+      "mock",
+      [],
+      { messages: [] },
+      { contextApplied: false, contextMessageCount: 0, contextTruncated: false, contextCharacterCount: 0 },
+    );
   });
 });

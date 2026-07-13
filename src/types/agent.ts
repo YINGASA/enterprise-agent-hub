@@ -156,6 +156,42 @@ export type AgentApiMetadata = {
   llmError?: string;
   parseError?: string;
   rawContentPreview?: string;
+  contextApplied?: boolean;
+  contextMessageCount?: number;
+  contextTruncated?: boolean;
+  contextCharacterCount?: number;
+};
+
+export type ConversationMessageRole = "user" | "assistant";
+
+export type ConversationMessage = {
+  id: string;
+  role: ConversationMessageRole;
+  content: string;
+  createdAt: string;
+  runId?: string;
+  responseMode?: AgentResponseMode;
+  intent?: AgentIntent;
+  scenario?: AgentScenario;
+};
+
+export type Conversation = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ConversationMessage[];
+  schemaVersion: 1;
+};
+
+export type ConversationContext = {
+  messages: Array<Pick<ConversationMessage, "role" | "content">>;
+};
+
+export type ConversationContextMeta = {
+  contextApplied: boolean;
+  contextMessageCount: number;
+  contextTruncated: boolean;
+  contextCharacterCount: number;
 };
 
 export type AgentApiResponse = AgentPipelineResult & {

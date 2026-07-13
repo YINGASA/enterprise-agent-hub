@@ -224,6 +224,12 @@ The local Playwright gate runs from an isolated temporary app directory that exc
 
 `src/types/index.ts` is a stable explicit type-only barrel. Definitions are grouped in `common`, `agent`, `knowledge`, `tools`, `feedback`, and `evaluation` modules. Type modules have no component or runtime dependencies; existing `@/types` imports remain compatible and no API, storage, backup, or JSONL schema changes are part of this release.
 
+## Conversation Context Flow (V2.0.0)
+
+The browser stores compact conversations under `enterprise-agent-hub:conversations` through the shared Client Storage Adapter. A conversation contains only user/assistant text and limited assistant metadata; sources, chunks, tool payloads, traces, prompts, feedback, and Ops records are excluded. On first use, valid legacy Chat Run History is copied into a default conversation without changing the legacy key.
+
+For each successful turn, the client builds a bounded recent-message window and sends it as optional `conversationContext`. The server applies the same sanitizer again: at most 6 user rounds, 12 messages, 6,000 historical characters, and 2,000 characters per message. Router, RAG retrieval, and tool parsing operate on the current `question`; bounded history is used only for deterministic Mock follow-up resolution and as explicitly marked untrusted user/assistant history before the current-question payload in the Real prompt. Ops persists only context-used, message-count, and truncated metadata.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

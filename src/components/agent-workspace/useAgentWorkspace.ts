@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { saveChatFeedback } from "@/lib/chat/feedback";
 import { readUserKnowledgeDocuments } from "@/lib/knowledge/storage";
-import type { AgentApiResponse, ChatAnswerFeedbackValue, LlmMode } from "@/types";
+import { appendConversationTurn, clearCurrentConversation, deleteCurrentConversation, loadConversationStore, selectConversation, startNewConversation, type ConversationStore } from "@/lib/conversation/storage";
+import { contextFromConversationMessages } from "@/lib/conversation/context";
+import type { AgentApiResponse, ChatAnswerFeedbackValue, ConversationContextMeta, LlmMode } from "@/types";
 
 export type LlmStatus = { configured: boolean };
 export type LlmHealthResult = { configured: boolean; healthy: boolean; durationMs?: number; statusCode?: number; errorType?: string; message?: string };
@@ -14,6 +16,8 @@ type AgentErrorPayload = { errorType?: string; error?: string; message?: string 
 export function useAgentWorkspace(fallbackQuestion: string) {
   const searchParams = useSearchParams();
   const mounted = useRef(true);
+  const inFlight = useRef(false);
+  const conversationEpoch = useRef(0);
   const [question, setQuestion] = useState(fallbackQuestion);
   const [mode, setMode] = useState<LlmMode>("mock");
   const [result, setResult] = useState<AgentApiResponse | null>(null);
@@ -26,12 +30,18 @@ export function useAgentWorkspace(fallbackQuestion: string) {
   const [feedbackValues, setFeedbackValues] = useState<ChatAnswerFeedbackValue[]>([]);
   const [feedbackReason, setFeedbackReason] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
+  const [conversationStore, setConversationStore] = useState<ConversationStore | null>(null);
+  const [contextMeta, setContextMeta] = useState<ConversationContextMeta | null>(null);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    setConversationStore(loadConversationStore().data);
   }, []);
 
   useEffect(() => {
@@ -59,18 +69,24 @@ export function useAgentWorkspace(fallbackQuestion: string) {
   const realApiUnavailable = mode === "real" && llmStatus?.configured === false;
 
   const runAgent = useCallback(async () => {
+    if (inFlight.current) return;
     if (realApiUnavailable) {
       setClientError("当前未配置模型服务。请使用开发模拟模式，或在服务端配置模型服务后再使用真实模型生成。");
       return;
     }
+    inFlight.current = true;
+    const requestEpoch = conversationEpoch.current;
     setIsLoading(true);
     setClientError("");
     try {
+      const currentStore = conversationStore ?? loadConversationStore().data;
+      const activeConversation = currentStore.conversations.find((item) => item.id === currentStore.activeConversationId);
+      const builtContext = contextFromConversationMessages(activeConversation?.messages ?? []);
       const enabledUserDocuments = readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
       const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, mode, userDocuments: enabledUserDocuments }),
+        body: JSON.stringify({ question, mode, userDocuments: enabledUserDocuments, conversationContext: builtContext.context }),
       });
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({})) as AgentErrorPayload;
@@ -80,17 +96,68 @@ export function useAgentWorkspace(fallbackQuestion: string) {
         throw new Error(errorPayload.message || `API request failed: ${response.status}`);
       }
       const nextResult = (await response.json()) as AgentApiResponse;
-      if (!mounted.current) return;
+      if (!mounted.current || requestEpoch !== conversationEpoch.current) return;
       setResult(nextResult);
+      const savedConversation = appendConversationTurn(currentStore, question, nextResult);
+      setConversationStore(savedConversation.data);
+      setContextMeta({
+        contextApplied: Boolean(nextResult.api.contextApplied),
+        contextMessageCount: nextResult.api.contextMessageCount ?? 0,
+        contextTruncated: Boolean(nextResult.api.contextTruncated),
+        contextCharacterCount: nextResult.api.contextCharacterCount ?? 0,
+      });
       setFeedbackValues([]);
       setFeedbackReason("");
       setFeedbackMessage("");
     } catch (error) {
       if (mounted.current) setClientError(error instanceof Error ? error.message : "Unknown client error.");
     } finally {
+      inFlight.current = false;
       if (mounted.current) setIsLoading(false);
     }
-  }, [mode, question, realApiUnavailable]);
+  }, [conversationStore, mode, question, realApiUnavailable]);
+
+  const newConversation = useCallback(() => {
+    if (inFlight.current) return;
+    const currentStore = conversationStore ?? loadConversationStore().data;
+    const next = startNewConversation(currentStore);
+    conversationEpoch.current += 1;
+    setConversationStore(next.data);
+    setResult(null);
+    setQuestion("");
+    setClientError("");
+    setFeedbackValues([]);
+    setFeedbackReason("");
+    setFeedbackMessage("");
+    setContextMeta(null);
+  }, [conversationStore]);
+
+  const switchConversation = useCallback((conversationId: string) => {
+    if (inFlight.current || !conversationStore) return;
+    const next = selectConversation(conversationStore, conversationId);
+    conversationEpoch.current += 1;
+    setConversationStore(next.data);
+    setResult(null);
+    setContextMeta(null);
+  }, [conversationStore]);
+
+  const clearConversation = useCallback(() => {
+    if (inFlight.current || !conversationStore) return;
+    const next = clearCurrentConversation(conversationStore);
+    conversationEpoch.current += 1;
+    setConversationStore(next.data);
+    setResult(null);
+    setContextMeta(null);
+  }, [conversationStore]);
+
+  const deleteConversation = useCallback(() => {
+    if (inFlight.current || !conversationStore) return;
+    const next = deleteCurrentConversation(conversationStore);
+    conversationEpoch.current += 1;
+    setConversationStore(next.data);
+    setResult(null);
+    setContextMeta(null);
+  }, [conversationStore]);
 
   const checkHealth = useCallback(async () => {
     setIsCheckingHealth(true);
@@ -145,5 +212,9 @@ export function useAgentWorkspace(fallbackQuestion: string) {
     question, setQuestion, mode, setMode, result, llmStatus, llmStatusError, healthResult,
     isLoading, isCheckingHealth, clientError, feedbackValues, feedbackReason, setFeedbackReason,
     feedbackMessage, realApiUnavailable, runAgent, checkHealth, toggleFeedback, saveFeedback,
+    conversationId: conversationStore?.activeConversationId ?? "",
+    conversations: conversationStore?.conversations ?? [],
+    conversationMessages: conversationStore?.conversations.find((item) => item.id === conversationStore.activeConversationId)?.messages ?? [],
+    contextMeta, newConversation, switchConversation, clearConversation, deleteConversation,
   };
 }

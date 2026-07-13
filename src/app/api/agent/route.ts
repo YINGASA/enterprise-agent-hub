@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_request", message: validated.message }, { status: validated.status });
   }
 
-  const { question, mode: requestedMode, userDocuments } = validated;
+  const { question, mode: requestedMode, userDocuments, conversationContext, contextMeta } = validated;
   if (requestedMode === "real") {
     const rateLimit = checkRealApiRateLimit(getClientIp(request));
     if (!rateLimit.allowed) {
@@ -29,6 +29,9 @@ export async function POST(request: Request) {
         responseMode: "real_error_fallback",
         errorType: "rate_limited",
         httpStatus: 429,
+        contextApplied: contextMeta.contextApplied,
+        contextMessageCount: contextMeta.contextMessageCount,
+        contextTruncated: contextMeta.contextTruncated,
       });
       return NextResponse.json(
         {
@@ -44,7 +47,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const response = await runAgentApiPipeline(question, requestedMode, userDocuments);
+  const response = await runAgentApiPipeline(question, requestedMode, userDocuments, conversationContext, contextMeta);
   const runId = await recordAgentRun(response);
   return NextResponse.json({ ...response, runId });
 }

@@ -5,9 +5,9 @@ import { AgentStepList } from "@/components/AgentStepList";
 import { CollapsibleSection } from "@/components/CollapsibleSection";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { StructuredOutputPanel } from "@/components/StructuredOutputPanel";
-import type { AgentPipelineResult } from "@/types";
+import type { AgentApiResponse } from "@/types";
 
-export function AgentTracePanel({ result }: { result: AgentPipelineResult | null }) {
+export function AgentTracePanel({ result }: { result: AgentApiResponse | null }) {
   if (!result) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -19,6 +19,9 @@ export function AgentTracePanel({ result }: { result: AgentPipelineResult | null
 
   return (
     <div className="min-w-0 space-y-4">
+      <CollapsibleSection title="Conversation Context" description="仅展示安全的上下文数量、预算和裁剪策略，不展示历史原文。" defaultOpen={false}>
+        <MockJsonPanel title="上下文安全摘要" data={{ contextApplied: result.api.contextApplied === true, contextMessageCount: result.api.contextMessageCount ?? 0, contextCharacterCount: result.api.contextCharacterCount ?? 0, estimatedTokens: Math.ceil((result.api.contextCharacterCount ?? 0) / 4), contextTruncated: result.api.contextTruncated === true, strategy: "recent-complete-messages", finalMessageStructure: { systemRules: 1, untrustedHistoryMessages: result.api.contextMessageCount ?? 0, currentQuestion: 1 }, longTermMemoryApplied: false, summaryApplied: false }} />
+      </CollapsibleSection>
       <CollapsibleSection title="Router 决策" description="场景、意图、是否需要 RAG 与工具选择。" defaultOpen={false}>
         <AgentRouteCard route={result.route} />
       </CollapsibleSection>

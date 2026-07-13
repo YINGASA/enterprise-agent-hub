@@ -93,6 +93,20 @@ describe("Ops JSONL storage reliability", () => {
     expect(summary.intentDistribution).toContainEqual(expect.objectContaining({ key: "policy_check", count: 1 }));
   });
 
+  it("stores only bounded context metadata and never conversation history", async () => {
+    const result = agentResult(1);
+    result.api.contextApplied = true;
+    result.api.contextMessageCount = 2;
+    result.api.contextTruncated = false;
+    Object.assign(result, { conversationContext: { messages: [{ role: "user", content: "历史秘密订单10001" }] } });
+    await recordAgentRun(result);
+    const raw = await readFile(path.join(runtimeDir, "agent-runs.jsonl"), "utf8");
+    const summary = await getOpsSummary(false);
+    expect(raw).not.toMatch(/conversationContext|messages|历史秘密订单10001/);
+    expect(summary.recentRuns[0]).toMatchObject({ contextApplied: true, contextMessageCount: 2, contextTruncated: false });
+    expect(JSON.stringify(summary)).not.toContain("历史秘密订单10001");
+  });
+
   it("records a safe degraded state on failure and recovers after a later successful write", async () => {
     const blockedPath = path.join(runtimeDir, "blocked");
     await writeFile(blockedPath, "not-a-directory", "utf8");

@@ -97,6 +97,7 @@ export function AgentWorkspace() {
     question, setQuestion, mode, setMode, result, llmStatus, llmStatusError, healthResult,
     isLoading, isCheckingHealth, clientError, feedbackValues, feedbackReason, setFeedbackReason,
     feedbackMessage, realApiUnavailable, runAgent, checkHealth, toggleFeedback, saveFeedback,
+    conversationId, conversations, conversationMessages, contextMeta, newConversation, switchConversation, clearConversation, deleteConversation,
   } = workspace;
   const [examplesPanelOpen, setExamplesPanelOpen] = useState(true);
   const [openGroups, setOpenGroups] = useState<string[]>(exampleGroups.filter((group) => group.defaultOpen).map((group) => group.title));
@@ -162,6 +163,26 @@ export function AgentWorkspace() {
             <h2 className="font-semibold text-ink-900">自由提问区</h2>
             <p className="mt-1 rounded-md bg-brand-50 p-3 text-sm leading-6 text-brand-700">你可以自由输入问题，不限于示例；系统会先执行 Agent Router、RAG 检索和业务工具，再优先使用真实模型生成回答。未配置模型服务时会自动使用开发模拟模式。</p>
           </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div>
+              <p className="text-sm font-semibold text-ink-800">当前对话</p>
+              <p className="mt-1 text-xs text-ink-500">{conversationId ? `会话 ${conversationId.slice(-8)}` : "正在恢复会话"}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select data-testid="conversation-list" value={conversationId} onChange={(event) => switchConversation(event.target.value)} disabled={isLoading} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-ink-700">
+                {conversations.map((conversation, index) => <option key={conversation.id} value={conversation.id}>{conversation.messages[0]?.content.slice(0, 24) || `新对话 ${index + 1}`}</option>)}
+              </select>
+              <button data-testid="conversation-new" type="button" onClick={newConversation} disabled={isLoading} className="rounded-md border border-brand-200 bg-white px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed">新建对话</button>
+              <button data-testid="conversation-clear" type="button" onClick={clearConversation} disabled={isLoading || !conversationMessages.length} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-ink-600 hover:bg-slate-100 disabled:cursor-not-allowed">清空当前</button>
+              <button data-testid="conversation-delete" type="button" onClick={deleteConversation} disabled={isLoading} className="rounded-md border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed">删除当前</button>
+            </div>
+          </div>
+          {conversationMessages.length ? (
+            <div data-testid="conversation-messages" className="max-h-80 space-y-2 overflow-y-auto rounded-md border border-slate-200 bg-white p-3">
+              {conversationMessages.map((message) => <div key={message.id} data-testid={`conversation-message-${message.role}`} className={message.role === "user" ? "ml-8 rounded-md bg-brand-50 p-3 text-sm text-brand-900" : "mr-8 rounded-md bg-slate-50 p-3 text-sm text-ink-700"}><p className="mb-1 text-xs font-semibold">{message.role === "user" ? "你" : "Agent"}</p><p className="whitespace-pre-wrap break-words">{message.content}</p></div>)}
+            </div>
+          ) : <p data-testid="conversation-messages" className="rounded-md bg-slate-50 p-3 text-sm text-ink-500">当前为新对话，尚无消息。</p>}
+          <p data-testid="conversation-context-meta" className="rounded-md bg-slate-50 p-3 text-xs text-ink-500">{contextMeta?.contextApplied ? `已参考最近 ${contextMeta.contextMessageCount} 条历史消息${contextMeta.contextTruncated ? "，上下文已截断" : ""}` : "本轮未使用历史上下文"}</p>
           <div className={healthResult?.healthy ? "rounded-md bg-emerald-50 p-3 text-sm leading-6 text-emerald-800" : llmStatus?.configured ? "rounded-md bg-amber-50 p-3 text-sm leading-6 text-amber-800" : "rounded-md bg-slate-50 p-3 text-sm leading-6 text-ink-700"}>
             <p className="mt-1 break-words">{llmStatus?.configured ? "当前默认使用真实模型生成。系统会把高相关知识库来源、工具结果和边界信息传入模型，用于生成更接近真实业务助手的回答。" : "当前未配置模型服务，已使用开发模拟模式。该模式可离线验证 Agent Router、Hybrid RAG、Tool Calling、评测面板与 Trace 导出等核心能力。"}</p>
             <p className="mt-1 break-words">{llmStatusText}</p>

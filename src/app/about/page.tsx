@@ -54,6 +54,7 @@ const versions = [
   { version: "V1.12.3", title: "Agent Workspace 结构拆分", body: "将请求状态、反馈提交与展示组合按职责分离，保持 Agent API、运行历史和页面交互兼容，并扩展 Chat Workspace 浏览器回归。" },
   { version: "V1.12.4", title: "Knowledge Workspace 结构拆分", body: "将知识库本地状态、文档操作和展示组合按职责分离，保持知识存储、备份格式、RAG 测试与页面交互兼容。" },
   { version: "V1.12.5", title: "领域类型结构", body: "将共享 TypeScript 类型按 Agent、Knowledge、Tools、Evaluation 和反馈领域拆分，保持 @/types 公共导入与所有数据协议兼容。" },
+  { version: "V2.0.0", title: "当前会话多轮上下文", body: "支持同一浏览器当前会话内连续追问、刷新恢复和新建对话隔离；Router、RAG 与工具仍以当前问题为主。" },
 ];
 
 const engineeringHighlights = [

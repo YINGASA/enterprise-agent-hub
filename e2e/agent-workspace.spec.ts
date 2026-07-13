@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const chatHistoryKey = "enterprise-agent-hub:chat-run-history";
+const conversationKey = "enterprise-agent-hub:conversations";
 
 async function selectMockMode(page: import("@playwright/test").Page) {
   await page.getByTestId("agent-mode-options").locator("summary").click();
@@ -8,7 +9,54 @@ async function selectMockMode(page: import("@playwright/test").Page) {
 }
 
 test.afterEach(async ({ page }) => {
-  await page.evaluate((key) => localStorage.removeItem(key), chatHistoryKey).catch(() => undefined);
+  await page.evaluate((keys) => keys.forEach((key) => localStorage.removeItem(key)), [chatHistoryKey, conversationKey]).catch(() => undefined);
+});
+
+test("uses recent mock conversation context and restores messages after refresh", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/agent") && request.method() === "POST") requests.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>);
+  });
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("订单10001可以退货吗？");
+  await page.getByTestId("agent-run").click();
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(1);
+  await page.getByTestId("agent-question").fill("那需要准备什么材料？");
+  await page.getByTestId("agent-run").click();
+  await expect(page.getByTestId("agent-answer")).toContainText("订单号");
+  await expect(page.getByTestId("conversation-context-meta")).toContainText("已参考最近 2 条历史消息");
+  expect(requests.map((request) => request.mode)).toEqual(["mock", "mock"]);
+  expect(requests[1]?.question).toBe("那需要准备什么材料？");
+  expect((requests[1]?.conversationContext as { messages?: unknown[] })?.messages).toEqual([
+    expect.objectContaining({ role: "user", content: "订单10001可以退货吗？" }),
+    expect.objectContaining({ role: "assistant" }),
+  ]);
+  expect(JSON.stringify((requests[1]?.conversationContext as { messages?: unknown[] })?.messages)).not.toContain("那需要准备什么材料？");
+  await page.reload();
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(2);
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(2);
+  await expect(page.getByTestId("conversation-message-user").last()).toContainText("那需要准备什么材料？");
+});
+
+test("starts an isolated conversation without inheriting the previous order context", async ({ page }) => {
+  const requests: Array<Record<string, unknown>> = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/agent") && request.method() === "POST") requests.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>);
+  });
+  await page.goto("/chat");
+  await selectMockMode(page);
+  const previousConversationId = await page.getByTestId("conversation-list").inputValue();
+  await page.getByTestId("agent-question").fill("订单10001可以退货吗？");
+  await page.getByTestId("agent-run").click();
+  await page.getByTestId("conversation-new").click();
+  await expect.poll(() => page.getByTestId("conversation-list").inputValue()).not.toBe(previousConversationId);
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(0);
+  await page.getByTestId("agent-question").fill("那需要准备什么材料？");
+  await page.getByTestId("agent-run").click();
+  await expect(page.getByTestId("agent-answer")).not.toContainText("结合刚才的订单退货语境");
+  await expect(page.getByTestId("conversation-context-meta")).toContainText("本轮未使用历史上下文");
+  expect((requests[1]?.conversationContext as { messages?: unknown[] })?.messages).toEqual([]);
 });
 
 test("runs a mock chat from URL prefill and keeps local history safe after refresh", async ({ page }) => {
@@ -82,6 +130,8 @@ test("keeps rate-limit and feedback runId handling on the workspace request path
   await page.getByTestId("agent-feedback-positive").click();
   await page.getByTestId("agent-feedback-submit").click();
   await expect.poll(() => feedbackRunId).toBe("e2e-feedback-run");
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(1);
 
   await page.unroute("**/api/agent");
   await page.route("**/api/agent", async (route) => {
@@ -89,4 +139,6 @@ test("keeps rate-limit and feedback runId handling on the workspace request path
   });
   await page.getByTestId("agent-run").click();
   await expect(page.getByText("运行失败：请求过于频繁，请稍后再试。", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(1);
 });

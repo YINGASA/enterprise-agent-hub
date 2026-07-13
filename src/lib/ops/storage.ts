@@ -39,6 +39,9 @@ export type OpsAgentRunRecord = {
   httpStatus?: number;
   durationMs?: number;
   fallback: boolean;
+  contextApplied?: boolean;
+  contextMessageCount?: number;
+  contextTruncated?: boolean;
 };
 
 export type OpsFeedbackRecord = {
@@ -80,7 +83,7 @@ export type OpsFeedbackModePerformance = {
 
 export type OpsSafeRunSummary = Pick<
   OpsAgentRunRecord,
-  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus"
+  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus" | "contextApplied" | "contextMessageCount" | "contextTruncated"
 >;
 
 export type OpsSafeFeedbackSummary = Pick<
@@ -191,6 +194,9 @@ function safeRunSummary(item: OpsAgentRunRecord): OpsSafeRunSummary {
     sourcesCount: item.sourcesCount,
     errorType: item.errorType,
     httpStatus: item.httpStatus,
+    contextApplied: item.contextApplied === true,
+    contextMessageCount: Number.isInteger(item.contextMessageCount) ? Math.max(0, Math.min(12, item.contextMessageCount ?? 0)) : 0,
+    contextTruncated: item.contextTruncated === true,
   };
 }
 
@@ -310,6 +316,9 @@ export async function recordAgentRun(result: AgentApiResponse) {
     httpStatus: result.api.httpStatus,
     durationMs: result.api.llmDurationMs,
     fallback: isFallback(result.api.responseMode, result.route.intent),
+    contextApplied: result.api.contextApplied === true,
+    contextMessageCount: Number.isInteger(result.api.contextMessageCount) ? Math.max(0, Math.min(12, result.api.contextMessageCount ?? 0)) : 0,
+    contextTruncated: result.api.contextTruncated === true,
   };
   await appendJsonLine("agent-runs.jsonl", item);
   return item.id;
@@ -321,6 +330,9 @@ export async function recordAgentError(input: {
   responseMode: string;
   errorType: string;
   httpStatus?: number;
+  contextApplied?: boolean;
+  contextMessageCount?: number;
+  contextTruncated?: boolean;
 }) {
   const item: OpsAgentRunRecord = {
     id: makeId("run"),
@@ -335,6 +347,9 @@ export async function recordAgentError(input: {
     errorType: input.errorType,
     httpStatus: input.httpStatus,
     fallback: input.responseMode === "real_error_fallback" || input.errorType === "rate_limited",
+    contextApplied: input.contextApplied === true,
+    contextMessageCount: Number.isInteger(input.contextMessageCount) ? Math.max(0, Math.min(12, input.contextMessageCount ?? 0)) : 0,
+    contextTruncated: input.contextTruncated === true,
   };
   await appendJsonLine("agent-runs.jsonl", item);
 }
