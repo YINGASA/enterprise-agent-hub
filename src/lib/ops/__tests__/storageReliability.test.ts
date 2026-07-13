@@ -95,6 +95,27 @@ describe("Ops JSONL storage reliability", () => {
     expect(summary.intentDistribution).toContainEqual(expect.objectContaining({ key: "policy_check", count: 1 }));
   });
 
+  it("reads a legacy recruitment run without reviving or rewriting its historical scenario", async () => {
+    const legacyRecord: OpsAgentRunRecord = {
+      id: "legacy-recruitment-run",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      questionPreview: "历史问题摘要",
+      responseMode: "mock",
+      requestedMode: "mock",
+      scenario: "recruitment",
+      intent: "jd_match",
+      toolsUsed: [],
+      sourcesCount: 0,
+      fallback: false,
+    };
+    await writeFile(path.join(runtimeDir, "agent-runs.jsonl"), `${JSON.stringify(legacyRecord)}\n`, "utf8");
+
+    const summary = await getOpsSummary(false);
+
+    expect(summary.recentRuns).toContainEqual(expect.objectContaining({ id: "legacy-recruitment-run", scenario: "recruitment" }));
+    expect(summary.scenarioDistribution).toContainEqual(expect.objectContaining({ key: "recruitment", count: 1 }));
+  });
+
   it("stores only bounded context metadata and never conversation history", async () => {
     const result = agentResult(1);
     result.api.contextApplied = true;

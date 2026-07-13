@@ -68,6 +68,36 @@ describe("conversation storage", () => {
     expect(storage.get(CHAT_HISTORY_KEY)).toContain("旧问题");
   });
 
+  it("keeps a retired recruitment scenario readable only as legacy conversation metadata", () => {
+    const storage = installStorage();
+    storage.set(CONVERSATION_STORAGE_KEY, envelope({
+      activeConversationId: "legacy-recruitment",
+      legacyHistoryMigrated: true,
+      conversations: [{
+        id: "legacy-recruitment",
+        title: "历史会话",
+        titleSource: "manual",
+        createdAt: savedAt,
+        updatedAt: savedAt,
+        schemaVersion: 1,
+        messages: [
+          { id: "legacy-user", role: "user", content: "请继续说明原来的建议", createdAt: savedAt },
+          { id: "legacy-assistant", role: "assistant", content: "这是已保留的历史回答", createdAt: savedAt, responseMode: "mock", scenario: "recruitment", intent: "jd_match", runId: "legacy-recruitment-run" },
+        ],
+      }],
+    }));
+
+    const loaded = loadConversationStore().data;
+
+    expect(loaded.conversations[0]?.messages).toHaveLength(2);
+    expect(loaded.conversations[0]?.messages[1]).toMatchObject({
+      content: "这是已保留的历史回答",
+      scenario: "recruitment",
+      intent: "jd_match",
+      runId: "legacy-recruitment-run",
+    });
+  });
+
   it("recovers corrupted storage and filters invalid messages", () => {
     const storage = installStorage();
     storage.set(CONVERSATION_STORAGE_KEY, "{");

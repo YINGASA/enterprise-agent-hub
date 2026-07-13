@@ -1,10 +1,11 @@
 import { documents } from "@/data/mock";
 import { runAgentPipeline } from "@/lib/agent";
+import { normalizeActiveAgentScenario } from "@/lib/agent/scenarios";
 import { callOpenAICompatibleChat, getLlmConfig, streamOpenAICompatibleChat } from "@/lib/llm";
 import { buildConversationContext, hasRecentOrderReturnContext } from "@/lib/conversation/context";
 import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStreamMetadata, AgentStreamPhase, AgentStructuredOutput, ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
 
-const validTools: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "analyzeJD", "generateCustomerReply"];
+const validTools: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "generateCustomerReply"];
 
 export type AgentApiPipelineRuntime = {
   streaming?: boolean;
@@ -60,20 +61,19 @@ function clampConfidence(value: unknown, fallback: number) {
   return Math.max(0, Math.min(1, numberValue(value, fallback)));
 }
 
-function normalizeStructuredOutput(value: Record<string, unknown>, fallback: AgentStructuredOutput): AgentStructuredOutput {
+export function normalizeStructuredOutput(value: Record<string, unknown>, fallback: AgentStructuredOutput): AgentStructuredOutput {
   return {
-    scenario: value.scenario === "enterprise" || value.scenario === "ecommerce" || value.scenario === "recruitment" || value.scenario === "ai_engineering" || value.scenario === "general" ? value.scenario : fallback.scenario,
+    scenario: normalizeActiveAgentScenario(value.scenario, fallback.scenario),
     intent:
       value.intent === "knowledge_qa" ||
       value.intent === "policy_check" ||
       value.intent === "order_query" ||
       value.intent === "product_query" ||
       value.intent === "after_sale_reply" ||
-      value.intent === "jd_match" ||
       value.intent === "ticket_create" ||
       value.intent === "general_chat"
         ? value.intent
-        : fallback.intent,
+        : fallback.intent === "jd_match" ? "general_chat" : fallback.intent,
     answer: truncate(sanitizeBusinessAnswer(typeof value.answer === "string" ? value.answer : fallback.answer), 300),
     evidence: stringArray(value.evidence, 5).map((item) => truncate(item, 120)),
     toolsUsed: toolArray(value.toolsUsed),

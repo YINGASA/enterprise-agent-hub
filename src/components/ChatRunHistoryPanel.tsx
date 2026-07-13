@@ -63,7 +63,7 @@ function scenarioLabel(value: string) {
   const labels: Record<string, string> = {
     enterprise: "\u4f01\u4e1a\u77e5\u8bc6\u5e93",
     ecommerce: "\u7535\u5546\u552e\u540e",
-    recruitment: "\u62db\u8058\u6c42\u804c",
+    recruitment: "\u5386\u53f2\u573a\u666f\uff08\u5df2\u4e0b\u7ebf\uff09",
     ai_engineering: "AI \u5de5\u7a0b\u89c4\u8303",
     "ai-engineering": "AI \u5de5\u7a0b\u89c4\u8303",
     general: "\u901a\u7528\u515c\u5e95",
@@ -78,7 +78,7 @@ function intentLabel(value: string) {
     order_query: "\u8ba2\u5355\u67e5\u8be2",
     product_query: "\u5546\u54c1\u67e5\u8be2",
     after_sale_reply: "\u552e\u540e\u56de\u590d",
-    jd_match: "JD \u5339\u914d",
+    jd_match: "\u5386\u53f2\u610f\u56fe\uff08\u5df2\u4e0b\u7ebf\uff09",
     ticket_create: "\u5de5\u5355\u521b\u5efa",
     general_chat: "\u901a\u7528\u5bf9\u8bdd",
   };
@@ -106,7 +106,9 @@ function retrieverLabel(value?: string) {
 }
 
 function toolsText(value?: string[]) {
-  return value && value.length ? value.join(" + ") : "\u672a\u8c03\u7528\u5de5\u5177";
+  return value && value.length
+    ? value.map((tool) => tool === "analyzeJD" ? "\u5386\u53f2\u5de5\u5177\uff08\u5df2\u4e0b\u7ebf\uff09" : tool).join(" + ")
+    : "\u672a\u8c03\u7528\u5de5\u5177";
 }
 
 function triggerMarkdownDownload(run: ChatRunHistoryItem) {

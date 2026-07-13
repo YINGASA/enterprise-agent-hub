@@ -28,7 +28,7 @@ function packLabel(packId?: string) {
   const labels: Record<string, string> = {
     "enterprise-policy": "企业 IT / 行政制度知识库",
     "ecommerce-support": "电商客服售后知识库",
-    "recruitment-career": "招聘求职匹配知识库",
+    "recruitment-career": "历史知识包（已下线）",
     "ai-engineering": "AI 工程规范知识库",
   };
   return packId ? labels[packId] ?? packId : ui.defaultSource;

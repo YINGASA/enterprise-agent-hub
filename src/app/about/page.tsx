@@ -3,7 +3,7 @@ import Link from "next/link";
 import { appVersionLabel, buildCommit } from "@/lib/appVersion";
 
 const capabilities = [
-  "4 个系统内置 Knowledge Packs，覆盖企业制度、电商售后、招聘匹配和 AI 工程规范",
+  "3 个系统内置 Knowledge Packs，覆盖企业制度、电商售后和 AI 工程规范",
   "本地知识库导入，支持 txt / md / json / csv，并保存在浏览器 localStorage",
   "Pack-aware Hybrid RAG，支持 Query Expansion、多维评分、scoreBreakdown 和 retrievalConfidence",
   "Agent Router 识别业务场景与任务意图，统一编排 RAG、Tools、LLM 与 fallback",
@@ -22,13 +22,13 @@ const productProblems = [
 const coreScenarios = [
   { title: "企业制度问答", body: "报销、差旅、请假、权限、采购和数据安全等内部制度咨询。" },
   { title: "电商客服售后", body: "订单退换、质量问题、物流异常、投诉升级和客服话术辅助。" },
-  { title: "招聘 JD 匹配", body: "候选人能力、项目经历、岗位要求和面试跟进建议。" },
+  { title: "业务流程协同", body: "规则查询、订单处理、异常工单和下一步业务动作建议。" },
   { title: "AI 工程规范", body: "RAG、Tool Calling、JSON repair、fallback、评测集和部署检查。" },
 ];
 
 const versions = [
   { version: "V0.1", title: "项目骨架", body: "完成 7 个基础页面、统一导航和 B 端 SaaS 风格界面。" },
-  { version: "V0.2", title: "业务工具层", body: "新增 mock 数据，并实现订单查询、商品查询、规则检索、工单创建、JD 分析和客服回复生成等本地工具。" },
+  { version: "V0.2", title: "业务工具层", body: "新增 mock 数据，并实现订单查询、商品查询、规则检索、工单创建和客服回复生成等本地工具。" },
   { version: "V0.3", title: "基础 Mock RAG", body: "跑通文档切片、关键词提取、TopK 检索、来源引用和 mock 回答链路。" },
   { version: "V0.4", title: "Agent Router", body: "实现规则版 Router，根据问题判断场景、意图、是否需要 RAG 和需要调用的业务工具。" },
   { version: "V0.5", title: "Real API 接入", body: "接入 OpenAI-compatible API，兼容 DeepSeek，支持 Mock / Real 双模式、JSON parse、repair 和 fallback。" },
@@ -58,12 +58,13 @@ const versions = [
   { version: "V2.0.1", title: "连续聊天工作台", body: "聊天页升级为双栏会话工作台，支持连续消息流、固定输入区、会话标题与管理、回答详情归属、移动抽屉和安全异步切换。" },
   { version: "V2.0.2", title: "流式回答与生成控制", body: "新增独立 NDJSON 流式 Agent 接口、确定性 Mock 分块、Real SSE 安全解析、停止生成和失败重试；只有完成回答进入会话上下文。" },
   { version: "V2.0.3", title: "消息操作与修订体验", body: "支持复制完整回答、重新生成最新回答和编辑重发最新问题；新结果完成前保留原轮次，成功后原子替换并隔离新旧 runId 与反馈。" },
+  { version: "V2.0.4", title: "企业场景聚焦", body: "正式产品组合聚焦企业知识库、制度流程、电商售后与业务工具；已下线标识仅用于旧会话和运行记录兼容。" },
 ];
 
 const engineeringHighlights = [
   "RAG：从 Knowledge Packs、用户导入文档、chunks、keywords、scoreBreakdown 到 sources，形成可解释检索链路。",
   "Agent：Router 判断业务场景和意图，统一编排 RAG、Tools、LLM 与 fallback。",
-  "Tool Calling：本地工具支持订单查询、商品查询、规则检索、工单创建、JD 分析和客服回复生成。",
+  "Tool Calling：本地工具支持订单查询、商品查询、规则检索、工单创建和客服回复生成。",
   "结构化输出：Real API 返回 AgentResponse JSON，支持 parse、repair 和文本兜底。",
   "评测闭环：80 条多场景测试用例，支持保存历史、趋势摘要和 Markdown / JSON 报告导出。",
 ];
@@ -114,7 +115,7 @@ export default function AboutPage() {
           {[
             { href: "/knowledge", title: "/knowledge", desc: "查看默认知识库与用户文档，检查启用状态、chunks 和质量诊断。" },
             { href: "/chat?question=%E6%88%91%E5%87%BA%E5%B7%AE%E5%9B%9E%E6%9D%A5%E6%83%B3%E6%8A%A5%E9%94%80%EF%BC%8C%E5%BA%94%E8%AF%A5%E5%87%86%E5%A4%87%E5%93%AA%E4%BA%9B%E6%9D%90%E6%96%99%EF%BC%9F", title: "/chat", desc: "带入问题但不自动运行，查看 Real API、RAG、工具和 fallback 展示。" },
-            { href: "/tools", title: "/tools", desc: "按业务流程查看订单、规则、工单、JD 匹配等工具能力。" },
+            { href: "/tools", title: "/tools", desc: "按业务流程查看订单、规则、工单和客服协同工具能力。" },
             { href: "/evaluation", title: "/evaluation", desc: "运行 full Mock 回归，确认 80 条评测和报告导出能力。" },
           ].map((item) => (
             <Link key={item.href} href={item.href} className="rounded-md bg-white p-4 shadow-sm ring-1 ring-brand-100 hover:bg-brand-100">
@@ -129,8 +130,8 @@ export default function AboutPage() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{versions.map((item) => <article key={item.version} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><span className="rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{item.version}</span><h3 className="mt-3 font-semibold text-ink-900">{item.title}</h3><p className="mt-2 text-sm leading-6 text-ink-500">{item.body}</p></article>)}</div>
       </section>
       <section className="grid gap-4 md:grid-cols-4">
-        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">Knowledge Packs</p><p className="mt-2 text-2xl font-semibold text-ink-900">4</p></article>
-        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">Mock 文档</p><p className="mt-2 text-2xl font-semibold text-ink-900">42</p></article>
+        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">Knowledge Packs</p><p className="mt-2 text-2xl font-semibold text-ink-900">3</p></article>
+        <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">活动业务场景</p><p className="mt-2 text-2xl font-semibold text-ink-900">2</p></article>
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">完整评测</p><p className="mt-2 text-2xl font-semibold text-ink-900">80/80</p></article>
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">passRate</p><p className="mt-2 text-2xl font-semibold text-ink-900">100%</p></article>
       </section>

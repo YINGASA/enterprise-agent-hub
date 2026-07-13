@@ -39,7 +39,7 @@ function sourceTypeLabel(sourceType?: KnowledgeSourceType) {
 }
 
 function toolLabel(tool: ToolName) {
-  const labels: Record<ToolName, string> = { queryOrder: "订单查询", queryProduct: "商品查询", searchPolicy: "规则检索", createTicket: "工单创建", analyzeJD: "JD 匹配", generateCustomerReply: "客服回复" };
+  const labels: Record<ToolName, string> = { queryOrder: "订单查询", queryProduct: "商品查询", searchPolicy: "规则检索", createTicket: "工单创建", analyzeJD: "历史工具（已下线）", generateCustomerReply: "客服回复" };
   return labels[tool];
 }
 

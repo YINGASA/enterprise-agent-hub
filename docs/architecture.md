@@ -47,8 +47,8 @@ The router is rule-based in the current version:
 
 1. Read user question.
 2. Match scenario keywords.
-3. Infer scenario: enterprise, ecommerce, recruitment, or general.
-4. Infer intent: knowledge QA, policy check, order query, product query, after-sale reply, JD match, ticket creation, or general chat.
+3. Infer an active scenario: enterprise, ecommerce, ai_engineering, or general.
+4. Infer intent: knowledge QA, policy check, order query, product query, after-sale reply, ticket creation, or general chat.
 5. Decide whether RAG is needed.
 6. Select tools for the route.
 
@@ -62,7 +62,6 @@ Tool Calling is local orchestration in the current V1.9 release-candidate line:
 - `queryProduct`
 - `searchPolicy`
 - `createTicket`
-- `analyzeJD`
 - `generateCustomerReply`
 
 The model does not currently perform native `tool_calls`. The server-side Agent pipeline selects and executes local tools based on Router output. `/tools` presents these tools as business workflow capabilities, while `/chat` summarizes which queries and judgments were performed for each answer.
@@ -95,11 +94,10 @@ This lets the demo remain usable even when the model or network is unstable.
 
 ## Knowledge Packs
 
-The system organizes default mock documents into four read-only Knowledge Packs:
+The system organizes default mock documents into three read-only Knowledge Packs:
 
 - enterprise-policy: reimbursement, travel, leave, security, procurement, contract, SLA, onboarding and offboarding.
 - ecommerce-support: return/refund policy, opened products, quality issues, size mismatch, logistics, complaints, scripts and inventory.
-- recruitment-career: AI application roles, JD matching, resume keywords, project packaging and interview preparation.
 - ai-engineering: Prompt, RAG quality, Agent tools, JSON output, fallback, API key security, evaluation and observability.
 
 The current RAG remains keyword/mock retrieval. The retriever now adds title, category, tags and preferred pack weighting, and each retrieved chunk exposes matched keywords and score reasons for UI inspection.
@@ -118,7 +116,7 @@ The retriever remains keyword-based. User-imported chunks receive a small source
 
 ## V1.1 Built-in Knowledge Packs
 
-V1.1 improves product readiness without adding a database or crawler. Four self-generated enterprise knowledge categories are bundled as read-only default packs and participate in RAG immediately:
+The current product keeps three self-generated enterprise knowledge categories as read-only default packs without adding a database or crawler:
 
 - default: shipped with the application and always available.
 - user_upload: imported from local txt / md / json / csv files.
@@ -133,7 +131,7 @@ No third-party webpage content is committed to the repository. URL import and li
 V1.2 keeps the no-database, no-vector-store constraint but improves retrieval quality. The RAG layer now has four visible stages:
 
 1. Query normalization: remove noisy punctuation, normalize casing, and keep Chinese/English tokens.
-2. Query expansion: add domain synonyms for refund, reimbursement, JD matching, RAG, Agent, JSON output, and fallback.
+2. Query expansion: add domain synonyms for refund, reimbursement, enterprise workflow, RAG, Agent, JSON output, and fallback.
 3. Hybrid scoring: combine keywordScore, titleScore, tagScore, categoryScore, packScore, sourceScore, phraseScore, and freshnessScore.
 4. Confidence gating: return retrievalConfidence as high, medium, or low. Low-confidence retrieval adds a boundary note so Mock and Real answers do not overclaim.
 
@@ -251,6 +249,12 @@ Every stored conversation identifies its editable target as the final adjacent c
 Regenerate builds context only from messages before the target user message, keeps that user message unchanged, and atomically replaces the final Assistant after `answer_completed`. Edit-resend uses the same earlier context and atomically replaces both messages; a first auto-titled question refreshes the title while a manual title remains unchanged. The original stored turn and Feedback state stay visible during generation and are retained on failure, stop, navigation, or stale CAS failure. A successful replacement creates new message identity and runId, removes the old runtime result from the active UI, and starts with empty Feedback.
 
 Clipboard state is component-local and never stored. Copy actions receive only the Assistant message's plain safe `content`; run metadata, context counts, sources, tools, Trace, Feedback, and rendered HTML are excluded. Clipboard API is preferred, with a temporary plain-text selection fallback and non-blocking live status.
+
+## Active Scenario Boundary (V2.0.4)
+
+The active product registry contains enterprise knowledge and policy workflows, ecommerce service workflows, AI engineering knowledge, and general fallback. Recruitment and career routing, Mock answers, built-in knowledge, tools, recommendations, and evaluation cases are no longer active. Direct questions about that retired area are handled as general questions and cannot select a retired tool or preferred knowledge pack.
+
+The `recruitment`, `jd_match`, `analyzeJD`, and `recruitment-career` identifiers remain only where old browser or Ops records need schema-compatible parsing and historical labeling. Those compatibility values are not active candidates and cannot be produced by new deterministic routes. User-uploaded documents are independent of the built-in scenario registry: their text, tags, enabled state, backup format, and storage key remain unchanged, including documents whose subject happens to involve hiring or resumes.
 
 ## V1.6.1 Knowledge Import Persistence
 

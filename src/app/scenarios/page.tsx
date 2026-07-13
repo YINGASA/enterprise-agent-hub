@@ -15,13 +15,6 @@ const routerScenarios = [
     tools: ["queryOrder", "queryProduct", "searchPolicy", "generateCustomerReply", "createTicket"],
     rag: "true",
   },
-  {
-    name: "招聘求职 Agent",
-    description: "分析 AI 应用开发岗位、JD 与 mock 简历的匹配度，输出能力差距、关键词和面试准备建议。",
-    intents: ["jd_match"],
-    tools: ["analyzeJD"],
-    rag: "optional",
-  },
 ];
 
 export default function ScenariosPage() {
@@ -30,9 +23,9 @@ export default function ScenariosPage() {
       <PageHeader
         eyebrow="Scenario Templates"
         title="场景模板"
-        description="当前场景模板已和 Agent Router、Tool Calling、RAG 使用策略及 Evaluation Dashboard 对齐，便于展示多场景 Agent 编排能力。"
+        description="当前场景模板聚焦企业知识库问答与业务流程自动化，并与 Agent Router、Tool Calling、RAG 策略及 Evaluation Dashboard 对齐。"
       />
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2">
         {routerScenarios.map((scenario) => (
           <article key={scenario.name} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4">

@@ -29,4 +29,5 @@ export type ToolCallLog = {
   output: Record<string, unknown>;
 };
 
+/** `recruitment` is retained only to parse and display records created before V2.0.4. */
 export type AgentScenario = "enterprise" | "ecommerce" | "recruitment" | "ai_engineering" | "general";

@@ -3,7 +3,7 @@ export type ToolName =
   | "queryProduct"
   | "searchPolicy"
   | "createTicket"
-  | "analyzeJD"
+  | "analyzeJD" // Legacy-only: never selected or executed for a new request.
   | "generateCustomerReply";
 
 export type ToolDefinition = {
@@ -71,6 +71,7 @@ export type AfterSalePolicy = {
   updatedAt: string;
 };
 
+/** @deprecated Retained as a public legacy type; the current product has no active JD workflow. */
 export type JobDescription = {
   id: string;
   title: string;
@@ -80,6 +81,7 @@ export type JobDescription = {
   requirements: string[];
 };
 
+/** @deprecated Retained as a public legacy type for compatible imports. */
 export type ResumeProfile = {
   id: string;
   name: string;
@@ -88,6 +90,7 @@ export type ResumeProfile = {
   projects: string[];
 };
 
+/** @deprecated Retained as a public legacy type for compatible imports. */
 export type InterviewQuestion = {
   id: string;
   jobId: string;

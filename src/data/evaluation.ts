@@ -401,220 +401,148 @@ export const evaluationCases: EvaluationCase[] = [
     "packId": "ecommerce-support"
   },
   {
-    "id": "EVAL-REC-001",
-    "question": "这个 AI 应用开发工程师岗位和我的简历匹配吗？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "AI",
-      "简历",
-      "匹配"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-001",
+    "question": "公司电脑怎么申请？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["电脑", "申请"],
+    "category": "enterprise",
     "difficulty": "easy",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-002",
-    "question": "这个项目如果面试 AI 应用开发岗，最应该讲哪些技术点？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "AI",
-      "RAG",
-      "Agent"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-002",
+    "question": "VPN 权限申请失败怎么办？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["VPN", "权限"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-003",
-    "question": "我的简历还缺哪些 AI 项目关键词？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "简历",
-      "AI",
-      "关键词"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-003",
+    "question": "新员工入职设备多久能发？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["入职", "设备"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-004",
-    "question": "大模型应用开发实习生会问哪些问题？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "大模型",
-      "面试",
-      "问题"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-004",
+    "question": "软件授权由谁审批？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["软件", "审批"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-005",
-    "question": "AI Agent 开发实习生需要准备什么项目？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "AI",
-      "Agent",
-      "项目"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-005",
+    "question": "报销审批通过后多久能到账？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["报销", "到账"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-006",
-    "question": "RAG 知识库开发实习生会关注哪些能力？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "RAG",
-      "知识库",
-      "能力"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-006",
+    "question": "请假和调休怎么申请？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["请假", "调休"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-007",
-    "question": "前端 AI 应用开发实习生和我的项目匹配吗？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "前端",
-      "AI",
-      "匹配"
-    ],
-    "category": "recruitment",
-    "difficulty": "medium",
-    "packId": "recruitment-career"
-  },
-  {
-    "id": "EVAL-REC-008",
-    "question": "Python AI 应用开发实习生需要补哪些后端能力？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "Python",
-      "AI",
-      "能力"
-    ],
-    "category": "recruitment",
-    "difficulty": "medium",
-    "packId": "recruitment-career"
-  },
-  {
-    "id": "EVAL-REC-009",
-    "question": "帮我分析这个 JD 的核心要求。",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "JD",
-      "核心要求",
-      "岗位"
-    ],
-    "category": "recruitment",
-    "difficulty": "easy",
-    "packId": "recruitment-career"
-  },
-  {
-    "id": "EVAL-REC-010",
-    "question": "如何把这个项目包装成一页简历 bullet？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "简历",
-      "项目",
-      "关键词"
-    ],
-    "category": "recruitment",
-    "difficulty": "medium",
-    "packId": "recruitment-career"
-  },
-  {
-    "id": "EVAL-REC-011",
-    "question": "面试官问这是不是只调 API，我该怎么回答？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "AI",
-      "项目",
-      "面试"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-007",
+    "question": "客户数据外发前怎么脱敏？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["客户数据", "脱敏"],
+    "category": "enterprise",
     "difficulty": "hard",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
-    "id": "EVAL-REC-012",
-    "question": "岗位匹配评分应该看哪些维度？",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
-    "expectedKeywords": [
-      "岗位",
-      "匹配",
-      "评分"
-    ],
-    "category": "recruitment",
+    "id": "EVAL-ENT-OPS-008",
+    "question": "员工离职后账号权限多久回收？",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["离职", "权限"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
+  },
+  {
+    "id": "EVAL-EC-POLICY-001",
+    "question": "商品发错了怎么办？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["searchPolicy"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-EC-POLICY-002",
+    "question": "优惠券过期能补发吗？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["优惠券", "补发"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-EC-POLICY-003",
+    "question": "商品质量问题需要准备什么举证材料？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["质量问题", "照片"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
+  },
+  {
+    "id": "EVAL-EC-POLICY-004",
+    "question": "物流异常超过三天怎么处理？",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "policy_check",
+    "expectedTools": ["searchPolicy"],
+    "expectedNeedRag": true,
+    "expectedKeywords": ["物流", "核查"],
+    "category": "ecommerce",
+    "difficulty": "medium",
+    "packId": "ecommerce-support"
   },
   {
     "id": "EVAL-AI-001",
@@ -936,28 +864,28 @@ export const evaluationCases: EvaluationCase[] = [
     "packId": "ecommerce-support"
   },
   {
-    "id": "EVAL-V11-REC-001",
-    "question": "\u5019\u9009\u4eba\u6709 Next.js \u548c RAG \u9879\u76ee\uff0c\u9002\u5408\u4ec0\u4e48\u5c97\u4f4d\uff1f",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": ["analyzeJD"],
+    "id": "EVAL-V11-ORDER-001",
+    "question": "\u8ba2\u5355 EAH20260618008 \u73b0\u5728\u662f\u4ec0\u4e48\u72b6\u6001\uff1f",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "order_query",
+    "expectedTools": ["queryOrder"],
     "expectedNeedRag": false,
-    "expectedKeywords": ["AI", "RAG", "\u5c97\u4f4d"],
-    "category": "recruitment",
-    "difficulty": "medium",
-    "packId": "recruitment-career"
+    "expectedKeywords": ["\u8ba2\u5355", "queryOrder"],
+    "category": "ecommerce",
+    "difficulty": "easy",
+    "packId": "ecommerce-support"
   },
   {
-    "id": "EVAL-V11-REC-002",
-    "question": "AI \u4ea7\u54c1\u7ecf\u7406 JD \u770b\u91cd\u4ec0\u4e48\uff1f",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": ["analyzeJD"],
+    "id": "EVAL-V11-PRODUCT-001",
+    "question": "\u5546\u54c1 P001 \u8fd8\u6709\u5e93\u5b58\u5417\uff1f",
+    "expectedScenario": "ecommerce",
+    "expectedIntent": "product_query",
+    "expectedTools": ["queryProduct"],
     "expectedNeedRag": false,
-    "expectedKeywords": ["AI", "JD", "\u4ea7\u54c1"],
-    "category": "recruitment",
-    "difficulty": "medium",
-    "packId": "recruitment-career"
+    "expectedKeywords": ["\u5e93\u5b58", "queryProduct"],
+    "category": "ecommerce",
+    "difficulty": "easy",
+    "packId": "ecommerce-support"
   },
   {
     "id": "EVAL-V11-AI-001",
@@ -1020,16 +948,16 @@ export const evaluationCases: EvaluationCase[] = [
     "packId": "ecommerce-support"
   },
   {
-    "id": "EVAL-V12-RAG-004",
-    "question": "\u8fd9\u4e2a\u5c97\u4f4d\u548c\u6211\u7684\u9879\u76ee\u5339\u914d\u4e0d",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": ["analyzeJD"],
+    "id": "EVAL-V12-TICKET-004",
+    "question": "\u8bf7\u521b\u5efa\u4e00\u4e2a\u9ad8\u4f18\u5148\u7ea7\u5185\u90e8\u8ddf\u8fdb\u5de5\u5355",
+    "expectedScenario": "enterprise",
+    "expectedIntent": "ticket_create",
+    "expectedTools": ["createTicket"],
     "expectedNeedRag": false,
-    "expectedKeywords": ["AI", "\u5339\u914d"],
-    "category": "recruitment",
+    "expectedKeywords": ["\u5de5\u5355", "createTicket"],
+    "category": "enterprise",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "enterprise-policy"
   },
   {
     "id": "EVAL-V12-RAG-005",
@@ -1180,20 +1108,18 @@ export const evaluationCases: EvaluationCase[] = [
   },
   {
     "id": "EVAL-V15-RETRIEVER-004",
-    "question": "项目和岗位匹配吗",
-    "expectedScenario": "recruitment",
-    "expectedIntent": "jd_match",
-    "expectedTools": [
-      "analyzeJD"
-    ],
-    "expectedNeedRag": false,
+    "question": "RAG 回答为什么需要来源引用？",
+    "expectedScenario": "ai_engineering",
+    "expectedIntent": "knowledge_qa",
+    "expectedTools": [],
+    "expectedNeedRag": true,
     "expectedKeywords": [
-      "匹配",
-      "AI"
+      "来源",
+      "引用"
     ],
-    "category": "recruitment",
+    "category": "ai_engineering",
     "difficulty": "medium",
-    "packId": "recruitment-career"
+    "packId": "ai-engineering"
   },
   {
     "id": "EVAL-V15-RETRIEVER-005",

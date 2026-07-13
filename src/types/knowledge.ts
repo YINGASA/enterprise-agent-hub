@@ -189,6 +189,7 @@ export type KnowledgeLibraryState = {
   allDocuments: KnowledgeDocument[];
 };
 
+/** `recruitment-career` is legacy-only so historical sources and backups remain readable. */
 export type KnowledgePackId = "enterprise-policy" | "ecommerce-support" | "recruitment-career" | "ai-engineering";
 
 export type KnowledgePack = {

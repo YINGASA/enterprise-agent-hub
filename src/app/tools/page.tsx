@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { ToolCard } from "@/components/ToolCard";
 import { tools } from "@/data/mock";
 import type { ToolName } from "@/types";
+import Link from "next/link";
 
 const workflowTemplates = [
   {
@@ -30,7 +31,7 @@ const workflowTemplates = [
   },
 ];
 
-const toolMeta: Record<ToolName, { businessName: string; businessGoal: string; questions: string[] }> = {
+const toolMeta: Partial<Record<ToolName, { businessName: string; businessGoal: string; questions: string[] }>> = {
   queryOrder: {
     businessName: "订单状态与售后资格查询",
     businessGoal: "用于确认订单状态、签收时间、商品信息和退货基础条件，是售后判断的第一步。",
@@ -51,11 +52,6 @@ const toolMeta: Record<ToolName, { businessName: string; businessGoal: string; q
     businessGoal: "当订单、售后或内部流程需要人工跟进时，模拟创建工单并标记优先级。",
     questions: ["订单超过 48 小时未发货，帮我创建工单", "客户投诉物流异常，应该怎么升级处理？"],
   },
-  analyzeJD: {
-    businessName: "JD 与候选人匹配分析",
-    businessGoal: "用于根据岗位要求和候选人经历输出匹配分、优势和能力缺口。",
-    questions: ["候选人有 Next.js 和 RAG 项目，适合 AI 应用开发吗？", "这个岗位和我的项目匹配吗？"],
-  },
   generateCustomerReply: {
     businessName: "客服回复生成",
     businessGoal: "用于根据售后上下文生成清晰、礼貌、可执行的客服回复话术。",
@@ -74,11 +70,6 @@ const scenarioGroups: Array<{ title: string; description: string; toolNames: Too
     description: "覆盖报销、审批、请假、权限等制度规则检索和流程解释。",
     toolNames: ["searchPolicy", "createTicket"],
   },
-  {
-    title: "招聘与岗位匹配",
-    description: "覆盖 JD 匹配、能力缺口和候选人项目解释。",
-    toolNames: ["analyzeJD", "searchPolicy"],
-  },
 ];
 
 function chatQuestionHref(question: string) {
@@ -91,7 +82,7 @@ export default function ToolsPage() {
       <PageHeader
         eyebrow="Tool Center"
         title="业务工具工作台"
-        description="按真实业务流程展示 Agent 可调用的订单查询、规则检索、工单创建、JD 匹配和客服回复工具；可一键带问题进入 Chat 工作台验证 Agent 编排。"
+        description="按真实业务流程展示 Agent 可调用的订单查询、规则检索、工单创建和客服回复工具；可一键带问题进入 Chat 工作台验证企业知识与流程编排。"
       />
 
       <section className="grid gap-4 lg:grid-cols-4">
@@ -103,9 +94,9 @@ export default function ToolsPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               {template.steps.map((step) => <span key={step} className="rounded bg-slate-50 px-2 py-1 text-xs text-ink-600 ring-1 ring-slate-200">{step}</span>)}
             </div>
-            <a href={chatQuestionHref(template.question)} className="mt-4 inline-flex rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">
+            <Link href={chatQuestionHref(template.question)} className="mt-4 inline-flex rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2">
               去 Chat 测试
-            </a>
+            </Link>
           </article>
         ))}
       </section>
@@ -122,6 +113,7 @@ export default function ToolsPage() {
                 const tool = tools.find((item) => item.name === toolName);
                 if (!tool) return null;
                 const meta = toolMeta[tool.name];
+                if (!meta) return null;
                 return (
                   <ToolCard
                     key={`${group.title}-${tool.name}`}

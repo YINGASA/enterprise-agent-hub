@@ -12,7 +12,7 @@ import { useAgentWorkspace } from "@/components/agent-workspace/useAgentWorkspac
 const recommendedQuestions = [
   "我出差回来想报销，应该准备哪些材料？",
   "订单10001可以退货吗？",
-  "这个 AI 应用开发工程师 JD 和我的简历匹配吗？",
+  "公司报销审批一般需要多久？",
   "RAG 检索质量应该怎么评测？",
 ];
 

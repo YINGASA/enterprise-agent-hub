@@ -8,7 +8,7 @@ export type AgentIntent =
   | "order_query"
   | "product_query"
   | "after_sale_reply"
-  | "jd_match"
+  | "jd_match" // Legacy-only: old Conversation, Evaluation, and Ops records.
   | "ticket_create"
   | "general_chat";
 
