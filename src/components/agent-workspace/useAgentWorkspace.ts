@@ -15,8 +15,10 @@ import {
   type ConversationStore,
 } from "@/lib/conversation/storage";
 import { contextFromConversationMessages } from "@/lib/conversation/context";
+import { parseAgentStreamResponse } from "@/lib/agent/streamProtocol";
+import { appendStreamAnswerDelta, appendStreamPhase, completeStreamAnswer, createStreamAnswerAccumulator, shouldStopStreamingRequest } from "@/lib/agent/streamClientState";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
-import type { AgentApiResponse, ChatAnswerFeedbackValue, Conversation, ConversationMessage, LlmMode } from "@/types";
+import type { AgentApiResponse, AgentStreamEvent, ChatAnswerFeedbackValue, Conversation, ConversationMessage, LlmMode } from "@/types";
 
 export type LlmStatus = { configured: boolean };
 export type LlmHealthResult = { configured: boolean; healthy: boolean; durationMs?: number; statusCode?: number; errorType?: string; message?: string };
@@ -47,6 +49,8 @@ export function useAgentWorkspace(initialQuestion = "") {
   const inFlight = useRef(false);
   const conversationEpoch = useRef(0);
   const abortController = useRef<AbortController | null>(null);
+  const activeRequestId = useRef<string | null>(null);
+  const completedRequestId = useRef<string | null>(null);
   const storeRef = useRef<ConversationStore | null>(null);
   const draftConversationRef = useRef<Conversation | null>(null);
   const prefillApplied = useRef(false);
@@ -78,6 +82,8 @@ export function useAgentWorkspace(initialQuestion = "") {
     conversationEpoch.current += 1;
     abortController.current?.abort();
     abortController.current = null;
+    activeRequestId.current = null;
+    completedRequestId.current = null;
     inFlight.current = false;
     setIsLoading(false);
     setTransientTurn(null);
@@ -144,7 +150,7 @@ export function useAgentWorkspace(initialQuestion = "") {
       commitDraft(originConversation);
     }
     const requestId = makeRequestId();
-    const retryingTurn = transientTurn?.status === "failed" && transientTurn.conversationId === originConversation.id && transientTurn.question === submittedQuestion ? transientTurn : null;
+    const retryingTurn = transientTurn && (transientTurn.status === "failed" || transientTurn.status === "stopped") && transientTurn.conversationId === originConversation.id && transientTurn.question === submittedQuestion ? transientTurn : null;
     const turn: TransientChatTurn = {
       requestId,
       conversationId: originConversation.id,
@@ -152,10 +158,16 @@ export function useAgentWorkspace(initialQuestion = "") {
       question: submittedQuestion,
       createdAt: retryingTurn?.createdAt ?? new Date().toISOString(),
       status: "pending",
+      phases: [],
+      partialAnswer: "",
+      deltaCount: 0,
+      retryable: false,
     };
     const requestEpoch = conversationEpoch.current;
     const controller = new AbortController();
     abortController.current = controller;
+    activeRequestId.current = requestId;
+    completedRequestId.current = null;
     inFlight.current = true;
     setIsLoading(true);
     setClientError("");
@@ -164,10 +176,12 @@ export function useAgentWorkspace(initialQuestion = "") {
     try {
       const builtContext = contextFromConversationMessages(originConversation.messages);
       const enabledUserDocuments = readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
-      const response = await fetch("/api/agent", {
+      const requestBody = JSON.stringify({ question: submittedQuestion, mode, userDocuments: enabledUserDocuments, conversationContext: builtContext.context });
+      const streamReadingSupported = typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined";
+      const response = await fetch(streamReadingSupported ? "/api/agent/stream" : "/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: submittedQuestion, mode, userDocuments: enabledUserDocuments, conversationContext: builtContext.context }),
+        body: requestBody,
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -175,7 +189,85 @@ export function useAgentWorkspace(initialQuestion = "") {
         if (response.status === 429 || errorPayload.errorType === "rate_limited" || errorPayload.error === "rate_limited") throw new Error(errorPayload.message || "请求过于频繁，请稍后再试。");
         throw new Error(errorPayload.message || `API request failed: ${response.status}`);
       }
-      const nextResult = (await response.json()) as AgentApiResponse;
+
+      let nextResult: AgentApiResponse | null = null;
+      let streamError: Extract<AgentStreamEvent, { type: "run_error" }> | null = null;
+      let streamAborted = false;
+      let answerAccumulator = createStreamAnswerAccumulator();
+      let pendingFrame: number | null = null;
+
+      const isCurrentRequest = () => mounted.current && !controller.signal.aborted && requestEpoch === conversationEpoch.current && abortController.current === controller;
+      const flushPartialAnswer = () => {
+        pendingFrame = null;
+        if (!isCurrentRequest()) return;
+        setTransientTurn((current) => current?.requestId === requestId ? { ...current, status: "streaming", partialAnswer: answerAccumulator.answer, deltaCount: answerAccumulator.deltaCount } : current);
+      };
+      const schedulePartialAnswer = () => {
+        if (pendingFrame !== null || !isCurrentRequest()) return;
+        pendingFrame = window.requestAnimationFrame(flushPartialAnswer);
+      };
+      const applyEvent = (event: AgentStreamEvent) => {
+        if (!isCurrentRequest()) return;
+        if (event.type === "run_started") {
+          setTransientTurn((current) => current?.requestId === requestId ? { ...current, status: "streaming", runId: event.runId } : current);
+          return;
+        }
+        if (event.type === "phase") {
+          setTransientTurn((current) => current?.requestId === requestId
+            ? { ...current, status: "streaming", phase: event.phase, phases: [...appendStreamPhase(current.phases ?? [], event.phase)] }
+            : current);
+          return;
+        }
+        if (event.type === "answer_delta") {
+          const nextAccumulator = appendStreamAnswerDelta(answerAccumulator, event);
+          if (nextAccumulator === answerAccumulator) return;
+          answerAccumulator = nextAccumulator;
+          schedulePartialAnswer();
+          return;
+        }
+        if (event.type === "answer_completed") {
+          completedRequestId.current = requestId;
+          nextResult = event.result;
+          answerAccumulator = completeStreamAnswer(answerAccumulator, event);
+          if (pendingFrame !== null) window.cancelAnimationFrame(pendingFrame);
+          flushPartialAnswer();
+          return;
+        }
+        if (event.type === "run_error") {
+          streamError = event;
+          return;
+        }
+        streamAborted = true;
+      };
+
+      try {
+        if (!streamReadingSupported) {
+          nextResult = (await response.json()) as AgentApiResponse;
+        } else if (response.body && typeof response.body.getReader === "function") {
+          await parseAgentStreamResponse(response, applyEvent, controller.signal);
+        } else {
+          throw new Error("当前浏览器无法读取流式回答，请重试。");
+        }
+      } catch (error) {
+        if (pendingFrame !== null) window.cancelAnimationFrame(pendingFrame);
+        flushPartialAnswer();
+        throw error;
+      }
+
+      if (pendingFrame !== null) window.cancelAnimationFrame(pendingFrame);
+      flushPartialAnswer();
+      if (streamAborted && isCurrentRequest()) {
+        setTransientTurn((current) => current?.requestId === requestId ? { ...current, status: "stopped", retryable: true, error: "已停止生成。" } : current);
+        return;
+      }
+      if (streamError) {
+        const safeError = streamError as Extract<AgentStreamEvent, { type: "run_error" }>;
+        const error = new Error(safeError.message);
+        Object.assign(error, { retryable: safeError.retryable });
+        throw error;
+      }
+      if (!nextResult) throw new Error("流式回答未正常完成，请重试。");
+      const completedResult = nextResult;
       if (!mounted.current || controller.signal.aborted || requestEpoch !== conversationEpoch.current) return;
 
       const latestStore = storeRef.current ?? baseStore;
@@ -184,13 +276,13 @@ export function useAgentWorkspace(initialQuestion = "") {
         if (draftConversationRef.current?.id !== originConversation.id) return;
         workingStore = { ...latestStore, activeConversationId: originConversation.id, conversations: [originConversation, ...latestStore.conversations] };
       }
-      const saved = appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, nextResult);
+      const saved = appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult);
       if (!saved.ok) throw new Error("error" in saved && saved.error ? saved.error : "会话写入失败。");
-      const assistantMessage = findAssistantMessage(saved.data, originConversation.id, nextResult);
+      const assistantMessage = findAssistantMessage(saved.data, originConversation.id, completedResult);
       if (!assistantMessage) throw new Error("回答已生成，但无法关联到当前会话。");
       commitStore(saved.data);
       if (draftConversationRef.current?.id === originConversation.id) commitDraft(null);
-      setResultsByMessageId((current) => ({ ...current, [assistantMessage.id]: nextResult }));
+      setResultsByMessageId((current) => ({ ...current, [assistantMessage.id]: completedResult }));
       setFeedbackByMessageId((current) => ({ ...current, [assistantMessage.id]: emptyFeedbackDraft() }));
       setTransientTurn(null);
       setQuestion("");
@@ -198,10 +290,13 @@ export function useAgentWorkspace(initialQuestion = "") {
       if (controller.signal.aborted || requestEpoch !== conversationEpoch.current) return;
       const message = error instanceof Error ? error.message : "请求失败，请稍后重试。";
       setClientError(message);
-      setTransientTurn({ ...turn, status: "failed", error: message });
+      const retryable = typeof error === "object" && error !== null && "retryable" in error ? error.retryable !== false : true;
+      setTransientTurn((current) => current?.requestId === requestId ? { ...current, status: "failed", error: message, retryable } : { ...turn, status: "failed", error: message, retryable });
     } finally {
       if (abortController.current === controller) {
         abortController.current = null;
+        if (activeRequestId.current === requestId) activeRequestId.current = null;
+        if (completedRequestId.current === requestId) completedRequestId.current = null;
         inFlight.current = false;
         if (mounted.current) setIsLoading(false);
       }
@@ -209,8 +304,24 @@ export function useAgentWorkspace(initialQuestion = "") {
   }, [commitDraft, commitStore, mode, question, realApiUnavailable, transientTurn]);
 
   const retryLastTurn = useCallback(() => {
-    if (transientTurn?.status === "failed") void runAgent(transientTurn.question);
+    if (transientTurn && (transientTurn.status === "failed" || transientTurn.status === "stopped") && transientTurn.retryable !== false) void runAgent(transientTurn.question);
   }, [runAgent, transientTurn]);
+
+  const stopGeneration = useCallback(() => {
+    if (!inFlight.current || !shouldStopStreamingRequest(activeRequestId.current, completedRequestId.current)) return;
+    conversationEpoch.current += 1;
+    const controller = abortController.current;
+    abortController.current = null;
+    activeRequestId.current = null;
+    completedRequestId.current = null;
+    inFlight.current = false;
+    controller?.abort();
+    setIsLoading(false);
+    setClientError("");
+    setTransientTurn((current) => current && (current.status === "pending" || current.status === "streaming")
+      ? { ...current, status: "stopped", retryable: true, error: "已停止生成。" }
+      : current);
+  }, []);
 
   const newConversation = useCallback(() => {
     cancelActiveRequest();
@@ -330,7 +441,7 @@ export function useAgentWorkspace(initialQuestion = "") {
 
   return {
     question, setQuestion, mode, setMode, result: currentResult, llmStatus, llmStatusError, healthResult,
-    isLoading, isCheckingHealth, clientError, realApiUnavailable, runAgent, retryLastTurn, checkHealth,
+    isLoading, isCheckingHealth, clientError, realApiUnavailable, runAgent, retryLastTurn, stopGeneration, checkHealth,
     conversationId, conversations: conversationStore?.conversations ?? [], conversationMessages,
     activeConversation, transientTurn, resultsByMessageId, feedbackByMessageId,
     newConversation, switchConversation, clearConversation, deleteConversation, renameConversation,

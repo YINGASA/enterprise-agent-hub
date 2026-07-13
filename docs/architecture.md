@@ -236,6 +236,14 @@ For each successful turn, the client builds a bounded recent-message window and 
 
 New conversations use an in-memory draft and are materialized only after the first successful response. Conversation titles are generated locally from the first user question, can be manually renamed, and are searched only in browser state. Assistant context metadata and compact source/tool/step summaries are persisted with that message; full runtime results remain memory-only. Pending and failed turns are transient and do not enter effective context. Every request captures its origin conversation ID and an AbortController epoch, so switching or deleting a conversation invalidates the response and a removed conversation cannot be recreated by a late request.
 
+## Streaming Agent Flow (V2.0.2)
+
+The existing `POST /api/agent` JSON contract remains unchanged. `POST /api/agent/stream` adds an `application/x-ndjson` channel with typed `run_started`, `phase`, `answer_delta`, `answer_completed`, `run_error`, and `run_aborted` events. The incremental decoder retains incomplete lines between network chunks, validates every event, and never exposes prompts, conversation history, raw upstream SSE, retrieved chunk bodies, or provider configuration.
+
+Mock responses are split by a deterministic bounded rule and can be cancelled through the request signal. Real mode consumes OpenAI-compatible SSE with `[DONE]`, heartbeat, multi-event chunk, and split-event handling. Because the Real prompt returns structured JSON, the server extracts only the safe answer field for display and uses the final validated Agent result to calibrate completion. Explicitly unsupported streaming falls back to the existing complete-call path and marks `streamFallback`; it does not simulate upstream token streaming.
+
+The Chat controller batches answer deltas into the active transient Assistant placeholder. A request is bound to its origin conversation ID, request epoch, and AbortController; switching, clearing, deleting, stopping, or unmounting invalidates late events. Pending, stopped, and failed turns remain transient. Only `answer_completed` is appended through Conversation Storage, so partial output never becomes future context or browser-persisted history. Ops writes at most one safe final summary per run ID and stores only scalar streaming/context metadata, never deltas or raw stream payloads.
+
 ## V1.6.1 Knowledge Import Persistence
 
 V1.6.1 fixes the browser-local persistence path for user-imported knowledge documents. `/knowledge` now reads user documents from `localStorage` during initialization and only writes back when the user imports, deletes, or clears documents. This avoids overwriting existing imported documents with an empty initial React state during page refresh.

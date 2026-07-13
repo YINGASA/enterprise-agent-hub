@@ -16,6 +16,7 @@ type ChatComposerProps = {
   onChange: (value: string) => void;
   onModeChange: (mode: LlmMode) => void;
   onSend: () => void;
+  onStop: () => void;
   onCheckHealth: () => void;
 };
 
@@ -30,7 +31,7 @@ function statusText(llmStatus: LlmStatus | null, healthResult: LlmHealthResult |
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
-  const disabled = props.isLoading || props.realApiUnavailable || !props.value.trim();
+  const sendDisabled = props.realApiUnavailable || !props.value.trim();
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -44,7 +45,7 @@ export function ChatComposer(props: ChatComposerProps) {
     const nativeEvent = event.nativeEvent as KeyboardEvent & { keyCode?: number };
     if (event.key !== "Enter" || event.shiftKey || isComposing || nativeEvent.isComposing || nativeEvent.keyCode === 229) return;
     event.preventDefault();
-    if (!disabled) props.onSend();
+    if (!props.isLoading && !sendDisabled) props.onSend();
   }
 
   return (
@@ -63,7 +64,14 @@ export function ChatComposer(props: ChatComposerProps) {
               <button type="button" onClick={props.onCheckHealth} disabled={props.isCheckingHealth} className="mt-2 cursor-pointer text-xs font-semibold text-brand-700 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50">{props.isCheckingHealth ? "检查中…" : "检查模型连接"}</button>
             </div>
           </details>
-          <button type="button" data-testid="agent-run" onClick={props.onSend} disabled={disabled} className="min-h-10 shrink-0 cursor-pointer rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300">{props.isLoading ? "发送中…" : "发送"}</button>
+          <button
+            type="button"
+            data-testid={props.isLoading ? "stop-generation" : "agent-run"}
+            aria-label={props.isLoading ? "停止生成" : "发送消息"}
+            onClick={props.isLoading ? props.onStop : props.onSend}
+            disabled={!props.isLoading && sendDisabled}
+            className={"min-h-10 shrink-0 cursor-pointer rounded-lg px-5 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 " + (props.isLoading ? "bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-500" : "bg-brand-600 hover:bg-brand-700 focus-visible:ring-brand-500")}
+          >{props.isLoading ? "停止生成" : "发送"}</button>
         </div>
       </div>
       <p aria-live="polite" className="mx-auto mt-2 max-w-4xl px-1 text-xs text-ink-500">{props.realApiUnavailable ? "真实模型未配置，请在高级选项中切换到开发模拟模式。" : "回答可能使用当前会话最近内容；历史原文不会显示在上下文状态中。"}</p>

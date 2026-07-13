@@ -19,6 +19,9 @@ export function AgentTracePanel({ result }: { result: AgentApiResponse | null })
 
   return (
     <div className="min-w-0 space-y-4">
+      <CollapsibleSection title="Streaming" description="只展示流式模式、降级、停止和事件数量等安全标量，不展示原始事件载荷。" defaultOpen={false}>
+        <MockJsonPanel title="流式安全摘要" data={{ streamingRequested: result.api.streamingRequested === true, streamingUsed: result.api.streamingUsed === true, streamFallback: result.api.streamFallback === true, aborted: result.api.aborted === true, deltaCount: Number.isInteger(result.api.streamDeltaCount) ? Math.max(0, result.api.streamDeltaCount ?? 0) : 0, durationMs: Number.isFinite(result.api.llmDurationMs) ? Math.max(0, Math.floor(result.api.llmDurationMs ?? 0)) : 0 }} />
+      </CollapsibleSection>
       <CollapsibleSection title="Conversation Context" description="仅展示安全的上下文数量、预算和裁剪策略，不展示历史原文。" defaultOpen={false}>
         <MockJsonPanel title="上下文安全摘要" data={{ contextApplied: result.api.contextApplied === true, contextMessageCount: result.api.contextMessageCount ?? 0, contextCharacterCount: result.api.contextCharacterCount ?? 0, estimatedTokens: Math.ceil((result.api.contextCharacterCount ?? 0) / 4), contextTruncated: result.api.contextTruncated === true, strategy: "recent-complete-messages", finalMessageStructure: { systemRules: 1, untrustedHistoryMessages: result.api.contextMessageCount ?? 0, currentQuestion: 1 }, longTermMemoryApplied: false, summaryApplied: false }} />
       </CollapsibleSection>

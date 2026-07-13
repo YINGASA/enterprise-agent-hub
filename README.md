@@ -1,8 +1,8 @@
 # Enterprise Agent Hub
 
-## V2.0.1 Quality Baseline
+## V2.0.2 Quality Baseline
 
-V2.0.1 redesigns `/chat` as a responsive, continuous conversation workspace while preserving the V2.0.0 context and API contracts. Desktop uses a conversation sidebar plus an independently scrolling message stream; mobile uses a keyboard-accessible drawer. User and Assistant messages keep their own answer details, context metadata, feedback runId, and safe compact trace references. The Composer remains visible at the bottom, supports Enter / Shift+Enter / IME composition, optimistic pending/error states, retry, and stale-request isolation. The release baseline is 21 unit-test files, 76 passing tests, 16/16 Playwright E2E scenarios, and Full Mock Evaluation at 80/80.
+V2.0.2 adds structured streaming answers and generation controls while preserving the V2.0.1 Chat Workspace, Conversation storage, context algorithm, and JSON Agent API. `/api/agent/stream` emits typed NDJSON events for safe phases, answer deltas, completion, errors, and aborts; the existing `/api/agent` remains compatible. Mock streaming is deterministic, Real OpenAI-compatible SSE is parsed server-side, unsupported streaming safely falls back to one complete response, and only completed Assistant answers enter conversation context. The release baseline is 27 unit-test files with 98/98 passing tests, 18/18 Playwright E2E scenarios, and Full Mock Evaluation at 80/80 with a 100% pass rate.
 
 The platform also includes Ops summaries, Real API rate and cost protection, feedback runId validation, automated tests and CI, RAG Test Bench, knowledge quality scoring, and backup/restore. Client knowledge and history remain browser-local; Ops uses lightweight local JSONL storage, and rate limiting is single-instance memory based. No real API keys, tokens, providers, model identifiers, or service URLs are stored in this repository.
 

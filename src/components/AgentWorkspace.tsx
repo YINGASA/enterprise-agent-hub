@@ -118,6 +118,7 @@ export function AgentWorkspace() {
           onChange={workspace.setQuestion}
           onModeChange={workspace.setMode}
           onSend={() => void workspace.runAgent()}
+          onStop={workspace.stopGeneration}
           onCheckHealth={() => void workspace.checkHealth()}
         />
       </section>

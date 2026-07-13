@@ -64,6 +64,11 @@ function privacySafeTrace(result: AgentApiResponse): AgentApiResponse {
       contextMessageCount: result.api.contextMessageCount,
       contextTruncated: result.api.contextTruncated,
       contextCharacterCount: result.api.contextCharacterCount,
+      streamingRequested: result.api.streamingRequested,
+      streamingUsed: result.api.streamingUsed,
+      streamFallback: result.api.streamFallback,
+      aborted: result.api.aborted,
+      streamDeltaCount: result.api.streamDeltaCount,
     },
   };
 }
@@ -82,6 +87,7 @@ export function AssistantMessage({ message, result, feedback, onToggleFeedback, 
         <div className="rounded-2xl rounded-tl-md border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           {message.responseMode === "real_error_fallback" ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-900">真实模型连接失败，本次已使用模拟模式。</p> : null}
           <div data-testid="assistant-answer" className="min-w-0"><p data-testid="agent-answer" className="whitespace-pre-wrap break-words text-[15px] leading-7 text-ink-800">{message.content}</p></div>
+          {result?.api.streamFallback ? <p data-testid="assistant-stream-fallback" className="mt-3 text-xs text-ink-500">本次模型服务使用完整响应模式。</p> : null}
           {message.contextApplied ? <p data-testid="assistant-context-meta" className="mt-3 text-xs text-ink-500">已参考最近 {contextRounds} 轮对话{message.contextTruncated ? "，较早内容已省略" : ""}</p> : null}
           {details?.needsClarification ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">当前回答需要你补充信息后才能继续判断。</p> : null}
 

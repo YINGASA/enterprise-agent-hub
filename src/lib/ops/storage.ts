@@ -42,6 +42,19 @@ export type OpsAgentRunRecord = {
   contextApplied?: boolean;
   contextMessageCount?: number;
   contextTruncated?: boolean;
+  streamingRequested?: boolean;
+  streamingUsed?: boolean;
+  streamFallback?: boolean;
+  aborted?: boolean;
+};
+
+export type OpsAgentRunStreamingMetadata = {
+  runId?: string;
+  streamingRequested?: boolean;
+  streamingUsed?: boolean;
+  streamFallback?: boolean;
+  aborted?: boolean;
+  durationMs?: number;
 };
 
 export type OpsFeedbackRecord = {
@@ -83,7 +96,7 @@ export type OpsFeedbackModePerformance = {
 
 export type OpsSafeRunSummary = Pick<
   OpsAgentRunRecord,
-  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus" | "contextApplied" | "contextMessageCount" | "contextTruncated"
+  "id" | "createdAt" | "questionPreview" | "responseMode" | "scenario" | "intent" | "toolsUsed" | "sourcesCount" | "errorType" | "httpStatus" | "durationMs" | "contextApplied" | "contextMessageCount" | "contextTruncated" | "streamingRequested" | "streamingUsed" | "streamFallback" | "aborted"
 >;
 
 export type OpsSafeFeedbackSummary = Pick<
@@ -137,6 +150,10 @@ function filePath(name: string) {
 
 function makeId(prefix: string) {
   return `${prefix}-${randomUUID()}`;
+}
+
+export function createOpsAgentRunId() {
+  return makeId("run");
 }
 
 function maxStoredItems() {
@@ -194,9 +211,14 @@ function safeRunSummary(item: OpsAgentRunRecord): OpsSafeRunSummary {
     sourcesCount: item.sourcesCount,
     errorType: item.errorType,
     httpStatus: item.httpStatus,
+    durationMs: Number.isFinite(item.durationMs) ? Math.max(0, Math.floor(item.durationMs ?? 0)) : undefined,
     contextApplied: item.contextApplied === true,
     contextMessageCount: Number.isInteger(item.contextMessageCount) ? Math.max(0, Math.min(12, item.contextMessageCount ?? 0)) : 0,
     contextTruncated: item.contextTruncated === true,
+    streamingRequested: item.streamingRequested === true,
+    streamingUsed: item.streamingUsed === true,
+    streamFallback: item.streamFallback === true,
+    aborted: item.aborted === true,
   };
 }
 
@@ -287,6 +309,26 @@ async function appendJsonLine(fileName: string, item: unknown) {
   });
 }
 
+async function appendAgentRunOnce(item: OpsAgentRunRecord) {
+  const serialized = JSON.stringify(item);
+  let appended = false;
+  await enqueueWrite("agent-runs.jsonl", async () => {
+    const lines = await readRawLines("agent-runs.jsonl");
+    const alreadyRecorded = lines.some((line) => {
+      try {
+        return (JSON.parse(line) as { id?: unknown }).id === item.id;
+      } catch {
+        return false;
+      }
+    });
+    if (alreadyRecorded) return;
+    appended = true;
+    const retained = [...lines, serialized].slice(-maxStoredItems());
+    await writeJsonLinesAtomically("agent-runs.jsonl", retained);
+  });
+  return appended;
+}
+
 async function readJsonLines<T>(fileName: string, limit = MAX_RECENT_ITEMS): Promise<T[]> {
   try {
     const pending = writeQueues.get(fileName);
@@ -300,9 +342,9 @@ async function readJsonLines<T>(fileName: string, limit = MAX_RECENT_ITEMS): Pro
   }
 }
 
-export async function recordAgentRun(result: AgentApiResponse) {
+export async function recordAgentRun(result: AgentApiResponse, streaming: OpsAgentRunStreamingMetadata = {}) {
   const item: OpsAgentRunRecord = {
-    id: makeId("run"),
+    id: streaming.runId || createOpsAgentRunId(),
     createdAt: new Date().toISOString(),
     questionPreview: sanitizeQuestionPreview(result.question),
     responseMode: result.api.responseMode,
@@ -314,13 +356,17 @@ export async function recordAgentRun(result: AgentApiResponse) {
     retrievalConfidence: result.ragAnswer?.retrievalConfidence ?? result.ragAnswer?.retrievalMetadata?.retrievalConfidence,
     errorType: result.api.errorType,
     httpStatus: result.api.httpStatus,
-    durationMs: result.api.llmDurationMs,
+    durationMs: Number.isFinite(streaming.durationMs) ? Math.max(0, Math.floor(streaming.durationMs ?? 0)) : result.api.llmDurationMs,
     fallback: isFallback(result.api.responseMode, result.route.intent),
     contextApplied: result.api.contextApplied === true,
     contextMessageCount: Number.isInteger(result.api.contextMessageCount) ? Math.max(0, Math.min(12, result.api.contextMessageCount ?? 0)) : 0,
     contextTruncated: result.api.contextTruncated === true,
+    streamingRequested: streaming.streamingRequested === true,
+    streamingUsed: streaming.streamingUsed === true,
+    streamFallback: streaming.streamFallback === true,
+    aborted: streaming.aborted === true,
   };
-  await appendJsonLine("agent-runs.jsonl", item);
+  await appendAgentRunOnce(item);
   return item.id;
 }
 
@@ -333,9 +379,15 @@ export async function recordAgentError(input: {
   contextApplied?: boolean;
   contextMessageCount?: number;
   contextTruncated?: boolean;
+  runId?: string;
+  durationMs?: number;
+  streamingRequested?: boolean;
+  streamingUsed?: boolean;
+  streamFallback?: boolean;
+  aborted?: boolean;
 }) {
   const item: OpsAgentRunRecord = {
-    id: makeId("run"),
+    id: input.runId || createOpsAgentRunId(),
     createdAt: new Date().toISOString(),
     questionPreview: sanitizeQuestionPreview(input.question),
     responseMode: input.responseMode,
@@ -346,12 +398,39 @@ export async function recordAgentError(input: {
     sourcesCount: 0,
     errorType: input.errorType,
     httpStatus: input.httpStatus,
+    durationMs: Number.isFinite(input.durationMs) ? Math.max(0, Math.floor(input.durationMs ?? 0)) : undefined,
     fallback: input.responseMode === "real_error_fallback" || input.errorType === "rate_limited",
     contextApplied: input.contextApplied === true,
     contextMessageCount: Number.isInteger(input.contextMessageCount) ? Math.max(0, Math.min(12, input.contextMessageCount ?? 0)) : 0,
     contextTruncated: input.contextTruncated === true,
+    streamingRequested: input.streamingRequested === true,
+    streamingUsed: input.streamingUsed === true,
+    streamFallback: input.streamFallback === true,
+    aborted: input.aborted === true,
   };
-  await appendJsonLine("agent-runs.jsonl", item);
+  await appendAgentRunOnce(item);
+  return item.id;
+}
+
+export async function recordAgentAbortedRun(input: {
+  runId: string;
+  question?: string;
+  requestedMode: string;
+  responseMode: string;
+  durationMs?: number;
+  contextApplied?: boolean;
+  contextMessageCount?: number;
+  contextTruncated?: boolean;
+  streamingUsed?: boolean;
+  streamFallback?: boolean;
+}) {
+  return recordAgentError({
+    ...input,
+    responseMode: "aborted",
+    errorType: "aborted",
+    streamingRequested: true,
+    aborted: true,
+  });
 }
 
 type FeedbackValidation =
@@ -366,6 +445,7 @@ export async function validateFeedbackRun(runId: string, values: ChatAnswerFeedb
   const runs = await readJsonLines<OpsAgentRunRecord>("agent-runs.jsonl", maxStoredItems());
   const run = runs.find((item) => item.id === runId);
   if (!run) return { ok: false, reason: "invalid" };
+  if (run.aborted || (run.errorType && run.scenario === "unknown")) return { ok: false, reason: "invalid" };
   const createdAt = Date.parse(run.createdAt);
   if (!Number.isFinite(createdAt) || Date.now() - createdAt > feedbackLimits.runTtlMs) return { ok: false, reason: "expired" };
 
@@ -417,9 +497,11 @@ export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary>
   const evaluations = await readJsonLines<OpsEvaluationRecord>("evaluations.jsonl", 20);
   const recentRuns = runs.slice(0, MAX_RECENT_ITEMS);
   const total = recentRuns.length;
-  const realCount = recentRuns.filter((item) => item.responseMode === "real" || item.responseMode === "real_repaired").length;
-  const mockCount = recentRuns.filter((item) => item.responseMode === "mock").length;
-  const fallbackCount = recentRuns.filter((item) => item.fallback).length;
+  const completedRuns = recentRuns.filter((item) => !item.aborted);
+  const completedTotal = completedRuns.length;
+  const realCount = completedRuns.filter((item) => item.responseMode === "real" || item.responseMode === "real_repaired").length;
+  const mockCount = completedRuns.filter((item) => item.responseMode === "mock").length;
+  const fallbackCount = completedRuns.filter((item) => item.fallback).length;
   const rateLimitedCount = recentRuns.filter((item) => item.errorType === "rate_limited").length;
   const helpfulCount = feedback.filter((item) => item.values.includes("positive")).length;
   const citationRated = feedback.filter((item) => item.values.includes("accurate") || item.values.includes("inaccurate"));
@@ -443,9 +525,9 @@ export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary>
     realCount,
     mockCount,
     fallbackCount,
-    realRate: percentage(realCount, total),
-    mockRate: percentage(mockCount, total),
-    fallbackRate: percentage(fallbackCount, total),
+    realRate: percentage(realCount, completedTotal),
+    mockRate: percentage(mockCount, completedTotal),
+    fallbackRate: percentage(fallbackCount, completedTotal),
     rateLimitedCount,
     responseModeDistribution: distribution(recentRuns.map((item) => item.responseMode)),
     errorTypeDistribution: distribution(recentRuns.filter((item) => item.errorType).map((item) => item.errorType ?? "unknown")),

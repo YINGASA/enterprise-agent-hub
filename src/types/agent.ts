@@ -95,6 +95,7 @@ export type LlmGenerateOptions = {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "json_object" | "text";
+  signal?: AbortSignal;
 };
 
 export type LlmErrorType =
@@ -160,6 +161,11 @@ export type AgentApiMetadata = {
   contextMessageCount?: number;
   contextTruncated?: boolean;
   contextCharacterCount?: number;
+  streamingRequested?: boolean;
+  streamingUsed?: boolean;
+  streamFallback?: boolean;
+  aborted?: boolean;
+  streamDeltaCount?: number;
 };
 
 export type ConversationMessageRole = "user" | "assistant";

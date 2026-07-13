@@ -1,10 +1,18 @@
 import { documents } from "@/data/mock";
 import { runAgentPipeline } from "@/lib/agent";
-import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
+import { callOpenAICompatibleChat, getLlmConfig, streamOpenAICompatibleChat } from "@/lib/llm";
 import { buildConversationContext, hasRecentOrderReturnContext } from "@/lib/conversation/context";
-import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStructuredOutput, ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
+import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStreamMetadata, AgentStreamPhase, AgentStructuredOutput, ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
 
 const validTools: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "analyzeJD", "generateCustomerReply"];
+
+export type AgentApiPipelineRuntime = {
+  streaming?: boolean;
+  signal?: AbortSignal;
+  onAnswerDelta?: (delta: string) => void;
+  onStreamMetadata?: (metadata: Omit<AgentStreamMetadata, "streamingRequested">) => void;
+  onPhase?: (phase: AgentStreamPhase) => void;
+};
 
 export function asAgentMode(value: unknown): LlmMode {
   return value === "real" ? "real" : "mock";
@@ -367,6 +375,7 @@ export async function runAgentApiPipeline(
   userDocuments: ImportedKnowledgeDocument[] = [],
   conversationContext?: ConversationContext,
   suppliedMeta?: ConversationContextMeta,
+  runtime?: AgentApiPipelineRuntime,
 ): Promise<AgentApiResponse> {
   const sanitized = buildConversationContext(conversationContext, question);
   const contextMeta = suppliedMeta ?? sanitized.meta;
@@ -382,6 +391,9 @@ export async function runAgentApiPipeline(
     const answer = "请补充你所指的业务事项，例如退货、报销、请假或申请流程；确认场景后我才能给出准确的材料清单。";
     pipeline = { ...pipeline, finalAnswer: answer, structuredOutput: { ...pipeline.structuredOutput, answer, needsClarification: true, missingFields: ["applicationType"], clarificationQuestion: "你需要准备的是哪项业务的材料？", nextAction: "补充具体业务场景" } };
   }
+  if (pipeline.route.needRag) runtime?.onPhase?.("retrieve");
+  if (pipeline.toolResults.length > 0) runtime?.onPhase?.("tool");
+  runtime?.onPhase?.("generate");
   const config = getLlmConfig();
 
   if (requestedMode === "mock") {
@@ -396,6 +408,7 @@ export async function runAgentApiPipeline(
 
   const firstMissing = config.missing[0];
   if (firstMissing) {
+    if (runtime?.streaming) runtime.onStreamMetadata?.({ streamingUsed: false, streamFallback: true, deltaCount: 0 });
     return {
       ...pipeline,
       api: metaApi({
@@ -408,11 +421,16 @@ export async function runAgentApiPipeline(
     };
   }
 
-  const llmResult = await callOpenAICompatibleChat(buildMessages(question, pipeline, sanitized.context), {
-    temperature: 0.1,
-    maxTokens: 1200,
-    responseFormat: "json_object",
-  });
+  const messages = buildMessages(question, pipeline, sanitized.context);
+  const generateOptions = { temperature: 0.1, maxTokens: 1200, responseFormat: "json_object" as const, signal: runtime?.signal };
+  let llmResult: LlmGenerateResult;
+  if (runtime?.streaming) {
+    const streamResult = await streamOpenAICompatibleChat(messages, generateOptions, (delta) => runtime.onAnswerDelta?.(delta));
+    runtime.onStreamMetadata?.({ streamingUsed: streamResult.streamingUsed, streamFallback: streamResult.streamFallback, deltaCount: streamResult.deltaCount });
+    llmResult = streamResult;
+  } else {
+    llmResult = await callOpenAICompatibleChat(messages, generateOptions);
+  }
 
   if (llmResult.parsedJson) {
     const structuredOutput = normalizeStructuredOutput(llmResult.parsedJson, pipeline.structuredOutput);
@@ -444,6 +462,7 @@ export async function runAgentApiPipeline(
       temperature: 0,
       maxTokens: 1000,
       responseFormat: "json_object",
+      signal: runtime?.signal,
     });
 
     if (repairResult.parsedJson) {

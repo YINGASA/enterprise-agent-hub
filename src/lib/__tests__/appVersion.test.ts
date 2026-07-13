@@ -7,7 +7,7 @@ describe("app version metadata", () => {
   it("matches the package version without including sensitive configuration", () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")) as { version: string };
     expect(appVersion).toBe(packageJson.version);
-    expect(appVersionLabel).toBe("Enterprise Agent Hub V2.0.1");
+    expect(appVersionLabel).toBe("Enterprise Agent Hub V2.0.2");
     expect(JSON.stringify({ appVersion, appVersionLabel, buildCommit, releaseChannel })).not.toMatch(/api[_-]?key|provider|baseurl|token/i);
   });
 

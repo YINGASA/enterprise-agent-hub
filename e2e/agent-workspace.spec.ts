@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
 const chatHistoryKey = "enterprise-agent-hub:chat-run-history";
 const conversationKey = "enterprise-agent-hub:conversations";
@@ -30,6 +30,26 @@ function mockAgentResponse(question: string, runId: string, overrides: Record<st
   };
 }
 
+function mockStreamBody(result: ReturnType<typeof mockAgentResponse>, deltas?: string[]) {
+  const answer = String(result.finalAnswer ?? "");
+  const chunks = deltas ?? (answer.length > 1 ? [answer.slice(0, Math.ceil(answer.length / 2)), answer.slice(Math.ceil(answer.length / 2))] : [answer]);
+  const completed = {
+    ...result,
+    api: { ...result.api, streamingRequested: true, streamingUsed: true, streamFallback: false, aborted: false, streamDeltaCount: chunks.length },
+  };
+  return [
+    { type: "run_started", runId: result.runId, requestedMode: "mock", responseMode: "mock", contextApplied: false, contextMessageCount: 0, contextTruncated: false },
+    { type: "phase", phase: "understand" },
+    { type: "phase", phase: "generate" },
+    ...chunks.map((delta, index) => ({ type: "answer_delta", delta, index })),
+    { type: "answer_completed", result: completed, streamingRequested: true, streamingUsed: true, streamFallback: false, deltaCount: chunks.length },
+  ].map((event) => JSON.stringify(event)).join("\n") + "\n";
+}
+
+async function fulfillMockStream(route: Route, result: ReturnType<typeof mockAgentResponse>, deltas?: string[]) {
+  await route.fulfill({ status: 200, contentType: "application/x-ndjson; charset=utf-8", body: mockStreamBody(result, deltas) });
+}
+
 function seedConversation(id: string, title: string, messagePairs: number, updatedAt: string) {
   const messages = Array.from({ length: messagePairs * 2 }, (_, index) => ({
     id: `${id}-message-${index}`,
@@ -55,7 +75,7 @@ test.afterEach(async ({ page }) => {
 test("uses recent mock context in the continuous desktop chat layout and restores it", async ({ page }) => {
   const requests: Array<Record<string, unknown>> = [];
   page.on("request", (request) => {
-    if (request.url().endsWith("/api/agent") && request.method() === "POST") requests.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>);
+    if (request.url().endsWith("/api/agent/stream") && request.method() === "POST") requests.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>);
   });
   await page.goto("/chat");
   await expect(page.getByTestId("conversation-sidebar")).toBeVisible();
@@ -91,7 +111,7 @@ test("uses recent mock context in the continuous desktop chat layout and restore
 test("starts a delayed isolated conversation without persisting duplicate empty drafts", async ({ page }) => {
   const requests: Array<Record<string, unknown>> = [];
   page.on("request", (request) => {
-    if (request.url().endsWith("/api/agent") && request.method() === "POST") requests.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>);
+    if (request.url().endsWith("/api/agent/stream") && request.method() === "POST") requests.push(JSON.parse(request.postData() ?? "{}") as Record<string, unknown>);
   });
   await page.goto("/chat");
   await selectMockMode(page);
@@ -129,13 +149,13 @@ test("keeps URL prefill and legacy run history available from a secondary dialog
 });
 
 test("renders clarification as a normal assistant message", async ({ page }) => {
-  await page.route("**/api/agent", async (route) => {
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse("我想报销", "e2e-clarification", {
+  await page.route("**/api/agent/stream", async (route) => {
+    await fulfillMockStream(route, mockAgentResponse("我想报销", "e2e-clarification", {
       route: { scenario: "enterprise", intent: "policy_check", needRag: true, toolsNeeded: [], confidence: 0.4, reason: "e2e" },
       finalAnswer: "请补充报销金额和票据类型。",
       structuredOutput: { scenario: "enterprise", intent: "policy_check", answer: "请补充报销金额和票据类型。", evidence: [], toolsUsed: [], sources: [], confidence: 0.4, riskLevel: "low", nextAction: "补充信息", needsClarification: true, missingFields: ["金额"], clarificationQuestion: "报销金额是多少？" },
       api: { requestedMode: "mock", responseMode: "fallback" },
-    })) });
+    }));
   });
   await page.goto("/chat");
   await selectMockMode(page);
@@ -148,10 +168,10 @@ test("renders clarification as a normal assistant message", async ({ page }) => 
 
 test("supports Enter send, Shift+Enter newline and IME-safe composition", async ({ page }) => {
   let requestCount = 0;
-  await page.route("**/api/agent", async (route) => {
+  await page.route("**/api/agent/stream", async (route) => {
     requestCount += 1;
     const question = String((JSON.parse(route.request().postData() ?? "{}") as { question?: string }).question ?? "");
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse(question, `keyboard-run-${requestCount}`)) });
+    await fulfillMockStream(route, mockAgentResponse(question, `keyboard-run-${requestCount}`));
   });
   await page.goto("/chat");
   await selectMockMode(page);
@@ -174,9 +194,59 @@ test("supports Enter send, Shift+Enter newline and IME-safe composition", async 
   expect(requestCount).toBe(1);
 });
 
+test("renders deterministic Mock stream deltas before completing the assistant answer", async ({ page }) => {
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.evaluate(() => {
+    const state = window as typeof window & { __eahStreamSnapshots?: string[] };
+    state.__eahStreamSnapshots = [];
+    new MutationObserver(() => {
+      const text = document.querySelector<HTMLElement>("[data-testid='stream-answer']")?.innerText ?? "";
+      if (text && state.__eahStreamSnapshots?.at(-1) !== text) state.__eahStreamSnapshots?.push(text);
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  await page.getByTestId("agent-question").fill("请详细说明订单10001退货所需材料、办理步骤、时间限制和注意事项。");
+  await page.getByTestId("agent-run").click();
+
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  await expect(page.getByTestId("assistant-streaming")).toBeVisible();
+  await expect(page.getByTestId("chat-composer")).toBeVisible();
+
+  const assistant = page.getByTestId("conversation-message-assistant").last();
+  await expect(assistant.getByTestId("assistant-answer")).toBeVisible();
+  await expect(assistant.getByTestId("assistant-feedback")).toBeVisible();
+  await expect(page.getByTestId("assistant-streaming")).toHaveCount(0);
+  const snapshots = await page.evaluate(() => (window as typeof window & { __eahStreamSnapshots?: string[] }).__eahStreamSnapshots ?? []);
+  expect(new Set(snapshots).size).toBeGreaterThan(1);
+  expect(snapshots.every((value, index) => index === 0 || value.length >= snapshots[index - 1].length)).toBe(true);
+  const store = await readConversationStore(page);
+  expect(store.conversations.find((conversation) => conversation.id === store.activeConversationId)?.messages).toHaveLength(2);
+});
+
+test("stops a Mock stream without persisting the partial answer and retries the same user turn", async ({ page }) => {
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("请完整列出企业差旅报销的全部材料、审批步骤、例外情形和注意事项。");
+  await page.getByTestId("agent-run").click();
+  await expect(page.getByTestId("stop-generation")).toBeVisible();
+  await page.getByTestId("stop-generation").click();
+
+  await expect(page.getByTestId("assistant-stopped")).toContainText("已停止生成");
+  await expect(page.getByTestId("agent-question")).toBeEnabled();
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  const stoppedStore = await readConversationStore(page);
+  expect(stoppedStore?.conversations?.find((conversation) => conversation.id === stoppedStore.activeConversationId)?.messages ?? []).toHaveLength(0);
+
+  await page.getByTestId("retry-generation").click();
+  await expect(page.getByTestId("conversation-message-user")).toHaveCount(1);
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(1);
+  const completedStore = await readConversationStore(page);
+  expect(completedStore.conversations.find((conversation) => conversation.id === completedStore.activeConversationId)?.messages).toHaveLength(2);
+});
+
 test("keeps feedback on the target run and retries failures without duplicating the optimistic user message", async ({ page }) => {
   let feedbackRunId = "";
-  await page.route("**/api/agent", async (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse("测试反馈", "e2e-feedback-run")) }));
+  await page.route("**/api/agent/stream", async (route) => fulfillMockStream(route, mockAgentResponse("测试反馈", "e2e-feedback-run")));
   await page.route("**/api/ops/feedback", async (route) => {
     feedbackRunId = String((JSON.parse(route.request().postData() ?? "{}") as { runId?: string }).runId ?? "");
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
@@ -191,8 +261,8 @@ test("keeps feedback on the target run and retries failures without duplicating 
   await firstAssistant.getByTestId("agent-feedback-submit").click();
   await expect.poll(() => feedbackRunId).toBe("e2e-feedback-run");
 
-  await page.unroute("**/api/agent");
-  await page.route("**/api/agent", async (route) => route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ errorType: "rate_limited", message: "请求过于频繁，请稍后再试。" }) }));
+  await page.unroute("**/api/agent/stream");
+  await page.route("**/api/agent/stream", async (route) => route.fulfill({ status: 429, contentType: "application/json", body: JSON.stringify({ errorType: "rate_limited", message: "请求过于频繁，请稍后再试。" }) }));
   await page.getByTestId("agent-question").fill("再次测试");
   await page.getByTestId("agent-run").click();
   await expect(page.getByTestId("assistant-error")).toContainText("请求过于频繁，请稍后再试。");
@@ -200,23 +270,28 @@ test("keeps feedback on the target run and retries failures without duplicating 
   const failedStore = await readConversationStore(page);
   expect(failedStore.conversations.find((conversation) => conversation.id === failedStore.activeConversationId)?.messages).toHaveLength(2);
 
-  await page.unroute("**/api/agent");
-  await page.route("**/api/agent", async (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse("再次测试", "e2e-retry-run")) }));
+  await page.unroute("**/api/agent/stream");
+  await page.route("**/api/agent/stream", async (route) => fulfillMockStream(route, mockAgentResponse("再次测试", "e2e-retry-run")));
   await page.getByTestId("agent-retry").click();
   await expect(page.getByTestId("conversation-message-user")).toHaveCount(2);
   await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(2);
+  const retriedAssistant = page.getByTestId("conversation-message-assistant").last();
+  await retriedAssistant.getByTestId("assistant-feedback").locator("summary").click();
+  await retriedAssistant.getByTestId("agent-feedback-positive").click();
+  await retriedAssistant.getByTestId("agent-feedback-submit").click();
+  await expect.poll(() => feedbackRunId).toBe("e2e-retry-run");
   const retriedStore = await readConversationStore(page);
   expect(retriedStore.conversations.find((conversation) => conversation.id === retriedStore.activeConversationId)?.messages).toHaveLength(4);
 });
 
-test("keeps the composer fixed while long conversations scroll independently", async ({ page }) => {
+test("keeps the composer fixed while long streamed answers scroll independently", async ({ page }) => {
   const conversation = seedConversation("scroll-conversation", "长对话滚动", 20, "2026-07-13T01:00:00.000Z");
   await seedConversationStore(page, [conversation], conversation.id);
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  await page.route("**/api/agent", async (route) => {
+  await page.route("**/api/agent/stream", async (route) => {
     await gate;
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse("滚动中的新问题", "scroll-run")) });
+    await fulfillMockStream(route, mockAgentResponse("滚动中的新问题", "scroll-run"));
   });
   await page.goto("/chat");
   await selectMockMode(page);
@@ -309,7 +384,7 @@ test("uses a keyboard-accessible conversation drawer on mobile without horizonta
 test("keeps sources, tools, trace and feedback with the assistant answer that produced them", async ({ page }) => {
   let call = 0;
   let feedbackRunId = "";
-  await page.route("**/api/agent", async (route) => {
+  await page.route("**/api/agent/stream", async (route) => {
     call += 1;
     const question = String((JSON.parse(route.request().postData() ?? "{}") as { question?: string }).question ?? "");
     const response = call === 1 ? mockAgentResponse(question, "details-run-one", {
@@ -320,7 +395,7 @@ test("keeps sources, tools, trace and feedback with the assistant answer that pr
       finalAnswer: "第一轮有依据的回答。",
       structuredOutput: { scenario: "enterprise", intent: "knowledge_qa", answer: "第一轮有依据的回答。", evidence: [], toolsUsed: ["searchPolicy"], sources: ["第一轮政策来源"], confidence: 0.9, riskLevel: "low", nextAction: "继续" },
     }) : mockAgentResponse(question, "details-run-two", { finalAnswer: "第二轮独立回答。", structuredOutput: { scenario: "general", intent: "general_chat", answer: "第二轮独立回答。", evidence: [], toolsUsed: [], sources: [], confidence: 0.8, riskLevel: "low", nextAction: "结束" } });
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(response) });
+    await fulfillMockStream(route, response);
   });
   await page.route("**/api/ops/feedback", async (route) => {
     feedbackRunId = String((JSON.parse(route.request().postData() ?? "{}") as { runId?: string }).runId ?? "");
@@ -345,15 +420,15 @@ test("keeps sources, tools, trace and feedback with the assistant answer that pr
   await expect.poll(() => feedbackRunId).toBe("details-run-one");
 });
 
-test("does not revive a deleted conversation when its pending request finishes", async ({ page }) => {
+test("does not revive a deleted conversation when its pending stream finishes", async ({ page }) => {
   const first = seedConversation("pending-one", "待删除会话", 1, "2026-07-13T04:00:00.000Z");
   const second = seedConversation("safe-two", "保留会话", 1, "2026-07-13T03:00:00.000Z");
   await seedConversationStore(page, [first, second], first.id);
   let release: (() => void) | undefined;
   const gate = new Promise<void>((resolve) => { release = resolve; });
-  await page.route("**/api/agent", async (route) => {
+  await page.route("**/api/agent/stream", async (route) => {
     await gate;
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse("等待中的问题", "late-run")) }).catch(() => undefined);
+    await fulfillMockStream(route, mockAgentResponse("等待中的问题", "late-run")).catch(() => undefined);
   });
   await page.goto("/chat");
   await selectMockMode(page);
@@ -370,28 +445,32 @@ test("does not revive a deleted conversation when its pending request finishes",
   expect((await readConversationStore(page)).conversations.find((conversation) => conversation.id === second.id)?.messages).toHaveLength(2);
 });
 
-test("does not write a pending response into a conversation selected later", async ({ page }) => {
+test("does not write late stream events into a conversation selected later", async ({ page }) => {
   const first = seedConversation("switch-one", "发起请求的会话", 1, "2026-07-13T05:00:00.000Z");
   const second = seedConversation("switch-two", "切换后的会话", 1, "2026-07-13T04:00:00.000Z");
   await seedConversationStore(page, [first, second], first.id);
-  let release: (() => void) | undefined;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
-  await page.route("**/api/agent", async (route) => {
-    await gate;
-    await route.fulfill({ contentType: "application/json", body: JSON.stringify(mockAgentResponse("不能串写的问题", "late-switch-run")) }).catch(() => undefined);
-  });
   await page.goto("/chat");
   await selectMockMode(page);
-  await page.getByTestId("agent-question").fill("不能串写的问题");
+  await page.getByTestId("agent-question").fill("订单10001可以退货吗？请详细说明退货材料、办理步骤、时间限制、例外条件和全部注意事项。");
   await page.getByTestId("agent-run").click();
   await expect(page.getByTestId("assistant-pending")).toBeVisible();
-  await page.getByTestId("conversation-list-item").filter({ hasText: "切换后的会话" }).getByTestId("conversation-select").click();
+  await page.waitForFunction(() => (document.querySelector<HTMLElement>("[data-testid='stream-answer']")?.innerText.length ?? 0) > 0, undefined, { polling: "raf" });
+  const partialAnswer = await page.getByTestId("stream-answer").innerText();
+  await page.evaluate(() => {
+    const target = [...document.querySelectorAll<HTMLElement>("[data-testid='conversation-list-item']")]
+      .find((element) => element.innerText.includes("切换后的会话"));
+    target?.querySelector<HTMLButtonElement>("[data-testid='conversation-select']")?.click();
+  });
   await expect(page.getByTestId("chat-header")).toContainText("切换后的会话");
   await expect(page.getByTestId("assistant-pending")).toHaveCount(0);
-  release?.();
+  await expect(page.getByTestId("conversation-messages")).not.toContainText(partialAnswer);
+  await page.waitForTimeout(600);
   await expect.poll(async () => (await readConversationStore(page)).activeConversationId).toBe(second.id);
   const store = await readConversationStore(page);
   expect(store.conversations.find((conversation) => conversation.id === first.id)?.messages).toHaveLength(2);
   expect(store.conversations.find((conversation) => conversation.id === second.id)?.messages).toHaveLength(2);
-  expect(JSON.stringify(store)).not.toContain("不能串写的问题");
+  expect(JSON.stringify(store)).not.toContain("请详细说明退货材料");
+  await page.getByTestId("conversation-list-item").filter({ hasText: "发起请求的会话" }).getByTestId("conversation-select").click();
+  await expect(page.getByTestId("assistant-pending")).toHaveCount(0);
+  await expect(page.getByTestId("assistant-stopped")).toHaveCount(0);
 });

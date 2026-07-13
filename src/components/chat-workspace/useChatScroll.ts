@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const BOTTOM_THRESHOLD = 96;
 
-export function useChatScroll(params: { conversationId: string; messageCount: number; transientKey: string }) {
+export function useChatScroll(params: { conversationId: string; messageCount: number; transientKey: string; streamRevision?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const previousConversationId = useRef("");
   const previousMessageCount = useRef(0);
   const previousTransientKey = useRef("");
+  const previousStreamRevision = useRef(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 
   const updateNearBottom = useCallback(() => {
@@ -35,14 +36,16 @@ export function useChatScroll(params: { conversationId: string; messageCount: nu
     const conversationChanged = previousConversationId.current !== params.conversationId;
     const transientStarted = Boolean(params.transientKey) && previousTransientKey.current !== params.transientKey;
     const messagesChanged = previousMessageCount.current !== params.messageCount;
-    const shouldFollow = conversationChanged || transientStarted || (messagesChanged && nearBottomRef.current);
+    const streamChanged = previousStreamRevision.current !== (params.streamRevision ?? 0);
+    const shouldFollow = conversationChanged || transientStarted || ((messagesChanged || streamChanged) && nearBottomRef.current);
     previousConversationId.current = params.conversationId;
     previousMessageCount.current = params.messageCount;
     previousTransientKey.current = params.transientKey;
+    previousStreamRevision.current = params.streamRevision ?? 0;
     if (!shouldFollow) return;
     const frame = requestAnimationFrame(() => scrollToLatest("auto"));
     return () => cancelAnimationFrame(frame);
-  }, [params.conversationId, params.messageCount, params.transientKey, scrollToLatest]);
+  }, [params.conversationId, params.messageCount, params.streamRevision, params.transientKey, scrollToLatest]);
 
   return { containerRef, showJumpToLatest, onScroll: updateNearBottom, scrollToLatest };
 }

@@ -39,24 +39,52 @@ function UserMessage({ message }: { message: ConversationMessage }) {
 }
 
 function PendingAssistant({ turn, onRetry }: { turn: TransientChatTurn; onRetry: () => void }) {
+  const retryButton = turn.retryable === false ? null : (
+    <button type="button" data-testid="agent-retry" onClick={onRetry} className="mt-3 cursor-pointer rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+      <span data-testid="retry-generation">重试</span>
+    </button>
+  );
   if (turn.status === "failed") {
     return (
       <article data-testid="assistant-error" role="alert" className="flex justify-start">
         <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-rose-200 bg-white p-4 shadow-sm">
           <p className="font-semibold text-rose-800">本次发送失败</p>
+          {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-3 whitespace-pre-wrap break-words border-l-2 border-slate-200 pl-3 text-sm leading-6 text-ink-600">{turn.partialAnswer}</p> : null}
           <p className="mt-2 break-words text-sm leading-6 text-rose-700">{turn.error ?? "请求失败，请稍后重试。"}</p>
-          <button type="button" data-testid="agent-retry" onClick={onRetry} className="mt-3 cursor-pointer rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">重试</button>
+          {retryButton}
         </div>
       </article>
     );
   }
+  if (turn.status === "stopped") {
+    return (
+      <article data-testid="assistant-stopped" role="status" className="flex justify-start">
+        <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-amber-200 bg-white p-4 shadow-sm">
+          <p className="font-semibold text-amber-900">已停止生成</p>
+          {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-3 whitespace-pre-wrap break-words border-l-2 border-amber-200 pl-3 text-sm leading-6 text-ink-700">{turn.partialAnswer}</p> : null}
+          <p className="mt-2 text-xs leading-5 text-ink-500">未完成内容不会保存，也不会进入后续对话上下文。</p>
+          {retryButton}
+        </div>
+      </article>
+    );
+  }
+  const phaseOrder = ["understand", "retrieve", "tool", "generate", "complete"] as const;
+  const phaseLabels = { understand: "理解问题", retrieve: "检索依据", tool: "调用工具", generate: "生成回答", complete: "完成" } as const;
+  const currentPhaseIndex = turn.phase ? phaseOrder.indexOf(turn.phase) : -1;
+  const receivedPhases = new Set(turn.phases ?? (turn.phase ? [turn.phase] : []));
   return (
     <article data-testid="assistant-pending" aria-live="polite" className="flex justify-start">
-      <div className="w-full max-w-xl rounded-2xl rounded-tl-md border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-sm font-semibold text-ink-700">Agent 正在处理</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-500 sm:grid-cols-4">
-          {["理解问题", "检索依据", "调用工具", "生成回答"].map((step, index) => <span key={step} className={"rounded-md px-2 py-2 text-center " + (index === 0 ? "bg-brand-50 font-semibold text-brand-700" : "bg-slate-50")}>{step}</span>)}
+      <div data-testid="assistant-streaming" className="w-full max-w-2xl rounded-2xl rounded-tl-md border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="text-sm font-semibold text-ink-700">{turn.partialAnswer ? "正在生成回答" : "Agent 正在处理"}</p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-500 sm:grid-cols-5">
+          {phaseOrder.map((phase, index) => {
+            const active = phase === turn.phase;
+            const completed = !active && receivedPhases.has(phase) && index < currentPhaseIndex;
+            const skipped = !active && !receivedPhases.has(phase) && index < currentPhaseIndex;
+            return <span key={phase} data-testid={`stream-phase-${phase}`} data-phase-status={active ? "active" : completed ? "completed" : skipped ? "skipped" : "pending"} className={"rounded-md px-2 py-2 text-center " + (active ? "bg-brand-50 font-semibold text-brand-700" : completed ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-ink-500")}>{phaseLabels[phase]}{skipped ? " · 已跳过" : ""}</span>;
+          })}
         </div>
+        {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-4 whitespace-pre-wrap break-words text-[15px] leading-7 text-ink-800">{turn.partialAnswer}</p> : null}
       </div>
     </article>
   );
@@ -64,7 +92,12 @@ function PendingAssistant({ turn, onRetry }: { turn: TransientChatTurn; onRetry:
 
 export function MessageList(props: MessageListProps) {
   const transientForConversation = props.transientTurn?.conversationId === props.conversationId ? props.transientTurn : null;
-  const scroll = useChatScroll({ conversationId: props.conversationId, messageCount: props.messages.length, transientKey: transientForConversation?.requestId ?? "" });
+  const scroll = useChatScroll({
+    conversationId: props.conversationId,
+    messageCount: props.messages.length,
+    transientKey: transientForConversation?.requestId ?? "",
+    streamRevision: transientForConversation?.partialAnswer?.length ?? 0,
+  });
   return (
     <div className="relative min-h-0 flex-1 bg-slate-50/70">
       <div ref={scroll.containerRef} onScroll={scroll.onScroll} data-testid="message-list" className="h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-5 sm:px-6">
