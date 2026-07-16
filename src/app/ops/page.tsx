@@ -194,6 +194,11 @@ export default function OpsPage() {
               {!summary.storage.health.storageHealthy ? <p className="mt-1 text-xs text-amber-800">最近错误类型：{summary.storage.health.lastErrorType || "storage_write_failed"}</p> : null}
               {summary.storage.health.pendingWrites > 0 ? <p className="mt-1 text-xs text-ink-500">待完成写入：{summary.storage.health.pendingWrites}</p> : null}
             </article>
+            <article className={`rounded-lg border p-5 shadow-sm ${summary.serverStorage?.storageMode === "server" ? "border-emerald-200 bg-emerald-50/50" : summary.serverStorage?.storageMode === "degraded" ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
+              <p className="text-sm text-ink-600">当前匿名工作区持久化</p>
+              <p className="mt-2 text-2xl font-semibold text-ink-900">{summary.serverStorage?.storageMode ?? "local"}</p>
+              <p className="mt-2 text-xs leading-5 text-ink-600">会话 {summary.serverStorage?.conversationCount ?? 0} · 消息 {summary.serverStorage?.messageCount ?? 0} · 知识文档 {summary.serverStorage?.knowledgeDocumentCount ?? 0} · 迁移 {summary.serverStorage?.migrationCount ?? 0}。仅统计此浏览器匿名工作区。</p>
+            </article>
           </section>
 
           <section className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">

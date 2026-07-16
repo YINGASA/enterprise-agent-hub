@@ -1,7 +1,10 @@
 {
   "name": "enterprise-agent-hub",
-  "version": "2.0.4",
+  "version": "2.2.0",
   "private": true,
+  "engines": {
+    "node": ">=20.19.0 <21"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,11 +13,19 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:storage": "vitest run src/lib/storage src/lib/server-storage src/app/api/storage src/app/api/__tests__/conversationStorageRoutes.test.ts src/app/api/__tests__/opsStorageSummary.test.ts src/app/api/__tests__/agentRoute.test.ts src/app/api/__tests__/agentStreamRoute.test.ts",
+    "test:storage:postgres": "vitest run src/lib/server-storage/__tests__/postgres.integration.test.ts --reporter=verbose",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
     "evaluation:mock": "vitest run src/lib/evaluation/__tests__/fullMockEvaluation.test.ts --reporter=verbose",
     "e2e": "node e2e/run.mjs",
     "audit:prod": "npm audit --omit=dev --registry=https://registry.npmjs.org"
   },
   "dependencies": {
+    "@prisma/client": "6.19.3",
     "next": "16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -27,6 +38,7 @@
     "@types/react-dom": "19.0.4",
     "autoprefixer": "10.4.21",
     "postcss": "8.5.16",
+    "prisma": "6.19.3",
     "tailwindcss": "3.4.17",
     "typescript": "5.8.3",
     "vitest": "3.2.7"

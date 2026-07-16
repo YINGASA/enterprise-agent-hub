@@ -6,13 +6,14 @@ import {
   retrieveChunks,
   splitDocument,
 } from "@/lib/retrieval/hybridRetriever";
-import type { AgentScenario, KnowledgeDocument, KnowledgePackId, RetrieverMode } from "@/types";
+import type { AgentScenario, KnowledgeChunk, KnowledgeDocument, KnowledgePackId, RetrieverMode } from "@/types";
 
 type RagPipelineOptions = {
   topK?: number;
   packId?: KnowledgePackId;
   scenario?: AgentScenario | "ai-engineering";
   retrieverMode?: RetrieverMode;
+  chunks?: KnowledgeChunk[];
 };
 
 const scenarioPackMap: Partial<Record<AgentScenario | "ai-engineering", KnowledgePackId>> = {
@@ -31,6 +32,7 @@ export function runMockRagPipeline(question: string, documents: KnowledgeDocumen
   const result = retriever.retrieve({
     query: question,
     documents,
+    chunks: options.chunks,
     scenario: options.scenario,
     packId: preferredPackId,
     topK: options.topK ?? 3,

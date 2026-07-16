@@ -7,6 +7,7 @@ import type {
   AgentScenario,
   AgentStep,
   AgentStructuredOutput,
+  KnowledgeChunk,
   KnowledgeDocument,
   RagAnswer,
   ToolName,
@@ -368,7 +369,7 @@ export function generateMockAgentFinalAnswer(
   };
 }
 
-export function runAgentPipeline(question: string, documents: KnowledgeDocument[]): AgentPipelineResult {
+export function runAgentPipeline(question: string, documents: KnowledgeDocument[], knowledgeChunks?: KnowledgeChunk[]): AgentPipelineResult {
   const steps: AgentStep[] = [];
   const createdAt = new Date().toISOString();
 
@@ -396,7 +397,7 @@ export function runAgentPipeline(question: string, documents: KnowledgeDocument[
   const ragStart = Date.now();
   if (route.needRag && !shouldSkipRagForClarification) {
     const ragQuestion = route.intent === "policy_check" ? `${question} 退货 售后 签收 拆封 7天无理由 质量问题` : question;
-    ragAnswer = runMockRagPipeline(ragQuestion, documents, { topK: 4, packId: inferRagPackId(question, route), scenario: route.scenario });
+    ragAnswer = runMockRagPipeline(ragQuestion, documents, { topK: 4, packId: inferRagPackId(question, route), scenario: route.scenario, chunks: knowledgeChunks });
     steps.push(
       makeStep({
         id: "step-rag",

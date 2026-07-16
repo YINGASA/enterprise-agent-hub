@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/chat-workspace/ConfirmDialog";
 import { ConversationSidebar } from "@/components/chat-workspace/ConversationSidebar";
 import { MessageList } from "@/components/chat-workspace/MessageList";
 import { useAgentWorkspace } from "@/components/agent-workspace/useAgentWorkspace";
+import { StorageStatusPanel } from "@/components/StorageStatusPanel";
 
 const recommendedQuestions = [
   "我出差回来想报销，应该准备哪些材料？",
@@ -80,6 +81,7 @@ export function AgentWorkspace() {
         onRequestClearCurrent={requestClear}
         onOpenHistory={openHistory}
         activeHasMessages={hasMessages}
+        storageStatus={workspace.storageStatus}
       />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
@@ -93,6 +95,7 @@ export function AgentWorkspace() {
           onRequestClear={requestClear}
           onRequestDelete={() => requestDelete(activeConversationId)}
         />
+        <StorageStatusPanel status={workspace.storageStatus} onRetry={workspace.refreshStorage} onMigrationComplete={workspace.refreshStorage} />
         <MessageList
           conversationId={activeConversationId}
           messages={workspace.conversationMessages}
@@ -114,6 +117,7 @@ export function AgentWorkspace() {
           isLoading={workspace.isLoading}
           isCheckingHealth={workspace.isCheckingHealth}
           realApiUnavailable={workspace.realApiUnavailable}
+          storageWritable={workspace.storageStatus !== null && workspace.storageStatus.storageMode !== "degraded"}
           llmStatus={workspace.llmStatus}
           llmStatusError={workspace.llmStatusError}
           healthResult={workspace.healthResult}

@@ -234,7 +234,7 @@ export function buildMetadata(query: string, selected: RetrievedChunk[], candida
 
 export function retrieveHybrid(input: RetrieverInput): RetrieverResult {
   const preferredPackId = (input.packId ?? (input.scenario ? scenarioPackMap[input.scenario] : undefined)) as KnowledgePackId | undefined;
-  const chunks = input.documents.flatMap((document) => splitDocument(document));
+  const chunks = input.chunks ?? input.documents.flatMap((document) => splitDocument(document));
   const topK = input.topK ?? 3;
   const candidates = scoreHybridCandidates(input.query, chunks, preferredPackId);
   const selected = selectDiverse(candidates, topK);

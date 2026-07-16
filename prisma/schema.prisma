@@ -1,0 +1,168 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MessageRole {
+  USER      @map("user")
+  ASSISTANT @map("assistant")
+}
+
+enum KnowledgeSourceType {
+  DEFAULT     @map("default")
+  USER_UPLOAD @map("user_upload")
+  USER_PASTE  @map("user_paste")
+}
+
+enum ImportJobStatus {
+  PENDING   @map("pending")
+  RUNNING   @map("running")
+  COMPLETED @map("completed")
+  FAILED    @map("failed")
+}
+
+enum StorageMigrationStatus {
+  PENDING   @map("pending")
+  RUNNING   @map("running")
+  COMPLETED @map("completed")
+  FAILED    @map("failed")
+  CONFLICT  @map("conflict")
+}
+
+model Workspace {
+  id               String             @id @db.VarChar(64)
+  name             String             @db.VarChar(160)
+  sessionTokenHash String             @unique @map("session_token_hash") @db.VarChar(64)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  conversations    Conversation[]
+  messages         Message[]
+  knowledgeDocuments KnowledgeDocument[]
+  knowledgeChunks  KnowledgeChunk[]
+  importJobs       ImportJob[]
+  storageMigrations StorageMigration[]
+
+  @@map("workspaces")
+}
+
+model Conversation {
+  workspaceId        String    @map("workspace_id") @db.VarChar(64)
+  id                 String    @db.VarChar(128)
+  title              String    @db.VarChar(240)
+  titleSource        String    @default("auto") @map("title_source") @db.VarChar(16)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  revision           Int       @default(0)
+  schemaVersion      Int       @default(1) @map("schema_version")
+  conversationSummary Json?    @map("conversation_summary") @db.JsonB
+  deletedAt          DateTime? @map("deleted_at") @db.Timestamptz(3)
+  workspace          Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages           Message[]
+
+  @@id([workspaceId, id])
+  @@index([workspaceId, updatedAt])
+  @@map("conversations")
+}
+
+model Message {
+  workspaceId     String      @map("workspace_id") @db.VarChar(64)
+  id              String      @db.VarChar(128)
+  conversationId  String      @map("conversation_id") @db.VarChar(128)
+  role            MessageRole
+  content         String      @db.Text
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  runId           String?     @map("run_id") @db.VarChar(128)
+  responseMode    String?     @map("response_mode") @db.VarChar(64)
+  intent          String?     @db.VarChar(64)
+  scenario        String?     @db.VarChar(64)
+  assistantDetails Json?      @map("assistant_details") @db.JsonB
+  messageOrder    Int         @map("message_order")
+  workspace       Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation    Conversation @relation(fields: [workspaceId, conversationId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@id([workspaceId, id])
+  @@unique([workspaceId, conversationId, messageOrder])
+  @@index([workspaceId, conversationId, createdAt])
+  @@map("messages")
+}
+
+model KnowledgeDocument {
+  workspaceId       String              @map("workspace_id") @db.VarChar(64)
+  id                String              @db.VarChar(128)
+  title             String              @db.VarChar(240)
+  content           String              @db.Text
+  sourceType        KnowledgeSourceType @map("source_type")
+  enabled           Boolean             @default(true)
+  tags              Json                @default("[]") @db.JsonB
+  metadata          Json                @default("{}") @db.JsonB
+  checksum          String              @db.VarChar(128)
+  category          String?             @db.VarChar(160)
+  summary           String?             @db.Text
+  packId            String?             @map("pack_id") @db.VarChar(128)
+  originalFileName  String?             @map("original_file_name") @db.VarChar(260)
+  importedAt        DateTime?           @map("imported_at") @db.Timestamptz(3)
+  suggestedQuestions Json               @default("[]") @map("suggested_questions") @db.JsonB
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks            KnowledgeChunk[]
+
+  @@id([workspaceId, id])
+  @@index([workspaceId, enabled, updatedAt])
+  @@index([workspaceId, checksum])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  workspaceId  String            @map("workspace_id") @db.VarChar(64)
+  id           String            @db.VarChar(128)
+  documentId   String            @map("document_id") @db.VarChar(128)
+  chunkIndex   Int               @map("chunk_index")
+  content      String            @db.Text
+  keywords     Json              @default("[]") @db.JsonB
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  document     KnowledgeDocument @relation(fields: [workspaceId, documentId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@id([workspaceId, id])
+  @@unique([workspaceId, documentId, chunkIndex])
+  @@index([workspaceId, documentId])
+  @@map("knowledge_chunks")
+}
+
+model ImportJob {
+  workspaceId String          @map("workspace_id") @db.VarChar(64)
+  id          String          @db.VarChar(128)
+  status      ImportJobStatus @default(PENDING)
+  documentId  String?         @map("document_id") @db.VarChar(128)
+  errorCode   String?         @map("error_code") @db.VarChar(64)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, id])
+  @@index([workspaceId, createdAt])
+  @@map("import_jobs")
+}
+
+model StorageMigration {
+  workspaceId     String                 @map("workspace_id") @db.VarChar(64)
+  migrationId     String                 @map("migration_id") @db.VarChar(128)
+  status          StorageMigrationStatus @default(PENDING)
+  importedCount   Int                    @default(0) @map("imported_count")
+  skippedCount    Int                    @default(0) @map("skipped_count")
+  conflictedCount Int                    @default(0) @map("conflicted_count")
+  failedCount     Int                    @default(0) @map("failed_count")
+  result          Json?                  @db.JsonB
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, migrationId])
+  @@index([workspaceId, createdAt])
+  @@map("storage_migrations")
+}

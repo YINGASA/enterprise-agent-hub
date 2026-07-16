@@ -7,7 +7,8 @@ import { buildContextPlan, type ContextPlan } from "@/lib/conversation/context-m
 import { buildRollingSummary } from "@/lib/conversation/context-summary";
 import { selectHistory } from "@/lib/conversation/history-selector";
 import { createContextTrace } from "@/lib/conversation/context-trace";
-import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStreamMetadata, AgentStreamPhase, AgentStructuredOutput, ContextCandidateMessage, ConversationContext, ConversationContextMeta, ConversationSummaryState, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
+import { splitDocument } from "@/lib/rag";
+import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStreamMetadata, AgentStreamPhase, AgentStructuredOutput, ContextCandidateMessage, ConversationContext, ConversationContextMeta, ConversationSummaryState, ImportedKnowledgeDocument, KnowledgeChunk, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
 
 const validTools: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "generateCustomerReply"];
 
@@ -389,11 +390,15 @@ export async function runAgentApiPipeline(
   suppliedMeta?: ConversationContextMeta,
   runtime?: AgentApiPipelineRuntime,
   conversationSummary?: ConversationSummaryState,
+  persistedUserKnowledgeChunks?: KnowledgeChunk[],
 ): Promise<AgentApiResponse> {
   const legacyMeta = suppliedMeta ?? { contextApplied: false, contextMessageCount: 0, contextTruncated: false, contextCharacterCount: 0 };
   const pipelineDocuments = [...documents, ...userDocuments.filter((document) => document.enabled !== false)];
+  const pipelineKnowledgeChunks = persistedUserKnowledgeChunks
+    ? [...documents.flatMap((document) => splitDocument(document)), ...persistedUserKnowledgeChunks]
+    : undefined;
   const ambiguousMaterialFollowUp = /那.*材料|需要准备什么材料/.test(question);
-  let pipeline = runAgentPipeline(question, pipelineDocuments);
+  let pipeline = runAgentPipeline(question, pipelineDocuments, pipelineKnowledgeChunks);
   const normalizedCandidates: ContextCandidateMessage[] = Array.isArray(contextCandidates)
     ? contextCandidates
     : contextCandidates.messages.map((message, index) => ({ id: `legacy-context-${index}`, ...message }));
@@ -418,7 +423,7 @@ export async function runAgentApiPipeline(
   };
   const orderReturnFollowUp = ambiguousMaterialFollowUp && hasRecentOrderReturnContext(effectiveContext);
   if (orderReturnFollowUp) {
-    pipeline = runAgentPipeline("订单退货需要准备什么材料？", pipelineDocuments);
+    pipeline = runAgentPipeline("订单退货需要准备什么材料？", pipelineDocuments, pipelineKnowledgeChunks);
     const answer = "结合刚才的订单退货语境，通常需要准备订单号、退货原因、商品及包装状态说明；如涉及质量问题，再补充清晰照片或视频。提交前还应核对签收时间和商品是否拆封。";
     pipeline = { ...pipeline, question, finalAnswer: answer, structuredOutput: { ...pipeline.structuredOutput, scenario: pipeline.route.scenario, intent: pipeline.route.intent, answer, needsClarification: false, missingFields: undefined, clarificationQuestion: undefined, nextAction: "准备退货材料并在订单详情发起售后申请" } };
   } else if (ambiguousMaterialFollowUp && !contextPlan.sections.recentMessages.length && !contextPlan.sections.selectedHistory.length) {

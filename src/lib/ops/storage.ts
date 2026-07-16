@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { feedbackLimits } from "@/lib/ops/securityLimits";
+import type { SafeWorkspaceStorageMetrics } from "@/lib/server-storage/status";
 import type { AgentApiResponse, AgentRequestAction, ChatAnswerFeedbackValue, EvaluationRunResponse } from "@/types";
 
 const MAX_RECENT_ITEMS = 80;
@@ -140,6 +141,7 @@ export type OpsSummary = {
     retentionLimit: number;
     health: OpsStorageHealth;
   };
+  serverStorage?: SafeWorkspaceStorageMetrics;
 };
 
 function dataDir() {
@@ -506,7 +508,7 @@ export async function recordEvaluationRun(result: EvaluationRunResponse) {
   await appendJsonLine("evaluations.jsonl", item);
 }
 
-export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary> {
+export async function getOpsSummary(llmConfigured: boolean, serverStorage?: SafeWorkspaceStorageMetrics): Promise<OpsSummary> {
   const runs = await readJsonLines<OpsAgentRunRecord>("agent-runs.jsonl", 200);
   const feedback = await readJsonLines<OpsFeedbackRecord>("feedback.jsonl", 200);
   const evaluations = await readJsonLines<OpsEvaluationRecord>("evaluations.jsonl", 20);
@@ -573,5 +575,6 @@ export async function getOpsSummary(llmConfigured: boolean): Promise<OpsSummary>
       retentionLimit: maxStoredItems(),
       health: publicStorageHealth(),
     },
+    serverStorage,
   };
 }

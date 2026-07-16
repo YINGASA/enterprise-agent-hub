@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useModalFocus } from "@/components/chat-workspace/useModalFocus";
+import type { PublicStorageStatus } from "@/lib/storage/status";
 import type { Conversation } from "@/types";
 
 type ConversationSidebarProps = {
@@ -11,11 +12,12 @@ type ConversationSidebarProps = {
   onCloseMobile: () => void;
   onNewConversation: () => void;
   onSelectConversation: (conversationId: string) => void;
-  onRenameConversation: (conversationId: string, title: string) => string | null;
+  onRenameConversation: (conversationId: string, title: string) => string | null | Promise<string | null>;
   onRequestDelete: (conversationId: string) => void;
   onRequestClearCurrent: () => void;
   onOpenHistory: () => void;
   activeHasMessages: boolean;
+  storageStatus?: PublicStorageStatus | null;
 };
 
 function formatUpdatedAt(value: string) {
@@ -26,7 +28,7 @@ function formatUpdatedAt(value: string) {
 
 type SidebarPanelProps = Omit<ConversationSidebarProps, "mobileOpen" | "onCloseMobile"> & { onSelected?: () => void };
 
-function SidebarPanel({ conversations, activeConversationId, activeHasMessages, onNewConversation, onSelectConversation, onRenameConversation, onRequestDelete, onRequestClearCurrent, onOpenHistory, onSelected }: SidebarPanelProps) {
+function SidebarPanel({ conversations, activeConversationId, activeHasMessages, storageStatus, onNewConversation, onSelectConversation, onRenameConversation, onRequestDelete, onRequestClearCurrent, onOpenHistory, onSelected }: SidebarPanelProps) {
   const [query, setQuery] = useState("");
   const [renamingId, setRenamingId] = useState("");
   const [renameValue, setRenameValue] = useState("");
@@ -50,9 +52,9 @@ function SidebarPanel({ conversations, activeConversationId, activeHasMessages, 
     setRenameError("");
   }
 
-  function submitRename() {
+  async function submitRename() {
     if (!renamingId) return;
-    const error = onRenameConversation(renamingId, renameValue);
+    const error = await onRenameConversation(renamingId, renameValue);
     if (error) {
       setRenameError(error);
       return;
@@ -79,11 +81,11 @@ function SidebarPanel({ conversations, activeConversationId, activeHasMessages, 
                 <div>
                   <label>
                     <span className="sr-only">新的会话标题</span>
-                    <input autoFocus data-testid="conversation-rename-input" value={renameValue} onChange={(event) => { setRenameValue(event.target.value); setRenameError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); submitRename(); } else if (event.key === "Escape") { event.preventDefault(); cancelRename(); } }} className="w-full rounded-md border border-brand-300 bg-white px-2 py-1.5 text-sm text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                    <input autoFocus data-testid="conversation-rename-input" value={renameValue} onChange={(event) => { setRenameValue(event.target.value); setRenameError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void submitRename(); } else if (event.key === "Escape") { event.preventDefault(); cancelRename(); } }} className="w-full rounded-md border border-brand-300 bg-white px-2 py-1.5 text-sm text-ink-800 focus:outline-none focus:ring-2 focus:ring-brand-500" />
                   </label>
                   {renameError ? <p role="alert" className="mt-1 text-xs text-rose-700">{renameError}</p> : null}
                   <div className="mt-2 flex gap-2">
-                    <button type="button" data-testid="conversation-rename-save" onClick={submitRename} className="cursor-pointer rounded-md bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">保存</button>
+                    <button type="button" data-testid="conversation-rename-save" onClick={() => void submitRename()} className="cursor-pointer rounded-md bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">保存</button>
                     <button type="button" onClick={cancelRename} className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">取消</button>
                   </div>
                 </div>
@@ -107,7 +109,13 @@ function SidebarPanel({ conversations, activeConversationId, activeHasMessages, 
         <button type="button" data-testid="conversation-clear-mobile" disabled={!activeHasMessages} onClick={() => { onRequestClearCurrent(); onSelected?.(); }} className="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50">清空当前</button>
         <button type="button" data-testid="chat-history-open-mobile" onClick={() => { onOpenHistory(); onSelected?.(); }} className="cursor-pointer rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-ink-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">运行记录</button>
       </div>
-      <div className="shrink-0 border-t border-slate-200 p-3 text-xs leading-5 text-ink-500">会话仅保存在当前浏览器。搜索和重命名不会发送到服务器。</div>
+      <div className={`shrink-0 border-t border-slate-200 p-3 text-xs leading-5 ${storageStatus?.storageMode === "degraded" ? "bg-amber-50 text-amber-800" : "text-ink-500"}`}>
+        {!storageStatus ? "正在确认存储模式…" : storageStatus.storageMode === "server"
+          ? "服务端存储已连接，会话按匿名工作区隔离并持久化。"
+          : storageStatus.storageMode === "degraded"
+            ? "服务端存储暂不可用：当前只读，写操作不会静默保存到本地。"
+            : "本地兼容模式：会话保存在当前浏览器。"}
+      </div>
     </div>
   );
 }
