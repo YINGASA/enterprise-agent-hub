@@ -458,6 +458,7 @@ export async function runAgentApiPipeline(
     if (runtime?.streaming) runtime.onStreamMetadata?.({ streamingUsed: false, streamFallback: true, deltaCount: 0 });
     return {
       ...pipeline,
+      ...responsePatch,
       api: metaApi({
         requestedMode,
         responseMode: "real_error_fallback",
@@ -590,6 +591,7 @@ export async function runAgentApiPipeline(
   const fallbackReason = llmResult.errorType ?? "llm_error";
   return {
     ...pipeline,
+    ...responsePatch,
     steps: [
       ...pipeline.steps,
       makeStep({

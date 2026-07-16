@@ -54,9 +54,13 @@ export function validateConversationSummary(summary: ConversationSummaryState | 
   if (index < 0) return { valid: false, reason: "cursor_not_found", coveredMessageCount: 0 };
   if (messages[index]?.role !== "assistant") return { valid: false, reason: "cursor_not_assistant", coveredMessageCount: 0 };
   const complete = turns(messages); const protectedStart = Math.max(0, complete.length - protectedRecentTurnCount);
+  const cursorTurnIndex = complete.findIndex((turn) => turn.assistant.id === summary.throughMessageId);
+  if (cursorTurnIndex < 0) return { valid: false, reason: "cursor_not_assistant", coveredMessageCount: 0 };
+  const coveredMessageCount = (cursorTurnIndex + 1) * 2;
+  if (summary.sourceMessageCount !== coveredMessageCount) return { valid: false, reason: "invalid_source_count", coveredMessageCount: 0 };
   const protectedIds = new Set(complete.slice(protectedStart).flatMap((turn) => [turn.user.id, turn.assistant.id]));
   if (protectedIds.has(summary.throughMessageId)) return { valid: false, reason: "cursor_in_protected_recent", coveredMessageCount: 0 };
-  return { valid: true, coveredMessageCount: index + 1 };
+  return { valid: true, coveredMessageCount };
 }
 
 function concise(value: string) { return value.replace(/\s+/g, " ").trim().slice(0, 240); }

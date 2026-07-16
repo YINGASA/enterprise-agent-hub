@@ -36,4 +36,11 @@ describe("rolling conversation summary", () => {
     expect(result).toEqual({ valid: false, reason: "cursor_not_assistant", coveredMessageCount: 0 });
     expect(JSON.stringify(result)).not.toContain(messages[0]?.content ?? "");
   });
+
+  it("rejects a cursor whose source count does not match the covered complete turns", () => {
+    const messages = Array.from({ length: 8 }, (_, index) => turn(index + 1)).flat();
+    const result = validateConversationSummary({ text: "old summary", throughMessageId: "a-4", version: 1, updatedAt: "2026-07-16T00:00:00.000Z", sourceMessageCount: 6 }, messages);
+
+    expect(result).toEqual({ valid: false, reason: "invalid_source_count", coveredMessageCount: 0 });
+  });
 });
