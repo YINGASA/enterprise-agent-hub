@@ -1,4 +1,5 @@
-import type { LlmClientConfig, LlmErrorType, LlmGenerateOptions, LlmGenerateResult, LlmMessage, LlmProvider, LlmProxyType } from "@/types";
+import { createOpenAiSseParser, extractJsonStringValuePrefix } from "@/lib/llm/sse";
+import type { LlmClientConfig, LlmErrorType, LlmGenerateOptions, LlmGenerateResult, LlmMessage, LlmProvider, LlmProxyType, LlmStreamResult } from "@/types";
 
 type ChatCompletionResponse = {
   choices?: Array<{
@@ -236,13 +237,13 @@ function failedResult(params: {
   };
 }
 
-function buildRequestBody(messages: LlmMessage[], options: LlmGenerateOptions, includeResponseFormat: boolean) {
+function buildRequestBody(messages: LlmMessage[], options: LlmGenerateOptions, includeResponseFormat: boolean, stream = false) {
   return {
     model: getLlmConfig().model,
     messages,
     temperature: options.temperature ?? 0.2,
     max_tokens: options.maxTokens ?? 800,
-    stream: false,
+    stream,
     ...(includeResponseFormat && options.responseFormat === "json_object" ? { response_format: { type: "json_object" } } : {}),
   };
 }
@@ -265,6 +266,9 @@ export async function callOpenAICompatibleChat(
   }
 
   const controller = new AbortController();
+  const abortFromCaller = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abortFromCaller();
+  else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
 
   async function send(includeResponseFormat: boolean) {
@@ -381,5 +385,205 @@ export async function callOpenAICompatibleChat(
     });
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
+  }
+}
+
+function streamResultFromComplete(result: LlmGenerateResult, streamFallback: boolean, deltaCount: number): LlmStreamResult {
+  return { ...result, streamingUsed: false, streamFallback, deltaCount };
+}
+
+function isStreamUnsupported(response: { status: number }, preview: string) {
+  if (![400, 404, 405, 415, 422, 501].includes(response.status)) return false;
+  const normalized = preview.toLowerCase();
+  return normalized.includes("stream") && (normalized.includes("unsupported") || normalized.includes("not support") || normalized.includes("unknown") || normalized.includes("invalid"));
+}
+
+/**
+ * Calls an OpenAI-compatible SSE endpoint without exposing raw upstream events.
+ * Structured JSON is buffered for final validation; only the decoded `answer`
+ * string is released incrementally.
+ */
+export async function streamOpenAICompatibleChat(
+  messages: LlmMessage[],
+  options: LlmGenerateOptions = {},
+  onAnswerDelta: (delta: string) => void = () => undefined,
+): Promise<LlmStreamResult> {
+  const config = getLlmConfig();
+  const startedAt = Date.now();
+  const firstMissing = config.missing[0];
+  if (firstMissing) return streamResultFromComplete(failedResult({ config, startedAt, errorType: firstMissing, errorMessage: firstMissing }), true, 0);
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abortFromCaller();
+  else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.timeoutMs);
+
+  async function send(includeResponseFormat: boolean) {
+    const proxyAgent = await createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
+    const requestInit: FetchInitWithDispatcher = {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify(buildRequestBody(messages, options, includeResponseFormat, true)),
+      signal: controller.signal,
+      ...(proxyAgent ? { dispatcher: proxyAgent } : {}),
+    };
+    if (proxyAgent) {
+      const { fetch: undiciFetch } = await import("undici");
+      return undiciFetch(config.requestUrl, requestInit as Parameters<typeof undiciFetch>[1]);
+    }
+    return fetch(config.requestUrl, requestInit);
+  }
+
+  let emittedAnswer = "";
+  let deltaCount = 0;
+  const emitAnswer = (answer: string) => {
+    if (!answer.startsWith(emittedAnswer)) return;
+    const delta = answer.slice(emittedAnswer.length);
+    if (!delta) return;
+    emittedAnswer = answer;
+    deltaCount += 1;
+    onAnswerDelta(delta);
+  };
+  const fallbackToComplete = async () => {
+    const result = await callOpenAICompatibleChat(messages, options);
+    const answer = result.parsedJson && typeof result.parsedJson.answer === "string" ? result.parsedJson.answer : "";
+    emitAnswer(answer);
+    return streamResultFromComplete(result, true, deltaCount);
+  };
+
+  try {
+    let response = await send(options.responseFormat === "json_object");
+    if (!response.ok && options.responseFormat === "json_object") {
+      const preview = (await response.text()).slice(0, 500);
+      if (response.status === 400 && preview.toLowerCase().includes("response_format")) response = await send(false);
+      else if (isStreamUnsupported(response, preview)) return await fallbackToComplete();
+      else return { ...failedResult({ config, startedAt, errorType: "http_error", errorMessage: `HTTP ${response.status} ${response.statusText}`, httpStatus: response.status, statusText: response.statusText, responseBodyPreview: preview }), streamingUsed: false, streamFallback: false, deltaCount };
+    }
+
+    if (!response.ok) {
+      const preview = (await response.text()).slice(0, 500);
+      if (isStreamUnsupported(response, preview)) return await fallbackToComplete();
+      return { ...failedResult({ config, startedAt, errorType: "http_error", errorMessage: `HTTP ${response.status} ${response.statusText}`, httpStatus: response.status, statusText: response.statusText, responseBodyPreview: preview }), streamingUsed: false, streamFallback: false, deltaCount };
+    }
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (!contentType.includes("text/event-stream")) {
+      const rawText = await response.text();
+      try {
+        const raw = JSON.parse(rawText) as ChatCompletionResponse;
+        const content = raw.choices?.[0]?.message?.content;
+        if (typeof content === "string" && content) {
+          const parsed = safeParseJson(content);
+          const answer = parsed.data && typeof parsed.data.answer === "string" ? parsed.data.answer : "";
+          emitAnswer(answer);
+          return {
+            content,
+            parsedJson: parsed.data,
+            raw: null,
+            model: raw.model ?? config.model,
+            provider: config.provider,
+            mode: "real",
+            durationMs: Date.now() - startedAt,
+            requestUrl: config.requestUrl,
+            hasProxy: config.hasProxy,
+            proxyType: config.proxyType,
+            maskedProxyUrl: config.maskedProxyUrl,
+            timeoutMs: config.timeoutMs,
+            httpStatus: response.status,
+            statusText: response.statusText,
+            rawContentPreview: parsed.rawContentPreview,
+            parseError: parsed.error,
+            errorType: parsed.error ? "json_parse_error" : undefined,
+            errorMessage: parsed.error,
+            error: parsed.error,
+            streamingUsed: false,
+            streamFallback: true,
+            deltaCount,
+          };
+        }
+      } catch {
+        // Fall through to the existing complete-response implementation.
+      }
+      return await fallbackToComplete();
+    }
+
+    if (!response.body) return await fallbackToComplete();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let content = "";
+    let sawDone = false;
+    const parser = createOpenAiSseParser((event) => {
+      if (event.type === "done") {
+        sawDone = true;
+        return;
+      }
+      content += event.content;
+      emitAnswer(extractJsonStringValuePrefix(content, "answer"));
+    });
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parser.push(decoder.decode(value, { stream: true }));
+      }
+      parser.push(decoder.decode());
+      parser.finish();
+    } finally {
+      reader.releaseLock();
+    }
+    if (!content && !sawDone) return await fallbackToComplete();
+
+    const parsed = safeParseJson(content);
+    if (parsed.data && typeof parsed.data.answer === "string") emitAnswer(parsed.data.answer);
+    return {
+      content,
+      parsedJson: parsed.data,
+      raw: null,
+      model: config.model,
+      provider: config.provider,
+      mode: "real",
+      durationMs: Date.now() - startedAt,
+      requestUrl: config.requestUrl,
+      hasProxy: config.hasProxy,
+      proxyType: config.proxyType,
+      maskedProxyUrl: config.maskedProxyUrl,
+      timeoutMs: config.timeoutMs,
+      httpStatus: response.status,
+      statusText: response.statusText,
+      rawContentPreview: parsed.rawContentPreview,
+      parseError: parsed.error,
+      errorType: parsed.error ? "json_parse_error" : undefined,
+      errorMessage: parsed.error,
+      error: parsed.error,
+      streamingUsed: true,
+      streamFallback: false,
+      deltaCount,
+    };
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    const typedError = error instanceof Error ? (error as ErrorWithCause) : null;
+    return {
+      ...failedResult({
+        config,
+        startedAt,
+        errorType: timedOut ? "timeout_error" : "network_error",
+        errorName: typedError?.name ?? "UnknownError",
+        errorMessage: timedOut ? `Request timed out after ${config.timeoutMs}ms.` : typedError?.message ?? "Unknown network error.",
+        causeMessage: typedError?.cause?.message,
+        causeCode: typedError?.cause?.code,
+      }),
+      streamingUsed: deltaCount > 0,
+      streamFallback: false,
+      deltaCount,
+    };
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abortFromCaller);
   }
 }

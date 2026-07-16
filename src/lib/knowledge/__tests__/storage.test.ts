@@ -81,6 +81,31 @@ describe("knowledge storage V2", () => {
     expect(result.notice).toContain("1");
   });
 
+  it("preserves user-provided recruitment content without treating it as a retired built-in scenario", () => {
+    const storage = installLocalStorage();
+    const userDocument = document({
+      id: "user-hiring-policy",
+      title: "用户自定义招聘制度",
+      category: "用户导入",
+      tags: ["招聘", "面试"],
+      content: "这是用户自行导入的企业招聘制度，包含候选人面试材料和内部审批要求。",
+      packId: "enterprise-policy",
+      enabled: true,
+      sourceType: "user_paste",
+    });
+
+    expect(writeUserKnowledgeDocuments([userDocument])).toMatchObject({ ok: true });
+    expect(readUserKnowledgeDocumentsWithStatus().data).toEqual([
+      expect.objectContaining({
+        id: "user-hiring-policy",
+        title: "用户自定义招聘制度",
+        enabled: true,
+        sourceType: "user_paste",
+      }),
+    ]);
+    expect(storage.get(USER_KNOWLEDGE_STORAGE_KEY)).toContain("用户自定义招聘制度");
+  });
+
   it("rejects document count, tag and content values beyond shared limits", () => {
     installLocalStorage();
     const tooMany = Array.from({ length: agentRequestLimits.userDocuments + 1 }, (_, index) => document({ id: `doc-${index}` }));

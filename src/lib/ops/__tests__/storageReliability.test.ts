@@ -5,8 +5,10 @@ import path from "node:path";
 import {
   getOpsStorageHealth,
   getOpsSummary,
+  recordAgentAbortedRun,
   recordAgentRun,
   recordChatFeedback,
+  validateFeedbackRun,
   type OpsAgentRunRecord,
 } from "@/lib/ops/storage";
 import type { AgentApiResponse } from "@/types";
@@ -91,6 +93,148 @@ describe("Ops JSONL storage reliability", () => {
     expect(summary.responseModeDistribution).toContainEqual(expect.objectContaining({ key: "real", count: 1 }));
     expect(summary.scenarioDistribution).toContainEqual(expect.objectContaining({ key: "ecommerce", count: 1 }));
     expect(summary.intentDistribution).toContainEqual(expect.objectContaining({ key: "policy_check", count: 1 }));
+  });
+
+  it("reads a legacy recruitment run without reviving or rewriting its historical scenario", async () => {
+    const legacyRecord: OpsAgentRunRecord = {
+      id: "legacy-recruitment-run",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      questionPreview: "历史问题摘要",
+      responseMode: "mock",
+      requestedMode: "mock",
+      scenario: "recruitment",
+      intent: "jd_match",
+      toolsUsed: [],
+      sourcesCount: 0,
+      fallback: false,
+    };
+    await writeFile(path.join(runtimeDir, "agent-runs.jsonl"), `${JSON.stringify(legacyRecord)}\n`, "utf8");
+
+    const summary = await getOpsSummary(false);
+
+    expect(summary.recentRuns).toContainEqual(expect.objectContaining({ id: "legacy-recruitment-run", scenario: "recruitment" }));
+    expect(summary.scenarioDistribution).toContainEqual(expect.objectContaining({ key: "recruitment", count: 1 }));
+  });
+
+  it("stores only bounded context metadata and never conversation history", async () => {
+    const result = agentResult(1);
+    result.api.contextApplied = true;
+    result.api.contextMessageCount = 2;
+    result.api.contextTruncated = false;
+    Object.assign(result, { conversationContext: { messages: [{ role: "user", content: "历史秘密订单10001" }] } });
+    await recordAgentRun(result);
+    const raw = await readFile(path.join(runtimeDir, "agent-runs.jsonl"), "utf8");
+    const summary = await getOpsSummary(false);
+    expect(raw).not.toMatch(/conversationContext|messages|历史秘密订单10001/);
+    expect(summary.recentRuns[0]).toMatchObject({ contextApplied: true, contextMessageCount: 2, contextTruncated: false });
+    expect(JSON.stringify(summary)).not.toContain("历史秘密订单10001");
+  });
+
+  it("stores only safe streaming metadata and never deltas or upstream stream payloads", async () => {
+    const result = agentResult(2);
+    result.api.contextApplied = true;
+    result.api.contextMessageCount = 4;
+    result.api.contextTruncated = true;
+    Object.assign(result, {
+      conversationContext: { messages: [{ role: "assistant", content: "private history" }] },
+      answerDelta: "private incremental answer",
+      upstreamSse: "data: private raw event",
+      prompt: "private final prompt",
+    });
+    await recordAgentRun(result, {
+      runId: "run-stream-safe",
+      streamingRequested: true,
+      streamingUsed: true,
+      streamFallback: false,
+      durationMs: 125.8,
+      requestAction: "regenerate",
+    });
+
+    const raw = await readFile(path.join(runtimeDir, "agent-runs.jsonl"), "utf8");
+    const [record] = await parseJsonl("agent-runs.jsonl");
+    const summary = await getOpsSummary(false);
+    expect(record).toMatchObject({
+      id: "run-stream-safe",
+      streamingRequested: true,
+      streamingUsed: true,
+      streamFallback: false,
+      aborted: false,
+      durationMs: 125,
+      contextApplied: true,
+      contextMessageCount: 4,
+      contextTruncated: true,
+      requestAction: "regenerate",
+    });
+    expect(raw).not.toMatch(/conversationContext|messages|answerDelta|upstreamSse|prompt|private history|private incremental answer|private raw event|private final prompt/);
+    expect(summary.recentRuns[0]).toMatchObject({
+      streamingRequested: true,
+      streamingUsed: true,
+      streamFallback: false,
+      aborted: false,
+      durationMs: 125,
+      requestAction: "regenerate",
+    });
+  });
+
+  it("whitelists request actions without storing revisions or answer bodies", async () => {
+    const result = agentResult(4);
+    Object.assign(result, {
+      previousAnswer: "private previous answer",
+      editedQuestionBefore: "private original question",
+      editedQuestionAfter: "private revised question",
+      clipboardContent: "private copied answer",
+    });
+    await recordAgentRun(result, { runId: "run-action-safe", requestAction: "edit_resend" });
+    await recordAgentRun(agentResult(5), {
+      runId: "run-action-invalid",
+      requestAction: "regenerate_with_private_answer" as "send",
+    });
+
+    const raw = await readFile(path.join(runtimeDir, "agent-runs.jsonl"), "utf8");
+    const records = await parseJsonl("agent-runs.jsonl");
+    const summary = await getOpsSummary(false);
+    expect(records.find((record) => record.id === "run-action-safe")?.requestAction).toBe("edit_resend");
+    expect(records.find((record) => record.id === "run-action-invalid")?.requestAction).toBe("send");
+    expect(summary.recentRuns.map((record) => record.requestAction)).toEqual(["send", "edit_resend"]);
+    expect(raw).not.toMatch(/previousAnswer|editedQuestion|clipboardContent|private previous answer|private original question|private revised question|private copied answer/);
+  });
+
+  it("records an aborted stream once and keeps the first terminal outcome", async () => {
+    const abort = {
+      runId: "run-abort-once",
+      question: "cancel private question",
+      requestedMode: "mock",
+      responseMode: "mock",
+      durationMs: 80,
+      contextApplied: false,
+      contextMessageCount: 0,
+      contextTruncated: false,
+      streamingUsed: true,
+      streamFallback: false,
+    };
+    await Promise.all(Array.from({ length: 8 }, () => recordAgentAbortedRun(abort)));
+    await recordAgentRun(agentResult(3), {
+      runId: abort.runId,
+      streamingRequested: true,
+      streamingUsed: true,
+      durationMs: 120,
+    });
+
+    const records = await parseJsonl("agent-runs.jsonl");
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      id: abort.runId,
+      responseMode: "aborted",
+      errorType: "aborted",
+      aborted: true,
+      streamingRequested: true,
+      streamingUsed: true,
+      durationMs: 80,
+    });
+    expect(JSON.stringify(records[0])).not.toContain("delta");
+    const summary = await getOpsSummary(false);
+    expect(summary).toMatchObject({ recentAgentRunCount: 1, realCount: 0, mockCount: 0, fallbackCount: 0, realRate: 0, mockRate: 0, fallbackRate: 0 });
+    await expect(validateFeedbackRun(abort.runId, ["positive"])).resolves.toEqual({ ok: false, reason: "invalid" });
   });
 
   it("records a safe degraded state on failure and recovers after a later successful write", async () => {

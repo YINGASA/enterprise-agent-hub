@@ -44,7 +44,7 @@ function distributionLabel(value: string) {
     mock: "开发模拟",
     enterprise: "企业制度",
     ecommerce: "电商售后",
-    recruitment: "招聘求职",
+    recruitment: "历史场景（已下线）",
     ai_engineering: "AI 工程规范",
     general: "通用场景",
     knowledge_qa: "知识库问答",
@@ -52,7 +52,7 @@ function distributionLabel(value: string) {
     order_query: "订单查询",
     product_query: "商品查询",
     after_sale_reply: "售后回复",
-    jd_match: "JD 匹配",
+    jd_match: "历史意图（已下线）",
     ticket_create: "工单创建",
     general_chat: "通用对话",
     rate_limited: "请求频率受限",
@@ -61,7 +61,7 @@ function distributionLabel(value: string) {
     queryProduct: "商品查询",
     searchPolicy: "规则检索",
     createTicket: "工单创建",
-    analyzeJD: "JD 匹配分析",
+    analyzeJD: "历史工具（已下线）",
     generateCustomerReply: "客服回复生成",
   };
   return labels[value] ?? value;
@@ -319,7 +319,7 @@ export default function OpsPage() {
                     <tr key={item.id} className="align-top">
                       <td className="whitespace-nowrap px-3 py-2 text-ink-500">{formatDate(item.createdAt)}</td>
                       <td className="whitespace-nowrap px-3 py-2 font-semibold text-ink-900">{responseModeText(item.responseMode)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-ink-600">{item.scenario} / {item.intent}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-ink-600">{distributionLabel(item.scenario)} / {distributionLabel(item.intent)}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">{item.toolsUsed.length}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">{item.sourcesCount}</td>
                       <td className="break-words px-3 py-2 text-ink-600">{item.questionPreview}</td>

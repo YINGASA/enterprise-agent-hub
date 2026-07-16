@@ -1,6 +1,5 @@
-import { jobDescriptions, sampleResume } from "@/data/mock";
 import { runMockRagPipeline } from "@/lib/rag";
-import { analyzeJD, createTicket, generateCustomerReply, queryOrder, queryProduct, searchPolicy } from "@/lib/tools";
+import { createTicket, generateCustomerReply, queryOrder, queryProduct, searchPolicy } from "@/lib/tools";
 import type {
   AgentIntent,
   AgentPipelineResult,
@@ -154,6 +153,10 @@ function makeStep(params: Omit<AgentStep, "durationMs"> & { startedAt: number })
 export function selectTools(route: AgentRoute, question: string): ToolName[] {
   const clarification = buildClarificationState(route, question);
 
+  if (route.scenario === "recruitment" || route.intent === "jd_match") {
+    return [];
+  }
+
   if (route.intent === "order_query") {
     return clarification.needsClarification ? [] : ["queryOrder"];
   }
@@ -164,10 +167,6 @@ export function selectTools(route: AgentRoute, question: string): ToolName[] {
 
   if (route.intent === "policy_check") {
     return clarification.needsClarification ? ["searchPolicy"] : ["queryOrder", "searchPolicy"];
-  }
-
-  if (route.intent === "jd_match") {
-    return ["analyzeJD"];
   }
 
   if (route.intent === "ticket_create") {
@@ -195,7 +194,7 @@ export function routeUserQuestion(question: string): AgentRoute {
   if (hasAny(q, ["\u8d28\u91cf\u95ee\u9898", "\u552e\u540e\u6d41\u7a0b", "\u4e3e\u8bc1", "\u51ed\u8bc1", "\u53d1\u9519", "\u53d1\u9519\u8d27", "\u6f0f\u53d1", "\u4f18\u60e0\u5238", "\u8865\u53d1", "\u4f1a\u5458\u6743\u76ca", "\u7269\u6d41\u5f02\u5e38"])) return { scenario: "ecommerce", intent: "policy_check", needRag: true, toolsNeeded: ["searchPolicy"], confidence: 0.88, reason: "\u547d\u4e2d\u552e\u540e\u653f\u7b56\u6216\u8fb9\u754c\u95ee\u9898\uff0c\u9700\u8981\u68c0\u7d22\u552e\u540e\u89c4\u5219\u3002" };
   if (hasAny(q, ["\u5546\u54c1", "\u5e93\u5b58", "\u5c3a\u7801", "\u4ef7\u683c", "\u63a8\u8350\u7801\u6570", "\u7801\u6570", "\u7f3a\u8d27", "\u6362\u8d27"])) { const intent: AgentIntent = hasAny(q, ["\u600e\u4e48\u56de\u590d", "\u5ba2\u6237\u8bf4", "\u56de\u590d"]) ? "after_sale_reply" : "product_query"; return { scenario: "ecommerce", intent, needRag: intent === "after_sale_reply", toolsNeeded: intent === "after_sale_reply" ? ["generateCustomerReply"] : ["queryProduct"], confidence: 0.86, reason: "\u547d\u4e2d\u5546\u54c1\u3001\u5e93\u5b58\u6216\u5c3a\u7801\u5173\u952e\u8bcd\uff0c\u8def\u7531\u5230\u7535\u5546\u5546\u54c1\u67e5\u8be2\u573a\u666f\u3002" }; }
   if (hasAny(q, ["\u8ba2\u5355", "\u9000\u8d27", "\u9000\u6b3e", "\u552e\u540e", "\u7b7e\u6536", "\u62c6\u5c01", "\u80fd\u4e0d\u80fd\u9000", "\u60f3\u9000", "\u4e0d\u559c\u6b22", "\u4e1c\u897f", "\u7269\u6d41", "\u4e03\u5929", "7 \u5929", "7\u5929", "\u8d28\u91cf\u95ee\u9898", "\u5ba2\u670d", "\u5ba2\u6237"])) { const intent: AgentIntent = hasAny(q, ["\u4ec0\u4e48\u65f6\u5019", "\u72b6\u6001", "\u7269\u6d41", "\u53d1\u8d27"]) ? "order_query" : "policy_check"; return { scenario: "ecommerce", intent, needRag: intent === "policy_check", toolsNeeded: intent === "order_query" ? ["queryOrder"] : ["queryOrder", "searchPolicy"], confidence: 0.9, reason: "\u547d\u4e2d\u8ba2\u5355\u3001\u9000\u8d27\u6216\u552e\u540e\u5173\u952e\u8bcd\uff0c\u9700\u8981\u7ed3\u5408\u8ba2\u5355\u5de5\u5177\u548c\u552e\u540e\u89c4\u5219\u5224\u65ad\u3002" }; }
-  if (hasAny(q, recruitmentKeywords)) return { scenario: "recruitment", intent: "jd_match", needRag: false, toolsNeeded: ["analyzeJD"], confidence: 0.86, reason: "\u547d\u4e2d\u5c97\u4f4d\u3001\u7b80\u5386\u3001\u5019\u9009\u4eba\u6216\u5339\u914d\u5173\u952e\u8bcd\uff0c\u8def\u7531\u5230\u62db\u8058\u6c42\u804c\u573a\u666f\u3002" };
+  if (hasAny(q, recruitmentKeywords)) return { scenario: "general", intent: "knowledge_qa", needRag: true, toolsNeeded: [], confidence: 0.58, reason: "\u8be5\u95ee\u9898\u5c5e\u4e8e\u5df2\u4e0b\u7ebf\u7684\u62db\u8058\u6c42\u804c\u4ea7\u54c1\u573a\u666f\uff0c\u4ec5\u4f5c\u901a\u7528\u77e5\u8bc6\u95ee\u7b54\u5e76\u68c0\u7d22\u7528\u6237\u81ea\u5b9a\u4e49\u6587\u6863\uff0c\u4e0d\u8c03\u7528\u62db\u8058\u4e13\u5c5e\u5de5\u5177\u3002" };
   if (hasAny(q, ["\u62a5\u9500", "\u5e74\u5047", "\u8bf7\u5047", "\u5236\u5ea6", "\u4fe1\u606f\u5b89\u5168", "\u516c\u53f8", "\u6750\u6599", "\u5dee\u65c5", "\u5408\u540c", "\u91c7\u8d2d", "\u9879\u76ee\u7acb\u9879", "SLA", "\u5165\u804c", "\u79bb\u804c", "\u5ba2\u6237\u6570\u636e", "\u5ba1\u6279"])) return { scenario: "enterprise", intent: "knowledge_qa", needRag: true, toolsNeeded: [], confidence: 0.84, reason: "\u547d\u4e2d\u516c\u53f8\u5236\u5ea6\u6216\u4f01\u4e1a\u6d41\u7a0b\u5173\u952e\u8bcd\uff0c\u9700\u8981 RAG \u68c0\u7d22\u3002" };
   return { scenario: "general", intent: "general_chat", needRag: false, toolsNeeded: [], confidence: 0.42, reason: "\u672a\u547d\u4e2d\u5df2\u77e5\u4e1a\u52a1\u573a\u666f\uff0c\u8fdb\u5165\u901a\u7528\u515c\u5e95\u3002" };
 }
@@ -204,7 +203,6 @@ function inferRagPackId(question: string, route: AgentRoute) {
   if (hasAny(question, ["Prompt", "\u63d0\u793a\u8bcd", "RAG", "\u68c0\u7d22\u8d28\u91cf", "Agent", "\u5de5\u5177\u8c03\u7528", "\u7ed3\u6784\u5316\u8f93\u51fa", "JSON", "fallback", "API Key", "\u8bc4\u6d4b\u96c6", "\u53ef\u89c2\u6d4b\u6027", "\u65e5\u5fd7", "Schema", "\u6a21\u578b\u8fd4\u56de", "\u6a21\u578b\u8f93\u51fa", "\u89e3\u6790\u5931\u8d25", "\u4f4e\u7f6e\u4fe1", "\u53ec\u56de", "\u547d\u4e2d\u7387", "\u6765\u6e90\u5f15\u7528", "\u5411\u91cf\u5e93", "Embedding", "Evaluation", "\u6d4b\u8bd5\u96c6", "\u8bc4\u6d4b\u6307\u6807", "sourceType", "scoreReason", "Top sources", "\u7528\u6237\u6587\u6863", "\u9ed8\u8ba4\u77e5\u8bc6\u5e93", "\u6765\u6e90", "Real API"])) return "ai-engineering" as const;
   if (route.scenario === "enterprise") return "enterprise-policy" as const;
   if (route.scenario === "ecommerce") return "ecommerce-support" as const;
-  if (route.scenario === "recruitment") return "recruitment-career" as const;
   if (route.scenario === "ai_engineering") return "ai-engineering" as const;
   return undefined;
 }
@@ -270,15 +268,6 @@ function parseToolInput(tool: ToolName, question: string): ParsedToolInput {
     };
   }
 
-  if (tool === "analyzeJD") {
-    return {
-      input: {
-        jdText: jobDescriptions[0]?.requirements.join(" ") ?? question,
-        resumeText: `${sampleResume.summary} ${sampleResume.skills.join(" ")} ${sampleResume.projects.join(" ")}`,
-      },
-    };
-  }
-
   const productInput = extractProductId(question);
   return {
     input: {
@@ -295,7 +284,6 @@ function runTool(tool: ToolName, input: Record<string, unknown>): ToolRunResult 
   if (tool === "queryProduct") return queryProduct(String(input.productId ?? ""));
   if (tool === "searchPolicy") return searchPolicy(String(input.keyword ?? ""));
   if (tool === "createTicket") return createTicket(String(input.summary ?? ""), input.priority === "high" ? "high" : input.priority === "low" ? "low" : "medium");
-  if (tool === "analyzeJD") return analyzeJD(String(input.jdText ?? ""), String(input.resumeText ?? ""));
   return generateCustomerReply({
     type: input.type === "size_advice" || input.type === "shipping_delay" || input.type === "quality_issue" || input.type === "return" ? input.type : "return",
     orderId: typeof input.orderId === "string" ? input.orderId : undefined,
@@ -352,8 +340,6 @@ export function generateMockAgentFinalAnswer(
     finalAnswer = "已查询商品信息，请查看库存、价格、尺码建议和卖点字段。";
   } else if (route.intent === "after_sale_reply") {
     finalAnswer = "已根据售后场景生成 mock 客服回复，可结合 RAG 召回的售后规则进行人工确认。";
-  } else if (route.intent === "jd_match") {
-    finalAnswer = "已完成 JD 与 mock 简历的规则匹配分析，请查看 matchScore、匹配关键词、能力缺口和面试问题建议。大模型应用开发相关岗位会重点关注 RAG、Agent、Tool Calling、API 调用和项目经验。";
   } else if (route.intent === "ticket_create") {
     finalAnswer = "已模拟创建跟进工单，工单优先级和负责人由规则决定。";
   }

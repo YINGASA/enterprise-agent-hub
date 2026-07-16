@@ -35,7 +35,11 @@ const suiteOptions: Array<{ value: SuiteOption; label: string; description: stri
   { value: "full", label: "完整 80条", description: "覆盖全部内置评测用例" },
 ];
 
-const packOptions = [{ id: "all", name: "全部知识库" }, ...knowledgePacks, { id: "fallback", name: "兜底 / 超出范围" }];
+const packOptions = [
+  { id: "all", name: "全部知识库" },
+  ...knowledgePacks.filter((pack) => pack.id !== "recruitment-career"),
+  { id: "fallback", name: "兜底 / 超出范围" },
+];
 
 const metricLabels: Array<{ key: keyof Pick<EvaluationRunResponse["summary"], "caseCount" | "passRate" | "scenarioAccuracy" | "intentAccuracy" | "toolHitRate" | "ragUsageAccuracy" | "citationRate" | "keywordHitRate" | "averageRagScore" | "fallbackCaseCount" | "fallbackRate" | "averageDurationMs">; label: string; suffix?: string }> = [
   { key: "caseCount", label: "用例数" },
@@ -92,6 +96,16 @@ function avg(values: number[]) {
 
 function displayValue(value: number | undefined, suffix = "") {
   return typeof value === "number" ? `${value}${suffix}` : "暂无数据";
+}
+
+function evaluationIdentifierLabel(value: string) {
+  const legacyLabels: Record<string, string> = {
+    recruitment: "历史场景（已下线）",
+    jd_match: "历史意图（已下线）",
+    analyzeJD: "历史工具（已下线）",
+    "recruitment-career": "历史知识包（已下线）",
+  };
+  return legacyLabels[value] ?? value;
 }
 
 function suiteLabel(value: string) {
@@ -283,9 +297,9 @@ export function EvaluationDashboard() {
         </div>
       </section>
       {preview ? <EvaluationReportPreview kind={preview.kind} title={preview.title} content={preview.content} onClose={() => setPreview(null)} onDownload={() => preview.kind === "markdown" ? triggerMarkdownDownload(preview.run) : triggerJsonDownload(preview.run)} /> : null}
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="mb-3 font-semibold text-ink-900">知识库覆盖</h2><div className="flex flex-wrap gap-2">{Object.entries(result.summary.packCoverage).map(([key, value]) => <span key={key} className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-ink-600 ring-1 ring-slate-200">{key}: {value}</span>)}</div></section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="mb-3 font-semibold text-ink-900">知识库覆盖</h2><div className="flex flex-wrap gap-2">{Object.entries(result.summary.packCoverage).map(([key, value]) => <span key={key} className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-ink-600 ring-1 ring-slate-200">{evaluationIdentifierLabel(key)}: {value}</span>)}</div></section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="mb-3 font-semibold text-ink-900">失败分析</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(result.summary.failureBuckets).map(([reason, count]) => <article key={reason} className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{failureBucketLabels[reason as EvaluationFailureReason].label}</p><p className="mt-1 text-lg font-semibold text-ink-900">{count}</p></article>)}</div>{failedResults.length === 0 ? <p className="mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">当前评测集全部通过。</p> : null}</section>
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-5"><h2 className="font-semibold text-ink-900">评测结果</h2><p className="mt-1 text-sm text-ink-500">当前返回 {filteredResults.length} 条用例结果，可展开问题查看回答和失败原因。</p></div><div className="overflow-x-auto"><table className="min-w-[1100px] divide-y divide-slate-200 text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-ink-500"><tr><th className="px-4 py-3">问题</th><th className="px-4 py-3">实际场景 / 意图</th><th className="px-4 py-3">工具</th><th className="px-4 py-3">是否通过</th><th className="px-4 py-3">responseMode</th><th className="px-4 py-3">RAG 分</th><th className="px-4 py-3">耗时</th><th className="px-4 py-3">错误</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredResults.map((item) => <tr key={item.caseId} className="align-top"><td className="max-w-[320px] px-4 py-3"><button type="button" onClick={() => setExpandedCaseId(expandedCaseId === item.caseId ? "" : item.caseId)} className="break-words text-left font-medium text-ink-900 hover:text-brand-700">{item.question}</button>{expandedCaseId === item.caseId ? <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs leading-5 text-ink-600"><p>失败原因：{item.failureReasons.length ? item.failureReasons.join(", ") : "无"}</p><p>失败摘要：{item.failureSummary ?? "无"}</p><p>修复建议：{reasonAdvice(item.failureReasons)}</p><p className="mt-2 break-words">来源：{item.sources.join(" / ") || "无"}</p><p className="mt-2 whitespace-pre-wrap break-words">{item.finalAnswer}</p></div> : null}</td><td className="px-4 py-3 text-ink-600">{item.route.scenario}<br />{item.route.intent}</td><td className="px-4 py-3 text-ink-600">{item.toolsUsed.join(" + ") || "无"}</td><td className="px-4 py-3"><span className={"rounded-md px-2 py-1 text-xs font-semibold " + statusClass(item.passed)}>{item.passed ? "通过" : "失败"}</span></td><td className="px-4 py-3 text-ink-600">{item.responseMode}</td><td className="px-4 py-3 text-ink-600">{item.ragScore}</td><td className="px-4 py-3 text-ink-600">{item.durationMs}ms</td><td className="max-w-[220px] break-words px-4 py-3 text-rose-600">{item.error ?? ""}</td></tr>)}</tbody></table></div></section>
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-5"><h2 className="font-semibold text-ink-900">评测结果</h2><p className="mt-1 text-sm text-ink-500">当前返回 {filteredResults.length} 条用例结果，可展开问题查看回答和失败原因。</p></div><div className="overflow-x-auto"><table className="min-w-[1100px] divide-y divide-slate-200 text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-ink-500"><tr><th className="px-4 py-3">问题</th><th className="px-4 py-3">实际场景 / 意图</th><th className="px-4 py-3">工具</th><th className="px-4 py-3">是否通过</th><th className="px-4 py-3">responseMode</th><th className="px-4 py-3">RAG 分</th><th className="px-4 py-3">耗时</th><th className="px-4 py-3">错误</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredResults.map((item) => <tr key={item.caseId} className="align-top"><td className="max-w-[320px] px-4 py-3"><button type="button" onClick={() => setExpandedCaseId(expandedCaseId === item.caseId ? "" : item.caseId)} className="break-words text-left font-medium text-ink-900 hover:text-brand-700">{item.question}</button>{expandedCaseId === item.caseId ? <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs leading-5 text-ink-600"><p>失败原因：{item.failureReasons.length ? item.failureReasons.join(", ") : "无"}</p><p>失败摘要：{item.failureSummary ?? "无"}</p><p>修复建议：{reasonAdvice(item.failureReasons)}</p><p className="mt-2 break-words">来源：{item.sources.join(" / ") || "无"}</p><p className="mt-2 whitespace-pre-wrap break-words">{item.finalAnswer}</p></div> : null}</td><td className="px-4 py-3 text-ink-600">{evaluationIdentifierLabel(item.route.scenario)}<br />{evaluationIdentifierLabel(item.route.intent)}</td><td className="px-4 py-3 text-ink-600">{item.toolsUsed.map(evaluationIdentifierLabel).join(" + ") || "无"}</td><td className="px-4 py-3"><span className={"rounded-md px-2 py-1 text-xs font-semibold " + statusClass(item.passed)}>{item.passed ? "通过" : "失败"}</span></td><td className="px-4 py-3 text-ink-600">{item.responseMode}</td><td className="px-4 py-3 text-ink-600">{item.ragScore}</td><td className="px-4 py-3 text-ink-600">{item.durationMs}ms</td><td className="max-w-[220px] break-words px-4 py-3 text-rose-600">{item.error ?? ""}</td></tr>)}</tbody></table></div></section>
     </> : <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-ink-500">请选择测试集规模并运行评测。评测结果、历史记录和报告导出操作会显示在这里。</p>}
 
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

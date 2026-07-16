@@ -33,6 +33,8 @@ try {
       await rm(path.join(workspace, entry.name), { recursive: true, force: true }).catch(() => undefined);
     }
   }
+  await rm(path.join(workspace, "test-results"), { recursive: true, force: true }).catch(() => undefined);
+  await rm(path.join(workspace, "playwright-report"), { recursive: true, force: true }).catch(() => undefined);
 }
 
 process.exit(exitCode);

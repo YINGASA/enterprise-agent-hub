@@ -47,8 +47,8 @@ The router is rule-based in the current version:
 
 1. Read user question.
 2. Match scenario keywords.
-3. Infer scenario: enterprise, ecommerce, recruitment, or general.
-4. Infer intent: knowledge QA, policy check, order query, product query, after-sale reply, JD match, ticket creation, or general chat.
+3. Infer an active scenario: enterprise, ecommerce, ai_engineering, or general.
+4. Infer intent: knowledge QA, policy check, order query, product query, after-sale reply, ticket creation, or general chat.
 5. Decide whether RAG is needed.
 6. Select tools for the route.
 
@@ -62,7 +62,6 @@ Tool Calling is local orchestration in the current V1.9 release-candidate line:
 - `queryProduct`
 - `searchPolicy`
 - `createTicket`
-- `analyzeJD`
 - `generateCustomerReply`
 
 The model does not currently perform native `tool_calls`. The server-side Agent pipeline selects and executes local tools based on Router output. `/tools` presents these tools as business workflow capabilities, while `/chat` summarizes which queries and judgments were performed for each answer.
@@ -95,11 +94,10 @@ This lets the demo remain usable even when the model or network is unstable.
 
 ## Knowledge Packs
 
-The system organizes default mock documents into four read-only Knowledge Packs:
+The system organizes default mock documents into three read-only Knowledge Packs:
 
 - enterprise-policy: reimbursement, travel, leave, security, procurement, contract, SLA, onboarding and offboarding.
 - ecommerce-support: return/refund policy, opened products, quality issues, size mismatch, logistics, complaints, scripts and inventory.
-- recruitment-career: AI application roles, JD matching, resume keywords, project packaging and interview preparation.
 - ai-engineering: Prompt, RAG quality, Agent tools, JSON output, fallback, API key security, evaluation and observability.
 
 The current RAG remains keyword/mock retrieval. The retriever now adds title, category, tags and preferred pack weighting, and each retrieved chunk exposes matched keywords and score reasons for UI inspection.
@@ -118,7 +116,7 @@ The retriever remains keyword-based. User-imported chunks receive a small source
 
 ## V1.1 Built-in Knowledge Packs
 
-V1.1 improves product readiness without adding a database or crawler. Four self-generated enterprise knowledge categories are bundled as read-only default packs and participate in RAG immediately:
+The current product keeps three self-generated enterprise knowledge categories as read-only default packs without adding a database or crawler:
 
 - default: shipped with the application and always available.
 - user_upload: imported from local txt / md / json / csv files.
@@ -133,7 +131,7 @@ No third-party webpage content is committed to the repository. URL import and li
 V1.2 keeps the no-database, no-vector-store constraint but improves retrieval quality. The RAG layer now has four visible stages:
 
 1. Query normalization: remove noisy punctuation, normalize casing, and keep Chinese/English tokens.
-2. Query expansion: add domain synonyms for refund, reimbursement, JD matching, RAG, Agent, JSON output, and fallback.
+2. Query expansion: add domain synonyms for refund, reimbursement, enterprise workflow, RAG, Agent, JSON output, and fallback.
 3. Hybrid scoring: combine keywordScore, titleScore, tagScore, categoryScore, packScore, sourceScore, phraseScore, and freshnessScore.
 4. Confidence gating: return retrievalConfidence as high, medium, or low. Low-confidence retrieval adds a boundary note so Mock and Real answers do not overclaim.
 
@@ -211,6 +209,52 @@ V1.12.1 moves RAG Test History to the shared client storage adapter without chan
 V1.12.2 treats Ops question text as sensitive telemetry. Server-side summaries mask order numbers, phone numbers, email addresses, identity-style numbers, and long numeric strings; every remaining question preview is truncated before storage and again before a summary is returned. Scenario, intent, response mode, tool, and error aggregates remain available without exposing raw prompts.
 
 The local Playwright gate runs from an isolated temporary app directory that excludes `.env*`, runtime data, and user test documents. It verifies Knowledge Backup export/import preview, merge recovery, replace confirmation, invalid and oversized backups, plus browser migration and corruption recovery for Chat History, Feedback, Evaluation History, and RAG Test History. These test records stay in browser localStorage and are not posted to Agent, Evaluation, or Feedback APIs.
+
+## Agent Workspace Structure (V1.12.3)
+
+`src/components/AgentWorkspace.tsx` remains the stable Chat entry component and owns composition plus display-only derivations. `src/components/agent-workspace/useAgentWorkspace.ts` owns URL question prefill, LLM status and health state, the single Agent request path, result normalization, clarification and rate-limit errors, feedback runId submission, and unmount-safe async updates. `AgentFeedbackPanel.tsx` is a props-only presentation component; it neither accesses localStorage nor calls the Agent API. Chat History remains an independent consumer of the returned result and continues using the existing versioned Client Storage adapter key.
+
+## Knowledge Workspace Structure (V1.12.4)
+
+`src/components/KnowledgeWorkspace.tsx` remains the stable `/knowledge` composition entry. `src/components/knowledge-workspace/useKnowledgeWorkspace.ts` owns browser-local document initialization, selection and filters, import, enable/disable, deletion, clear, and backup-restore refresh actions. It calls the existing Knowledge Storage Adapter and invalidates derived caches only after successful writes. `DocumentForm`, `KnowledgeBackupPanel`, and `RagTestBench` remain separate boundaries: backup restore reports documents through an explicit callback, and the RAG Test Bench continues to use `ragTestHistory` without invoking a model or tool. Storage keys, backup JSON, migration behavior, and the 50-item RAG Test History cap are unchanged.
+
+## Domain Type Structure (V1.12.5)
+
+`src/types/index.ts` is a stable explicit type-only barrel. Definitions are grouped in `common`, `agent`, `knowledge`, `tools`, `feedback`, and `evaluation` modules. Type modules have no component or runtime dependencies; existing `@/types` imports remain compatible and no API, storage, backup, or JSONL schema changes are part of this release.
+
+## Conversation Context Flow (V2.0.0)
+
+The browser stores compact conversations under `enterprise-agent-hub:conversations` through the shared Client Storage Adapter. A conversation contains user/assistant text, title metadata, context counts, and a strict assistant-detail whitelist. Source and chunk bodies, tool inputs or raw results, full trace input/output, prompts, feedback bodies, and Ops records remain excluded; only source references, tool names/statuses, and step names/statuses/durations may be retained for message-level display. On first use, valid legacy Chat Run History is copied into a default conversation without changing the legacy key.
+
+For each successful turn, the client builds a bounded recent-message window and sends it as optional `conversationContext`. The server applies the same sanitizer again: at most 6 user rounds, 12 messages, 6,000 historical characters, and 2,000 characters per message. Router, RAG retrieval, and tool parsing operate on the current `question`; bounded history is used only for deterministic Mock follow-up resolution and as explicitly marked untrusted user/assistant history before the current-question payload in the Real prompt. Ops persists only context-used, message-count, and truncated metadata.
+
+## Chat Workspace Flow (V2.0.1)
+
+`src/components/AgentWorkspace.tsx` remains the stable `/chat` entry and now composes focused modules under `src/components/chat-workspace/`: conversation sidebar, header, message list, Assistant details, bottom Composer, confirmation/history dialogs, and scroll control. The AppShell supplies a viewport-bounded flex area; the message list owns vertical scrolling while the Composer stays as a non-scrolling footer inside the chat pane.
+
+New conversations use an in-memory draft and are materialized only after the first successful response. Conversation titles are generated locally from the first user question, can be manually renamed, and are searched only in browser state. Assistant context metadata and compact source/tool/step summaries are persisted with that message; full runtime results remain memory-only. Pending and failed turns are transient and do not enter effective context. Every request captures its origin conversation ID and an AbortController epoch, so switching or deleting a conversation invalidates the response and a removed conversation cannot be recreated by a late request.
+
+## Streaming Agent Flow (V2.0.2)
+
+The existing `POST /api/agent` JSON contract remains unchanged. `POST /api/agent/stream` adds an `application/x-ndjson` channel with typed `run_started`, `phase`, `answer_delta`, `answer_completed`, `run_error`, and `run_aborted` events. The incremental decoder retains incomplete lines between network chunks, validates every event, and never exposes prompts, conversation history, raw upstream SSE, retrieved chunk bodies, or provider configuration.
+
+Mock responses are split by a deterministic bounded rule and can be cancelled through the request signal. Real mode consumes OpenAI-compatible SSE with `[DONE]`, heartbeat, multi-event chunk, and split-event handling. Because the Real prompt returns structured JSON, the server extracts only the safe answer field for display and uses the final validated Agent result to calibrate completion. Explicitly unsupported streaming falls back to the existing complete-call path and marks `streamFallback`; it does not simulate upstream token streaming.
+
+The Chat controller batches answer deltas into the active transient Assistant placeholder. A request is bound to its origin conversation ID, request epoch, and AbortController; switching, clearing, deleting, stopping, or unmounting invalidates late events. Pending, stopped, and failed turns remain transient. Only `answer_completed` is appended through Conversation Storage, so partial output never becomes future context or browser-persisted history. Ops writes at most one safe final summary per run ID and stores only scalar streaming/context metadata, never deltas or raw stream payloads.
+
+## Message Action State Flow (V2.0.3)
+
+Every stored conversation identifies its editable target as the final adjacent completed `user` / `assistant` pair. Historical Assistant answers remain copyable, but regenerate and edit-resend are limited to that final pair. Both operations reuse the existing NDJSON parser and request controller with a safe `requestAction` scalar; the action is recorded in Ops and Trace but is never added to the model prompt or conversation context.
+
+Regenerate builds context only from messages before the target user message, keeps that user message unchanged, and atomically replaces the final Assistant after `answer_completed`. Edit-resend uses the same earlier context and atomically replaces both messages; a first auto-titled question refreshes the title while a manual title remains unchanged. The original stored turn and Feedback state stay visible during generation and are retained on failure, stop, navigation, or stale CAS failure. A successful replacement creates new message identity and runId, removes the old runtime result from the active UI, and starts with empty Feedback.
+
+Clipboard state is component-local and never stored. Copy actions receive only the Assistant message's plain safe `content`; run metadata, context counts, sources, tools, Trace, Feedback, and rendered HTML are excluded. Clipboard API is preferred, with a temporary plain-text selection fallback and non-blocking live status.
+
+## Active Scenario Boundary (V2.0.4)
+
+The active product registry contains enterprise knowledge and policy workflows, ecommerce service workflows, AI engineering knowledge, and general fallback. Recruitment and career routing, Mock answers, built-in knowledge, tools, recommendations, and evaluation cases are no longer active. Direct questions about that retired area are handled as general questions and cannot select a retired tool or preferred knowledge pack.
+
+The `recruitment`, `jd_match`, `analyzeJD`, and `recruitment-career` identifiers remain only where old browser or Ops records need schema-compatible parsing and historical labeling. Those compatibility values are not active candidates and cannot be produced by new deterministic routes. User-uploaded documents are independent of the built-in scenario registry: their text, tags, enabled state, backup format, and storage key remain unchanged, including documents whose subject happens to involve hiring or resumes.
 
 ## V1.6.1 Knowledge Import Persistence
 

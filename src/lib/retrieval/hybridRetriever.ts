@@ -52,7 +52,6 @@ const RAG_ANSWER_PREFIX = "\u6839\u636e\u77e5\u8bc6\u5e93\u6765\u6e90\uff0c";
 const scenarioPackMap: Partial<Record<AgentScenario | "ai-engineering", KnowledgePackId>> = {
   enterprise: "enterprise-policy",
   ecommerce: "ecommerce-support",
-  recruitment: "recruitment-career",
   ai_engineering: "ai-engineering",
   "ai-engineering": "ai-engineering",
 };

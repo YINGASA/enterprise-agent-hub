@@ -1,11 +1,9 @@
 import {
   afterSalePolicies,
   companyPolicies,
-  jobDescriptions,
   orders,
   policyDocuments,
   products,
-  sampleResume,
 } from "@/data/mock";
 import type { ToolName, ToolRunResult } from "@/types";
 
@@ -202,34 +200,6 @@ export function createTicket(summary: string, priority: Priority = "medium") {
   });
 }
 
-export function analyzeJD(jdText: string, resumeText: string) {
-  const input = { jdText, resumeText };
-
-  if (!jdText.trim()) {
-    return failed("analyzeJD", input, "缺少 jdText，无法进行 JD 匹配分析。");
-  }
-
-  if (!resumeText.trim()) {
-    return failed("analyzeJD", input, "缺少 resumeText，无法进行 JD 匹配分析。");
-  }
-
-  const knownKeywords = Array.from(new Set(jobDescriptions.flatMap((job) => job.keywords)));
-  const combinedResume = `${resumeText} ${sampleResume.summary} ${sampleResume.skills.join(" ")} ${sampleResume.projects.join(" ")}`;
-  const jdKeywords = knownKeywords.filter((keyword) => includesKeyword(jdText, keyword));
-  const matchedKeywords = jdKeywords.filter((keyword) => includesKeyword(combinedResume, keyword));
-  const missingKeywords = jdKeywords.filter((keyword) => !matchedKeywords.includes(keyword));
-  const baseScore = jdKeywords.length === 0 ? 55 : Math.round((matchedKeywords.length / jdKeywords.length) * 100);
-  const matchScore = Math.min(96, Math.max(45, baseScore));
-
-  return success("analyzeJD", input, {
-    matchScore,
-    matchedKeywords,
-    gaps: missingKeywords.length > 0 ? missingKeywords : ["线上真实数据评测", "生产级监控与回滚策略"],
-    strengths: ["具备 AI 应用产品化项目", "覆盖 RAG、Agent Router、Tool Calling 与结构化输出", "前端工程化和 B 端展示能力较完整"],
-    suggestedKeywords: Array.from(new Set([...missingKeywords, "评测集", "失败案例分析", "工具调用协议"])),
-  });
-}
-
 export function generateCustomerReply(context: CustomerReplyContext) {
   const input: Record<string, unknown> = { ...context };
   const customerName = context.customerName?.trim() || "您好";
@@ -295,7 +265,7 @@ export function runToolDemo(tool: ToolName, input: Record<string, unknown>): Too
   }
 
   if (tool === "analyzeJD") {
-    return analyzeJD(text(input.jdText), text(input.resumeText));
+    return failed("analyzeJD", {}, "该演示工具已退出当前产品场景，不能再发起新的招聘匹配分析。");
   }
 
   return generateCustomerReply({

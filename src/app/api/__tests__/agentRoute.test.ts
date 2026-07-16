@@ -7,7 +7,11 @@ const { runAgentApiPipeline, recordAgentRun, recordAgentError } = vi.hoisted(() 
 }));
 
 vi.mock("@/lib/agent/api", () => ({ runAgentApiPipeline }));
-vi.mock("@/lib/ops/storage", () => ({ recordAgentRun, recordAgentError }));
+vi.mock("@/lib/ops/storage", () => ({
+  recordAgentRun,
+  recordAgentError,
+  sanitizeRequestAction: (value: unknown) => ["send", "retry", "regenerate", "edit_resend"].includes(String(value)) ? value : "send",
+}));
 
 import { POST } from "@/app/api/agent/route";
 
@@ -35,9 +39,29 @@ describe("POST /api/agent", () => {
   });
 
   it("returns a server-generated run id for valid mock runs", async () => {
-    const response = await POST(request(JSON.stringify({ question: "测试", mode: "mock" })));
+    const response = await POST(request(JSON.stringify({ question: "测试" })));
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ runId: "run-test" });
-    expect(runAgentApiPipeline).toHaveBeenCalledWith("测试", "mock", []);
+    expect(runAgentApiPipeline).toHaveBeenCalledWith(
+      "测试",
+      "mock",
+      [],
+      { messages: [] },
+      { contextApplied: false, contextMessageCount: 0, contextTruncated: false, contextCharacterCount: 0 },
+    );
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ api: expect.objectContaining({ requestAction: "send" }) }),
+      { requestAction: "send" },
+    );
+  });
+
+  it("preserves only safe request action metadata without changing the Agent pipeline call", async () => {
+    const response = await POST(request(JSON.stringify({ question: "测试", requestAction: "regenerate" })));
+    await expect(response.json()).resolves.toMatchObject({ api: { requestAction: "regenerate" } });
+    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(5);
+    expect(recordAgentRun).toHaveBeenCalledWith(
+      expect.objectContaining({ api: expect.objectContaining({ requestAction: "regenerate" }) }),
+      { requestAction: "regenerate" },
+    );
   });
 });

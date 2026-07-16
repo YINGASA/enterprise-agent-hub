@@ -1,16 +1,15 @@
 ﻿# Evaluation Dashboard
 
-The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as expected across enterprise knowledge QA, ecommerce after-sales support, recruitment/JD matching, AI engineering knowledge, and fallback scenarios.
+The Agent Evaluation Dashboard validates whether the Agent pipeline behaves as expected across enterprise knowledge and policy QA, ecommerce after-sales workflows, AI engineering knowledge, tool orchestration, clarification, context, and fallback scenarios.
 
-## V1.3 Dataset
+## V2.0.4 Dataset
 
-The built-in dataset contains 80 cases after V1.2 retrieval-quality and AI engineering routing expansion:
+The built-in dataset contains 80 active enterprise-product cases:
 
-- 12 enterprise policy cases
-- 12 ecommerce support cases
-- 12 recruitment and career cases
-- 8 AI engineering cases
-- 6 fallback / out-of-scope cases
+- enterprise policy, reimbursement, travel, approval, and internal-process cases
+- ecommerce order, return, refund, logistics, and service cases
+- AI engineering, RAG explainability, and retrieval-quality cases
+- clarification, multi-turn context, tool orchestration, and fallback cases
 
 The UI supports three suite sizes:
 
@@ -18,7 +17,7 @@ The UI supports three suite sizes:
 - Standard: 30 cases
 - Full: 80 current cases
 
-Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. The suite covers IT/admin operations, ecommerce edge policies, recruitment matching, AI engineering explainability, Hybrid RAG quality, and fallback behavior.
+Each case includes question, expectedScenario, expectedIntent, expectedTools, expectedNeedRag, expectedKeywords, category, difficulty, and packId. V2.0.4 replaced 16 retired product-scenario cases without reducing the 80-case total or the required pass rate. The current suite covers IT/admin operations, reimbursement and approval materials, ecommerce edge policies, AI engineering explainability, Hybrid RAG quality, tools, clarification, context, and fallback behavior.
 
 ## Metrics
 
@@ -102,7 +101,7 @@ V1.4 keeps the evaluation API stateless and adds frontend-only observability fea
 All of these features read from browser localStorage. They do not introduce a database, backend persistence, or external analytics service.
 ## V1.5 Retriever Strategy Cases
 
-V1.5 extends the full suite to 80 cases. The added checks cover short technical queries, colloquial refund intent, reimbursement ticket loss, recruitment matching, weather fallback, and embedding/vector-database concepts.
+V1.5 extended the full suite to 80 cases. The current equivalents cover short technical queries, colloquial refund intent, reimbursement ticket loss, enterprise workflow clarification, weather fallback, and embedding/vector-database concepts.
 
 The target remains passRate >= 90%. These cases validate that the Retriever Adapter does not regress Router decisions, missing-parameter clarification, low-confidence fallback, or AI engineering knowledge routing.
 ## V1.6.1 Knowledge Import Persistence Check

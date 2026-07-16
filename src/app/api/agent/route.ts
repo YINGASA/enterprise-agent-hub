@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { runAgentApiPipeline } from "@/lib/agent/api";
 import { validateAgentRequest } from "@/lib/ops/agentRequest";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
-import { recordAgentError, recordAgentRun } from "@/lib/ops/storage";
+import { recordAgentError, recordAgentRun, sanitizeRequestAction } from "@/lib/ops/storage";
 
 export const runtime = "nodejs";
 
@@ -19,7 +19,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_request", message: validated.message }, { status: validated.status });
   }
 
-  const { question, mode: requestedMode, userDocuments } = validated;
+  const { question, mode: requestedMode, userDocuments, conversationContext, contextMeta } = validated;
+  const requestAction = sanitizeRequestAction(body["requestAction"]);
   if (requestedMode === "real") {
     const rateLimit = checkRealApiRateLimit(getClientIp(request));
     if (!rateLimit.allowed) {
@@ -29,6 +30,10 @@ export async function POST(request: Request) {
         responseMode: "real_error_fallback",
         errorType: "rate_limited",
         httpStatus: 429,
+        contextApplied: contextMeta.contextApplied,
+        contextMessageCount: contextMeta.contextMessageCount,
+        contextTruncated: contextMeta.contextTruncated,
+        requestAction,
       });
       return NextResponse.json(
         {
@@ -44,7 +49,8 @@ export async function POST(request: Request) {
     }
   }
 
-  const response = await runAgentApiPipeline(question, requestedMode, userDocuments);
-  const runId = await recordAgentRun(response);
-  return NextResponse.json({ ...response, runId });
+  const response = await runAgentApiPipeline(question, requestedMode, userDocuments, conversationContext, contextMeta);
+  const responseWithAction = { ...response, api: { ...response.api, requestAction } };
+  const runId = await recordAgentRun(responseWithAction, { requestAction });
+  return NextResponse.json({ ...responseWithAction, runId });
 }

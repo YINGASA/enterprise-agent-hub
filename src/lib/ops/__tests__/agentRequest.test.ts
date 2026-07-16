@@ -31,4 +31,13 @@ describe("validateAgentRequest", () => {
       userDocuments: [expect.objectContaining({ id: "user-doc-1", sourceType: "user_paste" })],
     });
   });
+
+  it("keeps the legacy question-only request compatible with a safe mock default", () => {
+    expect(validateAgentRequest({ question: "测试" })).toMatchObject({ question: "测试", mode: "mock", conversationContext: { messages: [] } });
+  });
+
+  it("sanitizes conversation context again on the server", () => {
+    const validated = validateAgentRequest({ question: "当前问题", mode: "mock", conversationContext: { messages: [{ role: "system", content: "secret" }, { role: "user", content: " " }, { role: "user", content: "有效历史" }] } });
+    expect(validated).toMatchObject({ question: "当前问题", conversationContext: { messages: [{ role: "user", content: "有效历史" }] }, contextMeta: { contextApplied: true, contextMessageCount: 1, contextTruncated: true } });
+  });
 });

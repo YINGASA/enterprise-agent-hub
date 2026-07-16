@@ -27,7 +27,7 @@ test("migrates legacy arrays, filters invalid records and persists after refresh
   }, { storageKeys: keys, values: { chat, feedback, evaluation, rag } });
 
   await page.goto("/chat");
-  await expect(page.getByText("旧聊天迁移问题", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("conversation-message-user").getByText("旧聊天迁移问题", { exact: true })).toBeVisible();
   await page.goto("/evaluation");
   await expect(page.getByText("80 条用例 · 80 条通过", { exact: false })).toBeVisible();
   await expect(page.getByText("总反馈数").locator("..")).toContainText("1");
@@ -47,7 +47,7 @@ test("migrates legacy arrays, filters invalid records and persists after refresh
 test("corrupted JSON never crashes the consuming pages", async ({ page }) => {
   await page.addInitScript((storageKeys) => Object.values(storageKeys).forEach((key) => localStorage.setItem(key, "{")), keys);
   await page.goto("/chat");
-  await expect(page.getByRole("heading", { name: "聊天工作台" })).toBeVisible();
+  await expect(page.getByTestId("chat-workspace")).toBeVisible();
   await page.goto("/evaluation");
   await expect(page.getByRole("heading", { name: "Agent 评测面板", exact: true })).toBeVisible();
   await page.goto("/knowledge");

@@ -16,7 +16,7 @@ await symlink(path.join(workspace, "node_modules"), path.join(tempRoot, "node_mo
 
 const child = spawn(process.execPath, [path.join(workspace, "node_modules", "next", "dist", "bin", "next"), "dev", "--webpack", "--hostname", "127.0.0.1", "--port", "3100"], {
   cwd: tempRoot,
-  env: { ...runtimeEnv, NODE_ENV: "development", NEXT_TELEMETRY_DISABLED: "1" },
+  env: { ...runtimeEnv, NODE_ENV: "development", NEXT_TELEMETRY_DISABLED: "1", EAH_OPS_DATA_DIR: path.join(tempRoot, ".runtime-data") },
   stdio: "inherit",
 });
 

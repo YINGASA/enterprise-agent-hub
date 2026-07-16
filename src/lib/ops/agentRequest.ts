@@ -1,17 +1,21 @@
 import { sanitizeImportedKnowledgeDocument } from "@/lib/knowledge/storage";
 import { agentRequestLimits } from "@/lib/ops/securityLimits";
-import type { ImportedKnowledgeDocument, LlmMode } from "@/types";
+import { buildConversationContext } from "@/lib/conversation/context";
+import type { ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmMode } from "@/types";
 
 type AgentRequestBody = {
   question?: unknown;
   mode?: unknown;
   userDocuments?: unknown;
+  conversationContext?: unknown;
 };
 
 export type ValidatedAgentRequest = {
   question: string;
   mode: LlmMode;
   userDocuments: ImportedKnowledgeDocument[];
+  conversationContext: ConversationContext;
+  contextMeta: ConversationContextMeta;
 };
 
 export type AgentRequestValidationError = {
@@ -57,7 +61,8 @@ export function validateAgentRequest(body: AgentRequestBody): ValidatedAgentRequ
   if (!isNonEmptyString(rawQuestion)) return { status: 400, message: "请输入问题后再提交。" };
   const question = rawQuestion.trim();
   if (question.length > agentRequestLimits.questionChars) return { status: 413, message: "问题过长，请缩短后再提交。" };
-  if (body.mode !== "mock" && body.mode !== "real") return { status: 400, message: "请求模式不合法。" };
+  const mode = body.mode === undefined ? "mock" : body.mode;
+  if (mode !== "mock" && mode !== "real") return { status: 400, message: "请求模式不合法。" };
   if (body.userDocuments !== undefined && !Array.isArray(body.userDocuments)) return { status: 400, message: "用户文档格式不正确。" };
 
   const rawDocuments = body.userDocuments ?? [];
@@ -76,5 +81,9 @@ export function validateAgentRequest(body: AgentRequestBody): ValidatedAgentRequ
     userDocuments.push(sanitized);
   }
 
-  return { question, mode: body.mode, userDocuments };
+  const { context: conversationContext, meta: contextMeta } = buildConversationContext(
+    body.conversationContext && typeof body.conversationContext === "object" ? body.conversationContext as { messages?: unknown } : undefined,
+    question,
+  );
+  return { question, mode, userDocuments, conversationContext, contextMeta };
 }

@@ -1,27 +1,22 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
 import { KnowledgeBackupPanel } from "@/components/KnowledgeBackupPanel";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { RagTestBench } from "@/components/RagTestBench";
+import { useKnowledgeWorkspace, type SourceFilter } from "@/components/knowledge-workspace/useKnowledgeWorkspace";
 import { documents as defaultDocuments } from "@/data/mock";
 import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
 import { knowledgePacks } from "@/data/knowledgePacks";
-import { loadChatFeedback } from "@/lib/chat/feedback";
-import { loadChatHistory } from "@/lib/chat/history";
-import { getKnowledgeDerived, invalidateKnowledgeDerived } from "@/lib/knowledge/derived";
+import { getKnowledgeDerived } from "@/lib/knowledge/derived";
 import { findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
-import { loadRagTestHistory } from "@/lib/knowledge/ragTestHistory";
-import { clearUserKnowledgeDocuments, deleteUserKnowledgeDocument, readUserKnowledgeDocumentsWithStatus, updateUserDocumentEnabled, writeUserKnowledgeDocuments } from "@/lib/knowledge/storage";
-import type { AgentApiResponse, ChatAnswerFeedbackItem, ChatRunHistoryItem, ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType, RagTestHistoryItem } from "@/types";
+import type { AgentApiResponse, KnowledgeDocument, KnowledgeSourceType, RagTestHistoryItem } from "@/types";
 
 const allPackOption = "all";
 const allCategoryOption = "all";
 const allSourceOption = "all";
-
-type SourceFilter = typeof allSourceOption | KnowledgeSourceType;
 
 const ui = {
   defaultSource: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93",
@@ -125,7 +120,7 @@ function categoryIntro(packId: string) {
   const intros: Record<string, string> = {
     "enterprise-policy": "\u4f01\u4e1a\u5236\u5ea6\u3001IT \u884c\u653f\u3001\u6743\u9650\u3001\u5b89\u5168\u3001\u62a5\u9500\u3001\u8bf7\u5047\u7b49\u5185\u90e8\u77e5\u8bc6\u3002",
     "ecommerce-support": "\u552e\u540e\u653f\u7b56\u3001\u9000\u6b3e\u6362\u8d27\u3001\u7269\u6d41\u5f02\u5e38\u3001\u4f1a\u5458\u6743\u76ca\u4e0e\u6295\u8bc9\u5347\u7ea7\u89c4\u5219\u3002",
-    "recruitment-career": "\u5c97\u4f4d JD\u3001\u5019\u9009\u4eba\u8bc4\u5206\u3001\u7b80\u5386\u7b5b\u9009\u3001\u9762\u8bd5\u6d41\u7a0b\u4e0e\u9879\u76ee\u5339\u914d\u89c4\u5219\u3002",
+    "recruitment-career": "\u5386\u53f2\u77e5\u8bc6\u5206\u7c7b\uff08\u5df2\u4e0b\u7ebf\uff09\uff0c\u4ec5\u7528\u4e8e\u517c\u5bb9\u65e7\u8bb0\u5f55\uff1b\u7528\u6237\u81ea\u5b9a\u4e49\u6587\u6863\u4ecd\u53ef\u7ee7\u7eed\u7ba1\u7406\u548c\u68c0\u7d22\u3002",
     "ai-engineering": "RAG\u3001Agent Router\u3001Tool Calling\u3001JSON \u8f93\u51fa\u3001fallback\u3001\u90e8\u7f72\u4e0e\u8bc4\u6d4b\u89c4\u8303\u3002",
   };
   return intros[packId] ?? "\u7cfb\u7edf\u5185\u7f6e\u4e1a\u52a1\u77e5\u8bc6\u3002";
@@ -165,31 +160,14 @@ function ragTestHitRate(stats?: { total: number; hits: number }) {
 }
 
 export function KnowledgeWorkspace() {
-  const [userDocuments, setUserDocuments] = useState<ImportedKnowledgeDocument[]>([]);
-  const [selectedPack, setSelectedPack] = useState(allPackOption);
-  const [selectedCategory, setSelectedCategory] = useState(allCategoryOption);
-  const [selectedSourceType, setSelectedSourceType] = useState<SourceFilter>(allSourceOption);
-  const [search, setSearch] = useState("");
-  const [selectedDocumentId, setSelectedDocumentId] = useState(defaultDocuments[0]?.id ?? "");
-  const [notice, setNotice] = useState("");
-  const [chatHistory, setChatHistory] = useState<ChatRunHistoryItem[]>([]);
-  const [feedbackItems, setFeedbackItems] = useState<ChatAnswerFeedbackItem[]>([]);
-  const [ragTestHistory, setRagTestHistory] = useState<RagTestHistoryItem[]>([]);
-  const [testBenchQuestion, setTestBenchQuestion] = useState("");
-
-  useEffect(() => {
-    const loaded = readUserKnowledgeDocumentsWithStatus();
-    setUserDocuments(loaded.data);
-    if (!loaded.ok) setNotice(`用户文档读取失败：${loaded.error}`);
-
-    const loadedHistory = loadChatHistory();
-    setChatHistory(loadedHistory.data);
-    const loadedFeedback = loadChatFeedback();
-    setFeedbackItems(loadedFeedback.data);
-    const loadedRagTests = loadRagTestHistory();
-    setRagTestHistory(loadedRagTests.data);
-    if (!loadedRagTests.ok) setNotice(loadedRagTests.error);
-  }, []);
+  const workspace = useKnowledgeWorkspace();
+  const {
+    userDocuments, selectedPack, setSelectedPack, selectedCategory, setSelectedCategory,
+    selectedSourceType, setSelectedSourceType, search, setSearch, selectedDocumentId,
+    setSelectedDocumentId, notice, chatHistory, feedbackItems, ragTestHistory, setRagTestHistory,
+    testBenchQuestion, setTestBenchQuestion, handleAdd, handleDelete, handleToggleEnabled,
+    handleClearUserDocuments, handleRestore,
+  } = workspace;
 
   const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
   const enabledDocuments = useMemo<KnowledgeDocument[]>(() => allDocuments.filter(isDocumentEnabled), [allDocuments]);
@@ -253,71 +231,6 @@ export function KnowledgeWorkspace() {
     .filter((item) => item.issues.length > 0)
     .slice(0, 6);
 
-  function handleAdd(document: ImportedKnowledgeDocument) {
-    const duplicates = findDuplicateKnowledgeDocuments(document, allDocuments);
-    const nextDocuments = [document, ...userDocuments.filter((item) => item.id !== document.id)];
-    const saved = writeUserKnowledgeDocuments(nextDocuments);
-    if (!saved.ok) {
-      setNotice(`导入失败：${saved.error}`);
-      return;
-    }
-    invalidateKnowledgeDerived(document.id);
-    const chunkCount = getKnowledgeDerived(document).chunks.length;
-    setUserDocuments(saved.data);
-    setSelectedDocumentId(document.id);
-    setSelectedPack(document.packId ?? allPackOption);
-    setSelectedCategory(allCategoryOption);
-    setSelectedSourceType(document.sourceType);
-    setNotice(
-      saved.ok
-        ? `已成功导入：${document.title}。已保存到当前浏览器本地，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，${document.enabled === false ? "当前未启用 RAG 检索" : "已加入 RAG 检索"}。${duplicates.length ? ` 检测到可能重复文档：${duplicates.map((item) => item.title).join("、")}。` : ""}`
-        : "",
-    );
-  }
-
-  function handleDelete(documentId: string) {
-    const target = userDocuments.find((document) => document.id === documentId);
-    if (!target) return;
-    const saved = deleteUserKnowledgeDocument(userDocuments, documentId);
-    if (!saved.ok) {
-      setNotice(`删除失败：${saved.error}`);
-      return;
-    }
-    invalidateKnowledgeDerived(documentId);
-    setUserDocuments(saved.data);
-    setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
-    setNotice(ui.deleted + target.title);
-  }
-
-  function handleToggleEnabled(documentId: string) {
-    const target = userDocuments.find((document) => document.id === documentId);
-    if (!target) return;
-    const saved = updateUserDocumentEnabled(userDocuments, documentId, target.enabled === false);
-    if (!saved.ok) {
-      setNotice(`状态更新失败：${saved.error}`);
-      return;
-    }
-    invalidateKnowledgeDerived(documentId);
-    setUserDocuments(saved.data);
-    setNotice(`${target.title} 已${target.enabled === false ? "启用" : "禁用"} RAG 检索。`);
-  }
-
-  function handleClearUserDocuments() {
-    if (!userDocuments.length) return;
-    const confirmed = window.confirm(ui.confirmClear);
-    if (!confirmed) return;
-    const cleared = clearUserKnowledgeDocuments();
-    if (!cleared.ok) {
-      setNotice(`清空失败：${cleared.error}`);
-      return;
-    }
-    userDocuments.forEach((document) => invalidateKnowledgeDerived(document.id));
-    setUserDocuments(cleared.data);
-    setSelectedDocumentId(defaultDocuments[0]?.id ?? "");
-    setSelectedSourceType(allSourceOption);
-    setNotice(ui.cleared);
-  }
-
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
       <section className="space-y-5 min-w-0">
@@ -371,18 +284,11 @@ export function KnowledgeWorkspace() {
             <h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3>
             <p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p>
           </div>
-          <DocumentForm onAdd={handleAdd} existingDocuments={allDocuments} />
+          <DocumentForm onAdd={(document) => handleAdd(document, allDocuments)} existingDocuments={allDocuments} />
         </div>
         <KnowledgeBackupPanel
           documents={userDocuments}
-          onDocumentsChange={(documents) => {
-            userDocuments.forEach((document) => invalidateKnowledgeDerived(document.id));
-            documents.forEach((document) => invalidateKnowledgeDerived(document.id));
-            setUserDocuments(documents);
-            setSelectedDocumentId(documents[0]?.id ?? defaultDocuments[0]?.id ?? "");
-            setSelectedSourceType(allSourceOption);
-            setNotice("用户知识库备份已恢复，默认知识库未受影响。");
-          }}
+          onDocumentsChange={handleRestore}
         />
         <RagTestBench documents={allDocuments} currentDocument={selectedDocument} suggestedQuestions={selectedSuggestedQuestions} presetQuestion={testBenchQuestion} onHistoryChange={setRagTestHistory} />
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -401,7 +307,7 @@ export function KnowledgeWorkspace() {
             return (
               <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <button type="button" onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left">
+                  <button type="button" data-testid={`knowledge-document-select-${document.id}`} onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="break-words font-semibold text-ink-900">{document.title}</h4>
                       <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span>
@@ -420,8 +326,8 @@ export function KnowledgeWorkspace() {
                   </button>
                   {document.sourceType !== "default" ? (
                     <div className="flex shrink-0 flex-wrap gap-2">
-                      <button type="button" onClick={() => handleToggleEnabled(document.id)} className="rounded-md border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50">{enabled ? ui.disable : ui.enable}</button>
-                      <button type="button" onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.delete}</button>
+                      <button type="button" data-testid={`knowledge-document-toggle-${document.id}`} onClick={() => handleToggleEnabled(document.id)} className="rounded-md border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50">{enabled ? ui.disable : ui.enable}</button>
+                      <button type="button" data-testid={`knowledge-document-delete-${document.id}`} onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.delete}</button>
                     </div>
                   ) : null}
                 </div>

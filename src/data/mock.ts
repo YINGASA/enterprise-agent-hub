@@ -6,13 +6,10 @@ import type {
   CompanyPolicy,
   EvaluationMetric,
   Feature,
-  InterviewQuestion,
-  JobDescription,
   KnowledgeDocument,
   Order,
   PolicyDocument,
   Product,
-  ResumeProfile,
   Scenario,
   TestCase,
   ToolCallLog,
@@ -24,9 +21,9 @@ import { enterpriseKnowledgePackDocuments } from "@/data/enterpriseKnowledgePack
 export const features: Feature[] = [
   { title: "RAG 知识库问答", description: "基于企业文档、政策与 SOP 的检索增强回答，附带来源引用。" },
   { title: "Agent Router", description: "识别业务场景与用户意图，将请求路由到合适的 Agent 模板。" },
-  { title: "Tool Calling", description: "通过结构化参数调用订单、商品、工单、JD 分析等业务工具。" },
+  { title: "Tool Calling", description: "通过结构化参数调用订单、商品、制度检索和工单等业务工具。" },
   { title: "结构化输出", description: "面向前端展示、业务系统写入和评测分析输出稳定 JSON。" },
-  { title: "多场景插件", description: "以模板方式扩展知识库、客服售后、招聘匹配等业务能力。" },
+  { title: "企业场景编排", description: "统一编排企业知识问答、客服售后和业务流程自动化能力。" },
   { title: "评测面板", description: "用测试集追踪意图识别、工具命中、引用率和响应耗时。" },
 ];
 
@@ -46,14 +43,6 @@ export const scenarios: Scenario[] = [
     questions: ["订单什么时候发货？", "这个商品支持七天无理由吗？", "帮我创建售后工单。"],
     tools: ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "generateCustomerReply"],
     outputType: "客服回复 + 工单建议 + 工具调用记录",
-  },
-  {
-    id: "jd-match-agent",
-    name: "招聘求职 JD 匹配 Agent",
-    description: "分析岗位 JD 与候选人经历，输出匹配度、差距和面试准备建议。",
-    questions: ["这份 JD 和我的简历匹配吗？", "AI 应用开发工程师需要补哪些项目？", "帮我拆解岗位能力要求。"],
-    tools: ["analyzeJD", "searchPolicy"],
-    outputType: "匹配评分 + 能力差距 + 行动建议",
   },
 ];
 
@@ -159,52 +148,6 @@ export const afterSalePolicies: AfterSalePolicy[] = [
   { id: "ASP-SPECIAL-001", title: "特殊商品限制", category: "special_goods", rules: ["定制商品、临期清仓商品不支持无理由退货。", "特殊限制会在商品详情页明确展示。"], updatedAt: "2026-06-05" },
 ];
 
-export const jobDescriptions: JobDescription[] = [
-  {
-    id: "JD-AI-APP-ENG",
-    title: "AI 应用开发工程师",
-    level: "初中级/校招可投",
-    keywords: ["RAG", "Agent", "Tool Calling", "结构化输出", "Next.js", "TypeScript", "评测"],
-    responsibilities: ["开发企业知识库问答和业务流程自动化 Agent。", "设计工具调用协议和结构化输出格式。", "建设评测集并跟踪模型应用质量。"],
-    requirements: ["熟悉 TypeScript 和前端工程化。", "理解 RAG、Agent Router 和 Tool Calling 基本流程。", "能够用 mock 数据快速搭建可演示原型。"],
-  },
-  {
-    id: "JD-LLM-INTERN",
-    title: "大模型应用开发实习生",
-    level: "实习",
-    keywords: ["Prompt", "RAG", "Python", "API 调用", "数据清洗", "评测"],
-    responsibilities: ["协助整理业务知识库和测试集。", "编写 Prompt 与 API 调用脚本。", "分析模型回答质量并输出优化建议。"],
-    requirements: ["了解大模型 API 基本调用方式。", "具备脚本开发和数据处理能力。", "有 AI 应用 Demo 或课程项目优先。"],
-  },
-  {
-    id: "JD-FE-INTERN",
-    title: "前端开发实习生",
-    level: "实习",
-    keywords: ["React", "Next.js", "TypeScript", "Tailwind CSS", "组件化", "可视化"],
-    responsibilities: ["开发 B 端页面和可复用组件。", "对接后端 API 并处理异常状态。", "参与前端体验优化和数据展示。"],
-    requirements: ["熟悉 React 和 TypeScript。", "理解响应式布局和组件状态管理。", "有中后台项目经验优先。"],
-  },
-];
-
-export const sampleResume: ResumeProfile = {
-  id: "resume-demo-ai-app",
-  name: "候选人 Demo",
-  summary: "面向 AI 应用开发工程师岗位的模拟简历，包含企业 Agent 平台、RAG 问答、工具调用和前端工程化项目经验。",
-  skills: ["TypeScript", "Next.js", "React", "Tailwind CSS", "RAG", "Agent Router", "Tool Calling", "结构化输出", "Mock 数据", "评测面板"],
-  projects: [
-    "Enterprise Agent Hub：企业知识库与业务流程自动化 Agent 平台，覆盖知识库问答、客服售后和 JD 匹配场景。",
-    "RAG Knowledge Demo：实现文档切片、来源引用展示和检索结果 mock 编排。",
-    "客服工具中心：模拟订单查询、商品查询、售后政策检索和客服回复生成。",
-  ],
-};
-
-export const interviewQuestions: InterviewQuestion[] = [
-  { id: "IQ-AI-001", jobId: "JD-AI-APP-ENG", question: "请说明你会如何设计一个支持多业务场景的 Agent Router？", focus: "场景识别、意图拆解、工具选择、结构化输出。" },
-  { id: "IQ-AI-002", jobId: "JD-AI-APP-ENG", question: "RAG 回答为什么需要来源引用？你会如何在前端展示 citation？", focus: "可信度、可追溯性、chunk 与文档映射。" },
-  { id: "IQ-LLM-001", jobId: "JD-LLM-INTERN", question: "如果模型回答命中率不稳定，你会如何构造测试集和评测指标？", focus: "测试样本、准确率、工具命中率、失败案例分析。" },
-  { id: "IQ-FE-001", jobId: "JD-FE-INTERN", question: "如何把复杂工具调用结果做成稳定、可维护的前端组件？", focus: "组件拆分、状态管理、异常展示、JSON 可读性。" },
-];
-
 export const documents: KnowledgeDocument[] = [...knowledgePackDocuments, ...enterpriseKnowledgePackDocuments].map((document) => ({
   ...document,
   sourceType: "default",
@@ -270,13 +213,6 @@ export const tools: ToolDefinition[] = [
     outputExample: { ticketId: "TCK-20260624-001", status: "created" },
   },
   {
-    name: "analyzeJD",
-    scenario: "招聘求职 JD 匹配 Agent",
-    description: "用规则方式模拟 JD 与简历匹配分析，输出匹配分、匹配点、缺口和补强关键词。",
-    inputExample: { jdText: "AI 应用开发工程师，需要 RAG、Agent、Tool Calling、Next.js、TypeScript、评测经验。", resumeText: sampleResume.summary },
-    outputExample: { matchScore: 86, matchedKeywords: ["RAG", "Agent", "Tool Calling"], gaps: ["线上 A/B 评测"] },
-  },
-  {
     name: "generateCustomerReply",
     scenario: "电商客服与售后 Agent",
     description: "根据输入上下文生成 mock 客服回复，例如退货说明、尺码建议或物流解释。",
@@ -296,7 +232,7 @@ export const metrics: EvaluationMetric[] = [
 export const testCases: TestCase[] = [
   { id: "TC-001", scenario: "企业知识库 Agent", input: "差旅报销需要提前多久申请？", expectedTool: "searchPolicy", result: "pass", latency: "1.4s" },
   { id: "TC-002", scenario: "电商客服与售后 Agent", input: "订单三天未发货，帮我处理。", expectedTool: "queryOrder + searchPolicy", result: "pass", latency: "1.9s" },
-  { id: "TC-003", scenario: "招聘求职 JD 匹配 Agent", input: "这个 AI 应用开发岗位和我的项目匹配吗？", expectedTool: "analyzeJD", result: "review", latency: "2.2s" },
+  { id: "TC-003", scenario: "企业知识库 Agent", input: "VPN 权限申请失败怎么办？", expectedTool: "searchPolicy", result: "pass", latency: "1.5s" },
   { id: "TC-004", scenario: "电商客服与售后 Agent", input: "帮客户创建一个退货工单。", expectedTool: "createTicket", result: "pass", latency: "1.6s" },
 ];
 export const agentExamples: AgentExample[] = [
@@ -336,11 +272,11 @@ export const agentExamples: AgentExample[] = [
     expectedNeedRag: true,
   },
   {
-    question: "这个 AI 应用开发工程师岗位和我的简历匹配吗？",
-    expectedScenario: "recruitment",
-    expectedIntent: "jd_match",
-    expectedTools: ["analyzeJD"],
-    expectedNeedRag: false,
+    question: "公司电脑怎么申请？",
+    expectedScenario: "enterprise",
+    expectedIntent: "knowledge_qa",
+    expectedTools: [],
+    expectedNeedRag: true,
   },
   {
     question: "帮我创建一个高优先级售后工单。",
