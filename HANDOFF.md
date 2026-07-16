@@ -4,6 +4,21 @@
 
 这份文档写给一个完全没有上下文的新会话。请先读完，再执行任何 Git、发布或服务器操作。
 
+## V2.1.0 当前状态（2026-07-16）
+
+V2.1.0 **Conversation Context Manager** 已在本地 feature 分支完成四个阶段：Context Foundation、Smart History Selection、Rolling Summary 与最终安全回归。
+
+- 当前分支：`feature/v2.1.0-context-manager`
+- 当前 HEAD：`c2ff6e8c012695fd4c6e125e51834a571a0339ac`
+- 阶段三提交：`92cb77e feat(context): add rolling conversation summaries`
+- 阶段四安全修复：`c2ff6e8 fix(context): harden conversation revision safety`
+- 当前本地验证：36 个单测文件、148/148；Full Mock 80/80、100%；E2E 29/29；typecheck、build 与 `git diff --check` 通过。
+- 尚未 merge、tag、push 或部署。不要把该分支称为已发布版本。
+
+V2.1.0 将候选历史交由服务端统一规划：Router、RAG、Tool、规则式历史选择、Rolling Summary 与 Token Budget 共同形成唯一的 Context Plan。摘要是可选的浏览器本地 Conversation 状态，使用 cursor 增量推进；Mock、Real、Streaming 与非 Streaming 共用同一计划和 Summary Patch。没有新增第二次模型调用、数据库、长期记忆或跨会话记忆。
+
+发布前仍需用户明确授权 merge、tag、push 和部署；本地稳定标签建议为 `v2.1.0-stable`，但当前尚未创建。
+
 ## 1. 新会话开始时必须先做什么
 
 1. 读取全局记忆：
