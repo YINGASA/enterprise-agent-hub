@@ -163,6 +163,7 @@ export type AgentApiMetadata = {
   contextMessageCount?: number;
   contextTruncated?: boolean;
   contextCharacterCount?: number;
+  contextTrace?: ContextTrace;
   streamingRequested?: boolean;
   streamingUsed?: boolean;
   streamFallback?: boolean;
@@ -248,7 +249,10 @@ export type ContextToolResult = {
   content: string;
 };
 
-export type ContextStrategy = "recent_only" | "summary_recent" | "summary_selective";
+export type ContextStrategy = "recent_only" | "recent_selective" | "summary_recent" | "summary_selective";
+
+export type ContextCandidateMessage = ContextMessage & { id: string; createdAt?: string; scenario?: AgentScenario; intent?: AgentIntent };
+export type ContextSelectionReason = "keyword_overlap" | "route_scene_match" | "route_intent_match" | "recency_tiebreak";
 
 export type ContextTruncationReason =
   | "none"
@@ -296,6 +300,8 @@ export type ContextTrace = {
   ragIncluded: boolean;
   toolResultsIncluded: boolean;
   truncationReason: ContextTruncationReason;
+  candidateMessageCount?: number;
+  selectedTurnCount?: number;
 };
 
 export type AgentApiResponse = AgentPipelineResult & {

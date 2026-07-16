@@ -17,7 +17,7 @@ import {
   selectConversation,
   type ConversationStore,
 } from "@/lib/conversation/storage";
-import { contextFromConversationMessages } from "@/lib/conversation/context";
+import { toContextCandidates } from "@/lib/conversation/context-candidates";
 import { parseAgentStreamResponse } from "@/lib/agent/streamProtocol";
 import { appendStreamAnswerDelta, appendStreamPhase, completeStreamAnswer, createStreamAnswerAccumulator, shouldStopStreamingRequest } from "@/lib/agent/streamClientState";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
@@ -194,9 +194,8 @@ export function useAgentWorkspace(initialQuestion = "") {
 
     try {
       const contextMessages = targetsRevision && completedTurn ? completedTurn.contextMessages : originConversation.messages;
-      const builtContext = contextFromConversationMessages(contextMessages);
       const enabledUserDocuments = readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
-      const requestBody = JSON.stringify({ question: submittedQuestion, mode, requestAction: input.action, userDocuments: enabledUserDocuments, conversationContext: builtContext.context });
+      const requestBody = JSON.stringify({ question: submittedQuestion, mode, requestAction: input.action, userDocuments: enabledUserDocuments, contextCandidates: toContextCandidates(contextMessages) });
       const streamReadingSupported = typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined";
       const response = await fetch(streamReadingSupported ? "/api/agent/stream" : "/api/agent", {
         method: "POST",

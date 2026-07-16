@@ -99,7 +99,7 @@ test("uses recent mock context in the continuous desktop chat layout and restore
   expect(userBox?.x ?? 0).toBeGreaterThan(assistantBox?.x ?? 0);
   expect(requests.map((request) => request.mode)).toEqual(["mock", "mock"]);
   expect(requests[1]?.question).toBe("那需要准备什么材料？");
-  expect((requests[1]?.conversationContext as { messages?: unknown[] })?.messages).toEqual([
+  expect(requests[1]?.contextCandidates).toEqual([
     expect.objectContaining({ role: "user", content: "订单10001可以退货吗？" }),
     expect.objectContaining({ role: "assistant" }),
   ]);
@@ -129,7 +129,7 @@ test("starts a delayed isolated conversation without persisting duplicate empty 
   await page.getByTestId("agent-run").click();
   await expect(page.getByTestId("conversation-message-assistant").last().getByTestId("assistant-answer")).not.toContainText("结合刚才的订单退货语境");
   await expect(page.getByTestId("conversation-message-assistant").last().getByTestId("assistant-context-meta")).toHaveCount(0);
-  expect((requests[1]?.conversationContext as { messages?: unknown[] })?.messages).toEqual([]);
+  expect(requests[1]?.contextCandidates).toEqual([]);
   const next = await readConversationStore(page);
   expect(next.activeConversationId).not.toBe(previous.activeConversationId);
   expect(next.conversations).toHaveLength(previous.conversations.length + 1);

@@ -95,11 +95,12 @@ export function buildContextPlan(input: BuildContextPlanInput): ContextPlan {
     toolResults: cloneTools(input.toolResults),
   };
   const originalMessageCount = sections.recentMessages.length + sections.selectedHistory.length;
+  const strategy: ContextStrategy = sections.selectedHistory.length ? "recent_selective" : "recent_only";
   const priorityUsage = estimateSections({ ...sections, recentMessages: [], selectedHistory: [], ragEvidence: [], toolResults: [] });
   const priorityBudget = evaluateContextBudget(priorityUsage, config);
   if (priorityBudget.exceedsUsableSectionBudget || priorityUsage.systemInstructions > config.systemInstructionsTokens || priorityUsage.currentUserMessage > config.currentUserMessageTokens) {
-    const trace = createContextTrace({ contextStrategy: "recent_only", totalInputEstimate: priorityUsage.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: false, summaryMessageCount: 0, recentMessageCount: 0, selectedHistoryCount: 0, droppedMessageCount: originalMessageCount, ragIncluded: false, toolResultsIncluded: false, truncationReason: "priority_sections_exceed_budget" });
-    return { ok: false, strategy: "recent_only", sections, estimate: priorityUsage, budget: priorityBudget, trace, failureReason: "priority_sections_exceed_budget" };
+    const trace = createContextTrace({ contextStrategy: strategy, totalInputEstimate: priorityUsage.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: false, summaryMessageCount: 0, recentMessageCount: 0, selectedHistoryCount: 0, droppedMessageCount: originalMessageCount, ragIncluded: false, toolResultsIncluded: false, truncationReason: "priority_sections_exceed_budget" });
+    return { ok: false, strategy, sections, estimate: priorityUsage, budget: priorityBudget, trace, failureReason: "priority_sections_exceed_budget" };
   }
 
   let estimate = estimateSections(sections);
@@ -120,6 +121,7 @@ export function buildContextPlan(input: BuildContextPlanInput): ContextPlan {
 
   const droppedMessageCount = originalMessageCount - sections.recentMessages.length - sections.selectedHistory.length;
   const finalReason = firstTruncationReason;
-  const trace = createContextTrace({ contextStrategy: "recent_only", totalInputEstimate: estimate.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: false, summaryMessageCount: 0, recentMessageCount: sections.recentMessages.length, selectedHistoryCount: sections.selectedHistory.length, droppedMessageCount, ragIncluded: sections.ragEvidence.length > 0, toolResultsIncluded: sections.toolResults.length > 0, truncationReason: finalReason });
-  return { ok: true, strategy: "recent_only", sections, estimate, budget, trace };
+  const finalStrategy: ContextStrategy = sections.selectedHistory.length ? "recent_selective" : "recent_only";
+  const trace = createContextTrace({ contextStrategy: finalStrategy, totalInputEstimate: estimate.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: false, summaryMessageCount: 0, recentMessageCount: sections.recentMessages.length, selectedHistoryCount: sections.selectedHistory.length, droppedMessageCount, ragIncluded: sections.ragEvidence.length > 0, toolResultsIncluded: sections.toolResults.length > 0, truncationReason: finalReason });
+  return { ok: true, strategy: finalStrategy, sections, estimate, budget, trace };
 }

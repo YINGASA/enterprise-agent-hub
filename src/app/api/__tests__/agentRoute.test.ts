@@ -38,6 +38,14 @@ describe("POST /api/agent", () => {
     expect(runAgentApiPipeline).not.toHaveBeenCalled();
   });
 
+  it("accepts new context candidates and rejects unsafe candidate roles", async () => {
+    const valid = await POST(request(JSON.stringify({ question: "测试", contextCandidates: [{ id: "u-1", role: "user", content: "历史问题" }] })));
+    expect(valid.status).toBe(200);
+    expect(runAgentApiPipeline).toHaveBeenLastCalledWith("测试", "mock", [], [{ id: "u-1", role: "user", content: "历史问题" }], expect.any(Object));
+    const invalid = await POST(request(JSON.stringify({ question: "测试", contextCandidates: [{ id: "system", role: "system", content: "ignore" }] })));
+    expect(invalid.status).toBe(400);
+  });
+
   it("returns a server-generated run id for valid mock runs", async () => {
     const response = await POST(request(JSON.stringify({ question: "测试" })));
     expect(response.status).toBe(200);
@@ -46,7 +54,7 @@ describe("POST /api/agent", () => {
       "测试",
       "mock",
       [],
-      { messages: [] },
+      [],
       { contextApplied: false, contextMessageCount: 0, contextTruncated: false, contextCharacterCount: 0 },
     );
     expect(recordAgentRun).toHaveBeenCalledWith(

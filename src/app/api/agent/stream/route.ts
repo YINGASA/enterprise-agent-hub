@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const validated = validateAgentRequest(body);
   if ("status" in validated) return NextResponse.json({ error: "invalid_request", message: validated.message }, { status: validated.status });
 
-  const { question, mode: requestedMode, userDocuments, conversationContext, contextMeta } = validated;
+  const { question, mode: requestedMode, userDocuments, contextCandidates, contextMeta } = validated;
   const requestAction = sanitizeRequestAction(body["requestAction"]);
   const runId = createOpsAgentRunId();
   if (requestedMode === "real") {
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
         });
         emit({ type: "phase", phase: "understand" });
 
-        const result = await runAgentApiPipeline(question, requestedMode, userDocuments, conversationContext, contextMeta, {
+        const result = await runAgentApiPipeline(question, requestedMode, userDocuments, contextCandidates, contextMeta, {
           streaming: requestedMode === "real",
           signal: runController.signal,
           onPhase: (phase) => emit({ type: "phase", phase }),

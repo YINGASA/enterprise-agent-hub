@@ -2,7 +2,7 @@ import type { ContextStrategy, ContextTrace, ContextTruncationReason } from "@/t
 
 type ContextTraceInput = Partial<ContextTrace> & Record<string, unknown>;
 
-const strategies = new Set<ContextStrategy>(["recent_only", "summary_recent", "summary_selective"]);
+const strategies = new Set<ContextStrategy>(["recent_only", "recent_selective", "summary_recent", "summary_selective"]);
 const reasons = new Set<ContextTruncationReason>(["none", "tool_results", "rag_evidence", "selected_history", "recent_messages", "priority_sections_exceed_budget", "safety_margin_exceeded"]);
 
 function safeCount(value: unknown) {
@@ -27,5 +27,7 @@ export function createContextTrace(input: ContextTraceInput): ContextTrace {
     ragIncluded: input.ragIncluded === true,
     toolResultsIncluded: input.toolResultsIncluded === true,
     truncationReason: typeof input.truncationReason === "string" && reasons.has(input.truncationReason as ContextTruncationReason) ? input.truncationReason as ContextTruncationReason : "none",
+    candidateMessageCount: safeCount(input.candidateMessageCount),
+    selectedTurnCount: safeCount(input.selectedTurnCount),
   };
 }

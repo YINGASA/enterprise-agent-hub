@@ -16,7 +16,7 @@ describe("context manager foundation", () => {
     const before = JSON.stringify(input);
     const plan = buildContextPlan(input);
     expect(plan.ok).toBe(true);
-    expect(plan.strategy).toBe("recent_only");
+    expect(plan.strategy).toBe("recent_selective");
     expect(plan.sections.recentMessages).toEqual(input.recentMessages);
     expect(plan.sections.selectedHistory).toEqual(input.selectedHistory);
     expect(JSON.stringify(input)).toBe(before);

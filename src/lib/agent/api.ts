@@ -2,8 +2,10 @@ import { documents } from "@/data/mock";
 import { runAgentPipeline } from "@/lib/agent";
 import { normalizeActiveAgentScenario } from "@/lib/agent/scenarios";
 import { callOpenAICompatibleChat, getLlmConfig, streamOpenAICompatibleChat } from "@/lib/llm";
-import { buildConversationContext, hasRecentOrderReturnContext } from "@/lib/conversation/context";
-import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStreamMetadata, AgentStreamPhase, AgentStructuredOutput, ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
+import { hasRecentOrderReturnContext } from "@/lib/conversation/context";
+import { buildContextPlan, type ContextPlan } from "@/lib/conversation/context-manager";
+import { selectHistory } from "@/lib/conversation/history-selector";
+import type { AgentApiMetadata, AgentApiResponse, AgentStep, AgentStreamMetadata, AgentStreamPhase, AgentStructuredOutput, ContextCandidateMessage, ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmGenerateResult, LlmMessage, LlmMode, ToolName, ToolRunResult } from "@/types";
 
 const validTools: ToolName[] = ["queryOrder", "queryProduct", "searchPolicy", "createTicket", "generateCustomerReply"];
 
@@ -248,8 +250,10 @@ function safeToolPromptData(toolResult: ToolRunResult) {
   };
 }
 
-export function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPipeline>, conversationContext?: ConversationContext): LlmMessage[] {
-  const safeContext = buildConversationContext(conversationContext).context.messages;
+export function buildMessages(question: string, pipeline: ReturnType<typeof runAgentPipeline>, contextPlan?: ContextPlan | ConversationContext): LlmMessage[] {
+  const safeContext = contextPlan && "sections" in contextPlan
+    ? [...contextPlan.sections.selectedHistory, ...contextPlan.sections.recentMessages]
+    : contextPlan?.messages ?? [];
   return [
     {
       role: "system",
@@ -373,24 +377,38 @@ export async function runAgentApiPipeline(
   question: string,
   requestedMode: LlmMode,
   userDocuments: ImportedKnowledgeDocument[] = [],
-  conversationContext?: ConversationContext,
+  contextCandidates: ContextCandidateMessage[] | ConversationContext = [],
   suppliedMeta?: ConversationContextMeta,
   runtime?: AgentApiPipelineRuntime,
 ): Promise<AgentApiResponse> {
-  const sanitized = buildConversationContext(conversationContext, question);
-  const contextMeta = suppliedMeta ?? sanitized.meta;
-  const metaApi = (base: AgentApiMetadata) => buildApiMetadata({ ...base, contextApplied: contextMeta.contextApplied, contextMessageCount: contextMeta.contextMessageCount, contextTruncated: contextMeta.contextTruncated, contextCharacterCount: contextMeta.contextCharacterCount });
+  const legacyMeta = suppliedMeta ?? { contextApplied: false, contextMessageCount: 0, contextTruncated: false, contextCharacterCount: 0 };
   const pipelineDocuments = [...documents, ...userDocuments.filter((document) => document.enabled !== false)];
   const ambiguousMaterialFollowUp = /那.*材料|需要准备什么材料/.test(question);
-  const orderReturnFollowUp = ambiguousMaterialFollowUp && hasRecentOrderReturnContext(sanitized.context);
-  let pipeline = runAgentPipeline(orderReturnFollowUp ? "订单退货需要准备什么材料？" : question, pipelineDocuments);
+  let pipeline = runAgentPipeline(question, pipelineDocuments);
+  const normalizedCandidates: ContextCandidateMessage[] = Array.isArray(contextCandidates)
+    ? contextCandidates
+    : contextCandidates.messages.map((message, index) => ({ id: `legacy-context-${index}`, ...message }));
+  const selection = selectHistory({ messages: normalizedCandidates, currentUserMessage: question, route: pipeline.route });
+  const contextPlan = buildContextPlan({
+    systemInstructions: "Enterprise Agent Hub server instructions.",
+    currentUserMessage: question,
+    recentMessages: selection.recentMessages,
+    selectedHistory: selection.selectedHistory,
+    ragEvidence: pipeline.ragAnswer?.retrievedChunks.map((item) => ({ id: `${item.chunk.documentId}:${item.chunk.id}`, sourceTitle: item.chunk.sourceTitle, content: truncate(item.chunk.content, 500) })) ?? [],
+    toolResults: pipeline.toolResults.map((item) => ({ tool: item.tool, status: item.status, content: JSON.stringify(safeToolPromptData(item)) })),
+  });
+  if (!contextPlan.ok) throw new Error("Context plan priority sections exceed the input budget.");
+  const effectiveContext = { messages: [...contextPlan.sections.selectedHistory, ...contextPlan.sections.recentMessages] };
+  const orderReturnFollowUp = ambiguousMaterialFollowUp && hasRecentOrderReturnContext(effectiveContext);
   if (orderReturnFollowUp) {
+    pipeline = runAgentPipeline("订单退货需要准备什么材料？", pipelineDocuments);
     const answer = "结合刚才的订单退货语境，通常需要准备订单号、退货原因、商品及包装状态说明；如涉及质量问题，再补充清晰照片或视频。提交前还应核对签收时间和商品是否拆封。";
     pipeline = { ...pipeline, question, finalAnswer: answer, structuredOutput: { ...pipeline.structuredOutput, scenario: pipeline.route.scenario, intent: pipeline.route.intent, answer, needsClarification: false, missingFields: undefined, clarificationQuestion: undefined, nextAction: "准备退货材料并在订单详情发起售后申请" } };
-  } else if (ambiguousMaterialFollowUp && !sanitized.meta.contextApplied) {
+  } else if (ambiguousMaterialFollowUp && !contextPlan.sections.recentMessages.length && !contextPlan.sections.selectedHistory.length) {
     const answer = "请补充你所指的业务事项，例如退货、报销、请假或申请流程；确认场景后我才能给出准确的材料清单。";
     pipeline = { ...pipeline, finalAnswer: answer, structuredOutput: { ...pipeline.structuredOutput, answer, needsClarification: true, missingFields: ["applicationType"], clarificationQuestion: "你需要准备的是哪项业务的材料？", nextAction: "补充具体业务场景" } };
   }
+  const metaApi = (base: AgentApiMetadata) => buildApiMetadata({ ...base, contextApplied: effectiveContext.messages.length > 0, contextMessageCount: effectiveContext.messages.length, contextTruncated: contextPlan.trace.droppedMessageCount > 0 || legacyMeta.contextTruncated, contextCharacterCount: legacyMeta.contextCharacterCount, contextTrace: { ...contextPlan.trace, candidateMessageCount: normalizedCandidates.length, selectedTurnCount: selection.selectedTurnCount } });
   if (pipeline.route.needRag) runtime?.onPhase?.("retrieve");
   if (pipeline.toolResults.length > 0) runtime?.onPhase?.("tool");
   runtime?.onPhase?.("generate");
@@ -421,7 +439,7 @@ export async function runAgentApiPipeline(
     };
   }
 
-  const messages = buildMessages(question, pipeline, sanitized.context);
+  const messages = buildMessages(question, pipeline, contextPlan);
   const generateOptions = { temperature: 0.1, maxTokens: 1200, responseFormat: "json_object" as const, signal: runtime?.signal };
   let llmResult: LlmGenerateResult;
   if (runtime?.streaming) {
