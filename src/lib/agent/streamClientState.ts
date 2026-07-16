@@ -1,9 +1,10 @@
-import type { AgentStreamEvent, AgentStreamPhase } from "@/types";
+import type { AgentStreamEvent, AgentStreamPhase, ConversationSummaryPatch } from "@/types";
 
 export type StreamAnswerAccumulator = {
   answer: string;
   deltaCount: number;
   seenIndexes: ReadonlySet<number>;
+  conversationSummaryPatch?: ConversationSummaryPatch;
 };
 
 export function createStreamAnswerAccumulator(): StreamAnswerAccumulator {
@@ -21,6 +22,7 @@ export function appendStreamAnswerDelta(
     answer: current.answer + event.delta,
     deltaCount: current.deltaCount + 1,
     seenIndexes,
+    ...(current.conversationSummaryPatch ? { conversationSummaryPatch: current.conversationSummaryPatch } : {}),
   };
 }
 
@@ -32,6 +34,7 @@ export function completeStreamAnswer(
     ...current,
     answer: event.result.finalAnswer,
     deltaCount: event.deltaCount,
+    ...(current.conversationSummaryPatch ? { conversationSummaryPatch: current.conversationSummaryPatch } : event.conversationSummaryPatch ? { conversationSummaryPatch: event.conversationSummaryPatch } : {}),
   };
 }
 

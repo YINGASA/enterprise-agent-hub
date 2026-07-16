@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createNdjsonEventParser, parseAgentStreamResponse, splitMockAnswer, streamMockAnswer } from "@/lib/agent/streamProtocol";
+import { createNdjsonEventParser, isAgentStreamEvent, isConversationSummaryPatch, parseAgentStreamResponse, splitMockAnswer, streamMockAnswer } from "@/lib/agent/streamProtocol";
 import type { AgentStreamEvent } from "@/types";
 
 describe("agent NDJSON stream protocol", () => {
@@ -27,6 +27,27 @@ describe("agent NDJSON stream protocol", () => {
   it("rejects a response containing malformed protocol data", async () => {
     const response = new Response('{"type":"phase","phase":"generate"}\ninvalid\n', { status: 200 });
     await expect(parseAgentStreamResponse(response, () => undefined)).rejects.toThrow("invalid event");
+  });
+
+  it("accepts only bounded summary patches on completed events", () => {
+    const set = { set: { text: "summary", throughMessageId: "a-4", updatedAt: "2026-07-16T00:00:00.000Z", version: 1, sourceMessageCount: 8 } };
+    expect(isConversationSummaryPatch(set)).toBe(true);
+    expect(isConversationSummaryPatch({ clear: true })).toBe(true);
+    expect(isConversationSummaryPatch({ set: set.set, clear: true })).toBe(false);
+    expect(isConversationSummaryPatch({})).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, text: "x".repeat(8_001) } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, throughMessageId: "a".repeat(129) } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, version: 2 } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, sourceMessageCount: -1 } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, sourceMessageCount: 1.5 } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, sourceMessageCount: Number.NaN } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, sourceMessageCount: Number.POSITIVE_INFINITY } })).toBe(false);
+    expect(isConversationSummaryPatch({ set: { ...set.set, trace: "unsafe" } })).toBe(false);
+
+    const completed = { type: "answer_completed", result: { runId: "run-1", finalAnswer: "ok", api: {} }, streamingRequested: true, streamingUsed: true, streamFallback: false, deltaCount: 1, conversationSummaryPatch: set };
+    expect(isAgentStreamEvent(completed)).toBe(true);
+    expect(isAgentStreamEvent({ type: "answer_delta", delta: "x", index: 0, conversationSummaryPatch: set })).toBe(false);
+    expect(isAgentStreamEvent({ ...completed, conversationSummaryPatch: { set: set.set, clear: true } })).toBe(false);
   });
 });
 

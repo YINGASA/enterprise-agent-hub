@@ -1,13 +1,16 @@
 import { sanitizeImportedKnowledgeDocument } from "@/lib/knowledge/storage";
 import { agentRequestLimits } from "@/lib/ops/securityLimits";
 import { buildConversationContext } from "@/lib/conversation/context";
-import type { ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmMode } from "@/types";
+import { MAX_CONTEXT_CANDIDATES, MAX_CONTEXT_CANDIDATE_CHARACTERS, MAX_CONTEXT_CANDIDATE_TOTAL_CHARACTERS } from "@/lib/conversation/context-candidates";
+import type { ContextCandidateMessage, ConversationContext, ConversationContextMeta, ConversationSummaryState, ImportedKnowledgeDocument, LlmMode } from "@/types";
 
 type AgentRequestBody = {
   question?: unknown;
   mode?: unknown;
   userDocuments?: unknown;
   conversationContext?: unknown;
+  contextCandidates?: unknown;
+  conversationSummary?: unknown;
 };
 
 export type ValidatedAgentRequest = {
@@ -16,6 +19,8 @@ export type ValidatedAgentRequest = {
   userDocuments: ImportedKnowledgeDocument[];
   conversationContext: ConversationContext;
   contextMeta: ConversationContextMeta;
+  contextCandidates: ContextCandidateMessage[];
+  conversationSummary?: ConversationSummaryState;
 };
 
 export type AgentRequestValidationError = {
@@ -81,9 +86,35 @@ export function validateAgentRequest(body: AgentRequestBody): ValidatedAgentRequ
     userDocuments.push(sanitized);
   }
 
+  let contextCandidates: ContextCandidateMessage[] = [];
+  if (body.contextCandidates !== undefined) {
+    if (!Array.isArray(body.contextCandidates)) return { status: 400, message: "上下文候选消息格式不正确。" };
+    if (body.contextCandidates.length > MAX_CONTEXT_CANDIDATES) return { status: 413, message: "上下文候选消息数量超过限制。" };
+    let total = 0;
+    for (const value of body.contextCandidates) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return { status: 400, message: "上下文候选消息格式不正确。" };
+      const item = value as Record<string, unknown>;
+      if (typeof item.id !== "string" || !isNonEmptyString(item.content) || (item.role !== "user" && item.role !== "assistant")) return { status: 400, message: "上下文候选消息字段不正确。" };
+      if (item.content.length > MAX_CONTEXT_CANDIDATE_CHARACTERS) return { status: 413, message: "上下文候选消息内容过长。" };
+      total += item.content.length;
+      if (total > MAX_CONTEXT_CANDIDATE_TOTAL_CHARACTERS) return { status: 413, message: "上下文候选消息总内容超过限制。" };
+      contextCandidates.push({ id: item.id.slice(0, 128), role: item.role, content: item.content.trim(), ...(typeof item.createdAt === "string" ? { createdAt: item.createdAt } : {}), ...(typeof item.scenario === "string" ? { scenario: item.scenario as ContextCandidateMessage["scenario"] } : {}), ...(typeof item.intent === "string" ? { intent: item.intent as ContextCandidateMessage["intent"] } : {}) });
+    }
+  }
   const { context: conversationContext, meta: contextMeta } = buildConversationContext(
     body.conversationContext && typeof body.conversationContext === "object" ? body.conversationContext as { messages?: unknown } : undefined,
     question,
   );
-  return { question, mode, userDocuments, conversationContext, contextMeta };
+  if (!contextCandidates.length && conversationContext.messages.length) contextCandidates = conversationContext.messages.map((message, index) => ({ id: `legacy-context-${index}`, ...message }));
+  let conversationSummary: ConversationSummaryState | undefined;
+  if (body.conversationSummary !== undefined) {
+    const summary = body.conversationSummary && typeof body.conversationSummary === "object" && !Array.isArray(body.conversationSummary)
+      ? body.conversationSummary as Record<string, unknown>
+      : undefined;
+    if (typeof summary?.text === "string" && summary.text.length > 8_000 || typeof summary?.throughMessageId === "string" && summary.throughMessageId.length > 128) return { status: 413, message: "对话摘要内容超过限制。" };
+    if (summary && typeof summary.text === "string" && typeof summary.throughMessageId === "string" && summary.version === 1 && typeof summary.sourceMessageCount === "number" && Number.isInteger(summary.sourceMessageCount) && summary.sourceMessageCount >= 0 && summary.text.trim()) {
+      conversationSummary = { text: summary.text.trim(), throughMessageId: summary.throughMessageId, version: 1, sourceMessageCount: summary.sourceMessageCount, updatedAt: "1970-01-01T00:00:00.000Z" };
+    }
+  }
+  return { question, mode, userDocuments, conversationContext, contextMeta, contextCandidates, ...(conversationSummary ? { conversationSummary } : {}) };
 }

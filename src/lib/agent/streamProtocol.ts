@@ -1,4 +1,5 @@
-import type { AgentStreamEvent } from "@/types";
+import type { AgentStreamEvent, ConversationSummaryPatch, ConversationSummaryState } from "@/types";
+import { sanitizeConversationSummaryPatch, sanitizeConversationSummaryState } from "@/lib/conversation/context-summary";
 
 const encoder = new TextEncoder();
 
@@ -10,8 +11,13 @@ function isNonNegativeInteger(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 0;
 }
 
+export function isConversationSummaryPatch(value: unknown): value is ConversationSummaryPatch {
+  return sanitizeConversationSummaryPatch(value) !== undefined;
+}
+
 export function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
   if (!isRecord(value) || typeof value.type !== "string") return false;
+  if (value.type !== "answer_completed" && value.conversationSummaryPatch !== undefined) return false;
   if (value.type === "run_started") {
     return typeof value.runId === "string" && (value.requestedMode === "mock" || value.requestedMode === "real") &&
       (value.responseMode === "mock" || value.responseMode === "real") &&
@@ -20,10 +26,11 @@ export function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
   if (value.type === "phase") return value.phase === "understand" || value.phase === "retrieve" || value.phase === "tool" || value.phase === "generate" || value.phase === "complete";
   if (value.type === "answer_delta") return typeof value.delta === "string" && value.delta.length > 0 && isNonNegativeInteger(value.index);
   if (value.type === "answer_completed") {
-    return isRecord(value.result) && typeof value.result.runId === "string" && value.result.runId.length > 0 &&
+    return isRecord(value.result) && value.result.conversationSummaryPatch === undefined && typeof value.result.runId === "string" && value.result.runId.length > 0 &&
       typeof value.result.finalAnswer === "string" && isRecord(value.result.api) &&
       value.streamingRequested === true && typeof value.streamingUsed === "boolean" &&
-      typeof value.streamFallback === "boolean" && isNonNegativeInteger(value.deltaCount);
+      typeof value.streamFallback === "boolean" && isNonNegativeInteger(value.deltaCount) &&
+      (value.conversationSummaryPatch === undefined || isConversationSummaryPatch(value.conversationSummaryPatch));
   }
   if (value.type === "run_error") {
     return (value.code === "invalid_stream" || value.code === "network_error" || value.code === "rate_limited" || value.code === "server_error" || value.code === "timeout_error") &&

@@ -163,6 +163,7 @@ export type AgentApiMetadata = {
   contextMessageCount?: number;
   contextTruncated?: boolean;
   contextCharacterCount?: number;
+  contextTrace?: ContextTrace;
   streamingRequested?: boolean;
   streamingUsed?: boolean;
   streamFallback?: boolean;
@@ -214,7 +215,12 @@ export type Conversation = {
   updatedAt: string;
   messages: ConversationMessage[];
   schemaVersion: 1;
+  conversationSummary?: ConversationSummaryState;
 };
+
+export type ConversationSummaryState = { text: string; throughMessageId: string; updatedAt: string; version: 1; sourceMessageCount: number };
+export type ConversationSummaryPatch = { set: ConversationSummaryState; clear?: never } | { clear: true; set?: never };
+export type SummaryInvalidReason = "missing_cursor" | "cursor_not_found" | "cursor_not_assistant" | "cursor_in_protected_recent" | "unsupported_version" | "invalid_text" | "invalid_source_count";
 
 export type ConversationContext = {
   messages: Array<Pick<ConversationMessage, "role" | "content">>;
@@ -227,9 +233,89 @@ export type ConversationContextMeta = {
   contextCharacterCount: number;
 };
 
+/**
+ * V2.1.0 Context Foundation types. These types are runtime-only planning
+ * inputs and deliberately do not change the persisted Conversation schema.
+ */
+export type ContextMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type ContextEvidence = {
+  id?: string;
+  sourceTitle?: string;
+  content: string;
+};
+
+export type ContextToolResult = {
+  tool: string;
+  status: "success" | "failed";
+  content: string;
+};
+
+export type ContextStrategy = "recent_only" | "recent_selective" | "summary_recent" | "summary_selective";
+
+export type ContextCandidateMessage = ContextMessage & { id: string; createdAt?: string; scenario?: AgentScenario; intent?: AgentIntent };
+export type ContextSelectionReason = "keyword_overlap" | "route_scene_match" | "route_intent_match" | "recency_tiebreak";
+
+export type ContextTruncationReason =
+  | "none"
+  | "tool_results"
+  | "rag_evidence"
+  | "selected_history"
+  | "recent_messages"
+  | "priority_sections_exceed_budget"
+  | "safety_margin_exceeded";
+
+export type ContextBudgetConfig = {
+  modelContextTokens: number;
+  reservedOutputTokens: number;
+  maximumInputTokens: number;
+  safetyMarginTokens: number;
+  systemInstructionsTokens: number;
+  currentUserMessageTokens: number;
+  recentMessagesTokens: number;
+  selectedHistoryTokens: number;
+  conversationSummaryTokens: number;
+  ragEvidenceTokens: number;
+  toolResultsTokens: number;
+};
+
+export type ContextSectionUsage = {
+  systemInstructions: number;
+  currentUserMessage: number;
+  recentMessages: number;
+  selectedHistory: number;
+  conversationSummary: number;
+  ragEvidence: number;
+  toolResults: number;
+  totalInputEstimate: number;
+};
+
+export type ContextTrace = {
+  contextStrategy: ContextStrategy;
+  totalInputEstimate: number;
+  budgetLimit: number;
+  summaryUsed: boolean;
+  summaryMessageCount: number;
+  recentMessageCount: number;
+  selectedHistoryCount: number;
+  droppedMessageCount: number;
+  ragIncluded: boolean;
+  toolResultsIncluded: boolean;
+  truncationReason: ContextTruncationReason;
+  candidateMessageCount?: number;
+  selectedTurnCount?: number;
+  summaryUpdated?: boolean;
+  summaryVersion?: 1;
+  summaryFallbackReason?: SummaryInvalidReason;
+};
+
 export type AgentApiResponse = AgentPipelineResult & {
   api: AgentApiMetadata;
   runId?: string;
+  conversationSummaryPatch?: ConversationSummaryPatch;
 };
 export type AgentExample = {
   question: string;

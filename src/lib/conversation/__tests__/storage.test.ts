@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   appendConversationTurn,
   appendConversationTurnToConversation,
+  applyConversationSummaryPatch,
   clearCurrentConversation,
   CONVERSATION_STORAGE_KEY,
   createConversation,
@@ -17,6 +18,8 @@ import {
 } from "@/lib/conversation/storage";
 import { STORAGE_KEY as CHAT_HISTORY_KEY } from "@/lib/chat/history";
 import type { AgentApiResponse } from "@/types";
+
+const summaryPatch = (throughMessageId: string) => ({ set: { text: "Confirmed: ORD-10001 must not be cancelled.", throughMessageId, updatedAt: "2026-07-16T00:00:00.000Z", version: 1 as const, sourceMessageCount: 8 } });
 
 const savedAt = "2026-01-01T00:00:00.000Z";
 
@@ -295,5 +298,55 @@ describe("conversation storage", () => {
     expect(replaceLastCompletedAssistant(completed, "c", missingRunId).ok).toBe(false);
     expect(replaceLastCompletedTurn(completed, "c", "replacement", missingRunId).ok).toBe(false);
     expect(JSON.stringify(completed)).toBe(before);
+  });
+
+  it("keeps V2.0.4 messages when a persisted summary is invalid", () => {
+    const storage = installStorage();
+    storage.set(CONVERSATION_STORAGE_KEY, envelope({ activeConversationId: "c", legacyHistoryMigrated: true, conversations: [{ id: "c", title: "legacy", titleSource: "auto", createdAt: savedAt, updatedAt: savedAt, schemaVersion: 1, messages: [{ id: "u", role: "user", content: "legacy question", createdAt: savedAt }, { id: "a", role: "assistant", content: "legacy answer", createdAt: "2026-01-01T00:00:01.000Z" }], conversationSummary: { text: "bad", throughMessageId: "missing", updatedAt: savedAt, version: 1, sourceMessageCount: 2 } }] }));
+    const loaded = loadConversationStore().data.conversations[0]!;
+    expect(loaded.messages).toHaveLength(2);
+    expect(loaded.conversationSummary).toBeUndefined();
+  });
+
+  it("applies summary patches immutably and rejects malformed patches", () => {
+    const conversation = createConversation();
+    const clear = applyConversationSummaryPatch({ ...conversation, conversationSummary: summaryPatch("a-4").set }, { clear: true });
+    expect(clear?.conversationSummary).toBeUndefined();
+    expect(conversation.conversationSummary).toBeUndefined();
+    const set = applyConversationSummaryPatch(conversation, summaryPatch("a-4"));
+    expect(set?.conversationSummary).toEqual(summaryPatch("a-4").set);
+    expect(applyConversationSummaryPatch(conversation, { set: summaryPatch("a-4").set, clear: true } as never)).toBeNull();
+  });
+
+  it("atomically persists append, regenerate, and edit patches while CAS failures leave summaries unchanged", () => {
+    installStorage();
+    let store = loadConversationStore().data;
+    for (let index = 1; index <= 8; index += 1) store = appendConversationTurn(store, `question-${index}`, result(`run-${index}`)).data;
+    const baseConversation = store.conversations[0]!;
+    const cursor = baseConversation.messages[7]!.id;
+    const appended = appendConversationTurn(store, "question-9", result("run-9"), summaryPatch(cursor));
+    const appendedConversation = appended.data.conversations[0]!;
+    expect(appended.ok).toBe(true);
+    expect(appendedConversation.messages).toHaveLength(18);
+    expect(appendedConversation.conversationSummary).toEqual(summaryPatch(cursor).set);
+
+    const tail = getLastCompletedTurn(appendedConversation)!;
+    const regenerated = replaceLastCompletedAssistant(appended.data, appendedConversation.id, result("run-9-regenerated"), tail.assistantMessage.id, { clear: true });
+    expect(regenerated.ok).toBe(true);
+    expect(regenerated.data.conversations[0]?.conversationSummary).toBeUndefined();
+
+    const stale = replaceLastCompletedAssistant(appended.data, appendedConversation.id, result("run-stale"), "missing", { clear: true });
+    expect(stale.ok).toBe(false);
+    expect(stale.data.conversations[0]?.conversationSummary).toEqual(summaryPatch(cursor).set);
+
+    const regeneratedTurn = getLastCompletedTurn(regenerated.data.conversations[0]!)!;
+    const edited = replaceLastCompletedTurn(regenerated.data, appendedConversation.id, "edited question-9", result("run-9-edited"), { userMessageId: regeneratedTurn.userMessage.id, assistantMessageId: regeneratedTurn.assistantMessage.id }, summaryPatch(cursor));
+    expect(edited.ok).toBe(true);
+    expect(edited.data.conversations[0]?.conversationSummary).toEqual(summaryPatch(cursor).set);
+    expect(edited.data.conversations[0]?.messages.some((message) => message.content === "question-9")).toBe(false);
+
+    const staleEdit = replaceLastCompletedTurn(regenerated.data, appendedConversation.id, "stale edit", result("run-stale-edit"), { userMessageId: "missing", assistantMessageId: regeneratedTurn.assistantMessage.id }, { clear: true });
+    expect(staleEdit.ok).toBe(false);
+    expect(staleEdit.data.conversations[0]?.conversationSummary).toBeUndefined();
   });
 });

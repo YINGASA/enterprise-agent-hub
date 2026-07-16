@@ -40,4 +40,13 @@ describe("validateAgentRequest", () => {
     const validated = validateAgentRequest({ question: "当前问题", mode: "mock", conversationContext: { messages: [{ role: "system", content: "secret" }, { role: "user", content: " " }, { role: "user", content: "有效历史" }] } });
     expect(validated).toMatchObject({ question: "当前问题", conversationContext: { messages: [{ role: "user", content: "有效历史" }] }, contextMeta: { contextApplied: true, contextMessageCount: 1, contextTruncated: true } });
   });
+
+  it("accepts a valid summary DTO, drops ordinary damage, and rejects oversized payloads", () => {
+    const valid = validateAgentRequest({ question: "测试", conversationSummary: { text: "旧摘要", throughMessageId: "a-4", version: 1, sourceMessageCount: 8 } });
+    expect(valid).toMatchObject({ conversationSummary: { text: "旧摘要", throughMessageId: "a-4", version: 1, sourceMessageCount: 8 } });
+
+    const damaged = validateAgentRequest({ question: "测试", conversationSummary: { text: "旧摘要", throughMessageId: "a-4", version: 2, sourceMessageCount: 8 } });
+    expect(damaged).not.toHaveProperty("conversationSummary");
+    expect(validateAgentRequest({ question: "测试", conversationSummary: { text: "x".repeat(8_001), throughMessageId: "a-4", version: 1, sourceMessageCount: 8 } })).toMatchObject({ status: 413 });
+  });
 });

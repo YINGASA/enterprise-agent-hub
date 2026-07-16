@@ -17,7 +17,7 @@ import {
   selectConversation,
   type ConversationStore,
 } from "@/lib/conversation/storage";
-import { contextFromConversationMessages } from "@/lib/conversation/context";
+import { toContextCandidates, toConversationSummaryDto } from "@/lib/conversation/context-candidates";
 import { parseAgentStreamResponse } from "@/lib/agent/streamProtocol";
 import { appendStreamAnswerDelta, appendStreamPhase, completeStreamAnswer, createStreamAnswerAccumulator, shouldStopStreamingRequest } from "@/lib/agent/streamClientState";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
@@ -194,9 +194,10 @@ export function useAgentWorkspace(initialQuestion = "") {
 
     try {
       const contextMessages = targetsRevision && completedTurn ? completedTurn.contextMessages : originConversation.messages;
-      const builtContext = contextFromConversationMessages(contextMessages);
+      const contextCandidates = toContextCandidates(contextMessages);
+      const conversationSummary = toConversationSummaryDto(originConversation.conversationSummary, contextMessages);
       const enabledUserDocuments = readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
-      const requestBody = JSON.stringify({ question: submittedQuestion, mode, requestAction: input.action, userDocuments: enabledUserDocuments, conversationContext: builtContext.context });
+      const requestBody = JSON.stringify({ question: submittedQuestion, mode, requestAction: input.action, userDocuments: enabledUserDocuments, contextCandidates, ...(conversationSummary ? { conversationSummary } : {}) });
       const streamReadingSupported = typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined";
       const response = await fetch(streamReadingSupported ? "/api/agent/stream" : "/api/agent", {
         method: "POST",
@@ -296,11 +297,12 @@ export function useAgentWorkspace(initialQuestion = "") {
         if (draftConversationRef.current?.id !== originConversation.id) return;
         workingStore = { ...latestStore, activeConversationId: originConversation.id, conversations: [originConversation, ...latestStore.conversations] };
       }
+      const summaryPatch = answerAccumulator.conversationSummaryPatch ?? completedResult.conversationSummaryPatch;
       const saved = input.targetAssistantMessageId
         ? (input.action === "edit_resend" || (input.action === "retry" && input.targetUserMessageId && submittedQuestion !== completedTurn?.userMessage.content)
-          ? replaceLastCompletedTurn(workingStore, originConversation.id, submittedQuestion, completedResult, { userMessageId: input.targetUserMessageId!, assistantMessageId: input.targetAssistantMessageId })
-          : replaceLastCompletedAssistant(workingStore, originConversation.id, completedResult, input.targetAssistantMessageId))
-        : appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult);
+          ? replaceLastCompletedTurn(workingStore, originConversation.id, submittedQuestion, completedResult, { userMessageId: input.targetUserMessageId!, assistantMessageId: input.targetAssistantMessageId }, summaryPatch)
+          : replaceLastCompletedAssistant(workingStore, originConversation.id, completedResult, input.targetAssistantMessageId, summaryPatch))
+        : appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult, summaryPatch);
       if (!saved.ok) throw new Error("error" in saved && typeof saved.error === "string" ? saved.error : "会话写入失败。");
       const assistantMessage = findAssistantMessage(saved.data, originConversation.id, completedResult);
       if (!assistantMessage) throw new Error("回答已生成，但无法关联到当前会话。");

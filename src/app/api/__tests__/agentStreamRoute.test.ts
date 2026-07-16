@@ -85,7 +85,7 @@ describe("POST /api/agent/stream", () => {
       expect.objectContaining({ api: expect.objectContaining({ requestAction: "edit_resend" }) }),
       expect.objectContaining({ requestAction: "edit_resend" }),
     );
-    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(6);
+    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(7);
 
     recordAgentRun.mockClear();
     runAgentApiPipeline.mockClear();
@@ -96,6 +96,37 @@ describe("POST /api/agent/stream", () => {
       expect.objectContaining({ requestAction: "send" }),
     );
     expect(JSON.stringify(recordAgentRun.mock.calls)).not.toContain("private");
+  });
+
+  it("sends a pipeline patch once on completion and excludes it from Ops", async () => {
+    const patch = { set: { text: "summary text", throughMessageId: "a-4", updatedAt: "2026-07-16T00:00:00.000Z", version: 1 as const, sourceMessageCount: 8 } };
+    runAgentApiPipeline.mockResolvedValueOnce({ ...agentResult(), conversationSummaryPatch: patch });
+    const events = await readEvents(await POST(request()));
+    const completed = events.filter((event): event is Extract<AgentStreamEvent, { type: "answer_completed" }> => event.type === "answer_completed");
+
+    expect(completed).toHaveLength(1);
+    expect(completed[0]?.conversationSummaryPatch).toEqual(patch);
+    expect(completed[0]?.result).not.toHaveProperty("conversationSummaryPatch");
+    expect(recordAgentRun).toHaveBeenCalledWith(expect.not.objectContaining({ conversationSummaryPatch: expect.anything() }), expect.any(Object));
+    expect(JSON.stringify(recordAgentRun.mock.calls)).not.toContain("summary text");
+  });
+
+  it("forwards the same patch for real streaming and real fallback completion", async () => {
+    const patch = { clear: true as const };
+    const realResult = { ...agentResult(), api: { ...agentResult().api, requestedMode: "real" as const, responseMode: "real" as const }, conversationSummaryPatch: patch };
+    runAgentApiPipeline.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[5] as { onStreamMetadata?: (value: { streamingUsed: boolean; streamFallback: boolean; deltaCount: number }) => void } | undefined)?.onStreamMetadata?.({ streamingUsed: true, streamFallback: false, deltaCount: 1 });
+      return realResult;
+    });
+    const streamed = (await readEvents(await POST(request("real")))).find((event): event is Extract<AgentStreamEvent, { type: "answer_completed" }> => event.type === "answer_completed");
+    expect(streamed).toMatchObject({ conversationSummaryPatch: patch, streamingUsed: true, streamFallback: false });
+
+    runAgentApiPipeline.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[5] as { onStreamMetadata?: (value: { streamingUsed: boolean; streamFallback: boolean; deltaCount: number }) => void } | undefined)?.onStreamMetadata?.({ streamingUsed: false, streamFallback: true, deltaCount: 0 });
+      return { ...realResult, api: { ...realResult.api, responseMode: "real_error_fallback" as const } };
+    });
+    const fallback = (await readEvents(await POST(request("real")))).find((event): event is Extract<AgentStreamEvent, { type: "answer_completed" }> => event.type === "answer_completed");
+    expect(fallback).toMatchObject({ conversationSummaryPatch: patch, streamFallback: true });
   });
 
   it("keeps the response open until the completed run id is persisted", async () => {
@@ -132,8 +163,9 @@ describe("POST /api/agent/stream", () => {
     const controller = new AbortController();
     const response = await POST(request("mock", controller.signal));
     controller.abort();
-    await response.text();
+    const body = await response.text();
     await vi.waitFor(() => expect(recordAgentAbortedRun).toHaveBeenCalledTimes(1));
     expect(recordAgentRun).not.toHaveBeenCalled();
+    expect(body).not.toContain("conversationSummaryPatch");
   });
 });
