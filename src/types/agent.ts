@@ -227,6 +227,77 @@ export type ConversationContextMeta = {
   contextCharacterCount: number;
 };
 
+/**
+ * V2.1.0 Context Foundation types. These types are runtime-only planning
+ * inputs and deliberately do not change the persisted Conversation schema.
+ */
+export type ContextMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type ContextEvidence = {
+  id?: string;
+  sourceTitle?: string;
+  content: string;
+};
+
+export type ContextToolResult = {
+  tool: string;
+  status: "success" | "failed";
+  content: string;
+};
+
+export type ContextStrategy = "recent_only" | "summary_recent" | "summary_selective";
+
+export type ContextTruncationReason =
+  | "none"
+  | "tool_results"
+  | "rag_evidence"
+  | "selected_history"
+  | "recent_messages"
+  | "priority_sections_exceed_budget"
+  | "safety_margin_exceeded";
+
+export type ContextBudgetConfig = {
+  modelContextTokens: number;
+  reservedOutputTokens: number;
+  maximumInputTokens: number;
+  safetyMarginTokens: number;
+  systemInstructionsTokens: number;
+  currentUserMessageTokens: number;
+  recentMessagesTokens: number;
+  selectedHistoryTokens: number;
+  conversationSummaryTokens: number;
+  ragEvidenceTokens: number;
+  toolResultsTokens: number;
+};
+
+export type ContextSectionUsage = {
+  systemInstructions: number;
+  currentUserMessage: number;
+  recentMessages: number;
+  selectedHistory: number;
+  conversationSummary: number;
+  ragEvidence: number;
+  toolResults: number;
+  totalInputEstimate: number;
+};
+
+export type ContextTrace = {
+  contextStrategy: ContextStrategy;
+  totalInputEstimate: number;
+  budgetLimit: number;
+  summaryUsed: boolean;
+  summaryMessageCount: number;
+  recentMessageCount: number;
+  selectedHistoryCount: number;
+  droppedMessageCount: number;
+  ragIncluded: boolean;
+  toolResultsIncluded: boolean;
+  truncationReason: ContextTruncationReason;
+};
+
 export type AgentApiResponse = AgentPipelineResult & {
   api: AgentApiMetadata;
   runId?: string;
