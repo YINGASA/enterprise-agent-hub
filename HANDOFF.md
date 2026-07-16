@@ -9,7 +9,7 @@
 V2.1.0 **Conversation Context Manager** 已在本地 feature 分支完成四个阶段：Context Foundation、Smart History Selection、Rolling Summary 与最终安全回归。
 
 - 当前分支：`feature/v2.1.0-context-manager`
-- 当前 HEAD：`c2ff6e8c012695fd4c6e125e51834a571a0339ac`
+- 当前 HEAD：接手时请执行 `git rev-parse HEAD` 实时核对；本文档的后续文档提交会推进 HEAD。
 - 阶段三提交：`92cb77e feat(context): add rolling conversation summaries`
 - 阶段四安全修复：`c2ff6e8 fix(context): harden conversation revision safety`
 - 当前本地验证：36 个单测文件、148/148；Full Mock 80/80、100%；E2E 29/29；typecheck、build 与 `git diff --check` 通过。
