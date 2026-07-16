@@ -2,7 +2,7 @@ import { sanitizeImportedKnowledgeDocument } from "@/lib/knowledge/storage";
 import { agentRequestLimits } from "@/lib/ops/securityLimits";
 import { buildConversationContext } from "@/lib/conversation/context";
 import { MAX_CONTEXT_CANDIDATES, MAX_CONTEXT_CANDIDATE_CHARACTERS, MAX_CONTEXT_CANDIDATE_TOTAL_CHARACTERS } from "@/lib/conversation/context-candidates";
-import type { ContextCandidateMessage, ConversationContext, ConversationContextMeta, ImportedKnowledgeDocument, LlmMode } from "@/types";
+import type { ContextCandidateMessage, ConversationContext, ConversationContextMeta, ConversationSummaryState, ImportedKnowledgeDocument, LlmMode } from "@/types";
 
 type AgentRequestBody = {
   question?: unknown;
@@ -10,6 +10,7 @@ type AgentRequestBody = {
   userDocuments?: unknown;
   conversationContext?: unknown;
   contextCandidates?: unknown;
+  conversationSummary?: unknown;
 };
 
 export type ValidatedAgentRequest = {
@@ -19,6 +20,7 @@ export type ValidatedAgentRequest = {
   conversationContext: ConversationContext;
   contextMeta: ConversationContextMeta;
   contextCandidates: ContextCandidateMessage[];
+  conversationSummary?: ConversationSummaryState;
 };
 
 export type AgentRequestValidationError = {
@@ -104,5 +106,15 @@ export function validateAgentRequest(body: AgentRequestBody): ValidatedAgentRequ
     question,
   );
   if (!contextCandidates.length && conversationContext.messages.length) contextCandidates = conversationContext.messages.map((message, index) => ({ id: `legacy-context-${index}`, ...message }));
-  return { question, mode, userDocuments, conversationContext, contextMeta, contextCandidates };
+  let conversationSummary: ConversationSummaryState | undefined;
+  if (body.conversationSummary !== undefined) {
+    const summary = body.conversationSummary && typeof body.conversationSummary === "object" && !Array.isArray(body.conversationSummary)
+      ? body.conversationSummary as Record<string, unknown>
+      : undefined;
+    if (typeof summary?.text === "string" && summary.text.length > 8_000 || typeof summary?.throughMessageId === "string" && summary.throughMessageId.length > 128) return { status: 413, message: "对话摘要内容超过限制。" };
+    if (summary && typeof summary.text === "string" && typeof summary.throughMessageId === "string" && summary.version === 1 && typeof summary.sourceMessageCount === "number" && Number.isInteger(summary.sourceMessageCount) && summary.sourceMessageCount >= 0 && summary.text.trim()) {
+      conversationSummary = { text: summary.text.trim(), throughMessageId: summary.throughMessageId, version: 1, sourceMessageCount: summary.sourceMessageCount, updatedAt: "1970-01-01T00:00:00.000Z" };
+    }
+  }
+  return { question, mode, userDocuments, conversationContext, contextMeta, contextCandidates, ...(conversationSummary ? { conversationSummary } : {}) };
 }

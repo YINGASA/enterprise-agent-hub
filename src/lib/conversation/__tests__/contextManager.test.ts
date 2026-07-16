@@ -59,4 +59,18 @@ describe("context manager foundation", () => {
     expect(first.trace).toMatchObject({ budgetLimit: 6_800, recentMessageCount: 1, selectedHistoryCount: 0, summaryUsed: false, ragIncluded: false, toolResultsIncluded: false });
     expect(Object.values(first.trace).every((value) => typeof value !== "string" || ["recent_only", "none"].includes(value))).toBe(true);
   });
+
+  it("uses the summary section and downgrades strategy if its budget is exhausted", () => {
+    const withSummary = buildContextPlan({ currentUserMessage: "question", conversationSummary: "older conversation facts", selectedHistory: [message("user", "related history")] });
+    expect(withSummary.strategy).toBe("summary_selective");
+    expect(withSummary.trace).toMatchObject({ summaryUsed: true, summaryMessageCount: 1 });
+
+    const removedSummary = buildContextPlan({
+      currentUserMessage: "question",
+      conversationSummary: "summary ".repeat(50),
+      budget: { maximumInputTokens: 40, modelContextTokens: 1_240, reservedOutputTokens: 1_200, safetyMarginTokens: 0, systemInstructionsTokens: 0, currentUserMessageTokens: 20, recentMessagesTokens: 20, selectedHistoryTokens: 0, conversationSummaryTokens: 0, ragEvidenceTokens: 0, toolResultsTokens: 0 },
+    });
+    expect(removedSummary.sections.conversationSummary).toBeUndefined();
+    expect(removedSummary.strategy).toBe("recent_only");
+  });
 });

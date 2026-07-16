@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import type { AgentApiResponse, ConversationSummaryState } from "@/types";
 
 const chatHistoryKey = "enterprise-agent-hub:chat-run-history";
 const conversationKey = "enterprise-agent-hub:conversations";
@@ -7,13 +8,14 @@ const feedbackKey = "enterprise-agent-hub:chat-answer-feedback";
 async function selectMockMode(page: Page) {
   await page.getByTestId("agent-mode-options").locator("summary").click();
   await page.getByTestId("agent-mode-mock").click();
+  await expect(page.getByTestId("agent-mode-options").locator("summary")).toContainText("模拟模式");
 }
 
 async function readConversationStore(page: Page) {
-  return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null")?.data?.[0] ?? null, conversationKey) as Promise<{ activeConversationId: string; conversations: Array<{ id: string; title: string; messages: unknown[] }> }>;
+  return page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null")?.data?.[0] ?? null, conversationKey) as Promise<{ activeConversationId: string; conversations: Array<{ id: string; title: string; messages: unknown[]; conversationSummary?: ConversationSummaryState }> }>;
 }
 
-function mockAgentResponse(question: string, runId: string, overrides: Record<string, unknown> = {}) {
+function mockAgentResponse(question: string, runId: string, overrides: Record<string, unknown> = {}): AgentApiResponse {
   return {
     question,
     route: { scenario: "general", intent: "general_chat", needRag: false, toolsNeeded: [], confidence: 0.8, reason: "e2e" },
@@ -27,22 +29,23 @@ function mockAgentResponse(question: string, runId: string, overrides: Record<st
     api: { requestedMode: "mock", responseMode: "mock" },
     runId,
     ...overrides,
-  };
+  } as AgentApiResponse;
 }
 
 function mockStreamBody(result: ReturnType<typeof mockAgentResponse>, deltas?: string[]) {
   const answer = String(result.finalAnswer ?? "");
   const chunks = deltas ?? (answer.length > 1 ? [answer.slice(0, Math.ceil(answer.length / 2)), answer.slice(Math.ceil(answer.length / 2))] : [answer]);
+  const { conversationSummaryPatch, ...safeResult } = result;
   const completed = {
-    ...result,
-    api: { ...result.api, streamingRequested: true, streamingUsed: true, streamFallback: false, aborted: false, streamDeltaCount: chunks.length },
+    ...safeResult,
+    api: { ...safeResult.api, streamingRequested: true, streamingUsed: true, streamFallback: false, aborted: false, streamDeltaCount: chunks.length },
   };
   return [
     { type: "run_started", runId: result.runId, requestedMode: "mock", responseMode: "mock", contextApplied: false, contextMessageCount: 0, contextTruncated: false },
     { type: "phase", phase: "understand" },
     { type: "phase", phase: "generate" },
     ...chunks.map((delta, index) => ({ type: "answer_delta", delta, index })),
-    { type: "answer_completed", result: completed, streamingRequested: true, streamingUsed: true, streamFallback: false, deltaCount: chunks.length },
+    { type: "answer_completed", result: completed, ...(conversationSummaryPatch ? { conversationSummaryPatch } : {}), streamingRequested: true, streamingUsed: true, streamFallback: false, deltaCount: chunks.length },
   ].map((event) => JSON.stringify(event)).join("\n") + "\n";
 }
 
@@ -62,7 +65,11 @@ function seedConversation(id: string, title: string, messagePairs: number, updat
 }
 
 async function seedConversationStore(page: Page, conversations: ReturnType<typeof seedConversation>[], activeConversationId: string) {
-  await page.addInitScript(({ key, store }) => localStorage.setItem(key, JSON.stringify({ version: 1, data: [store], updatedAt: "2026-07-13T00:00:00.000Z" })), {
+  await page.addInitScript(({ key, store }) => {
+    if (localStorage.getItem(key) === null) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, data: [store], updatedAt: "2026-07-13T00:00:00.000Z" }));
+    }
+  }, {
     key: conversationKey,
     store: { activeConversationId, conversations, legacyHistoryMigrated: true },
   });
@@ -108,6 +115,41 @@ test("uses recent mock context in the continuous desktop chat layout and restore
   await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(2);
   await expect(page.getByTestId("conversation-message-assistant").last().getByTestId("assistant-context-meta")).toContainText("已参考最近 1 轮对话");
   await expect(page.getByTestId("chat-composer")).toBeVisible();
+});
+
+test("persists and reuses a rolling summary without crossing conversations", async ({ page }) => {
+  const first = seedConversation("summary-one", "摘要会话", 8, "2026-07-13T07:00:00.000Z");
+  const second = seedConversation("summary-two", "隔离会话", 1, "2026-07-13T06:00:00.000Z");
+  const requests: Array<Record<string, unknown>> = [];
+  const patch = { set: { text: "已确认事项：订单 ORD-10001 不要取消。", throughMessageId: "summary-one-message-7", updatedAt: "2026-07-16T00:00:00.000Z", version: 1, sourceMessageCount: 8 } };
+  await page.route("**/api/llm/status", async (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ configured: false }) }));
+  await page.route("**/api/agent/stream", async (route) => {
+    const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>;
+    requests.push(body);
+    await fulfillMockStream(route, mockAgentResponse(String(body.question ?? ""), `summary-run-${requests.length}`, { conversationSummaryPatch: patch }));
+  });
+  await seedConversationStore(page, [first, second], first.id);
+  await page.goto("/chat");
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("继续处理订单 ORD-10001");
+  await page.getByTestId("agent-run").click();
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(9);
+  const saved = await readConversationStore(page);
+  const savedFirst = saved.conversations.find((conversation) => conversation.id === first.id);
+  expect(savedFirst?.conversationSummary).toMatchObject(patch.set);
+  expect(requests[0]?.conversationSummary).toBeUndefined();
+
+  await page.reload();
+  await selectMockMode(page);
+  await page.getByTestId("agent-question").fill("订单 ORD-10001 还有什么限制？");
+  await expect(page.getByTestId("agent-run")).toBeEnabled();
+  await page.getByTestId("agent-run").click();
+  await expect(page.getByTestId("conversation-message-assistant")).toHaveCount(10);
+  expect(requests[1]?.conversationSummary).toEqual({ text: patch.set.text, throughMessageId: patch.set.throughMessageId, version: 1, sourceMessageCount: 8 });
+
+  await page.getByTestId("conversation-list-item").filter({ hasText: "隔离会话" }).getByTestId("conversation-select").click();
+  const isolated = await readConversationStore(page);
+  expect(isolated.conversations.find((conversation) => conversation.id === second.id)?.conversationSummary).toBeUndefined();
 });
 
 test("starts a delayed isolated conversation without persisting duplicate empty drafts", async ({ page }) => {

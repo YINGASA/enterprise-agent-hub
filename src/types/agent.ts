@@ -215,7 +215,12 @@ export type Conversation = {
   updatedAt: string;
   messages: ConversationMessage[];
   schemaVersion: 1;
+  conversationSummary?: ConversationSummaryState;
 };
+
+export type ConversationSummaryState = { text: string; throughMessageId: string; updatedAt: string; version: 1; sourceMessageCount: number };
+export type ConversationSummaryPatch = { set: ConversationSummaryState; clear?: never } | { clear: true; set?: never };
+export type SummaryInvalidReason = "missing_cursor" | "cursor_not_found" | "cursor_not_assistant" | "cursor_in_protected_recent" | "unsupported_version" | "invalid_text" | "invalid_source_count";
 
 export type ConversationContext = {
   messages: Array<Pick<ConversationMessage, "role" | "content">>;
@@ -302,11 +307,15 @@ export type ContextTrace = {
   truncationReason: ContextTruncationReason;
   candidateMessageCount?: number;
   selectedTurnCount?: number;
+  summaryUpdated?: boolean;
+  summaryVersion?: 1;
+  summaryFallbackReason?: SummaryInvalidReason;
 };
 
 export type AgentApiResponse = AgentPipelineResult & {
   api: AgentApiMetadata;
   runId?: string;
+  conversationSummaryPatch?: ConversationSummaryPatch;
 };
 export type AgentExample = {
   question: string;

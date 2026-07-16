@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const validated = validateAgentRequest(body);
   if ("status" in validated) return NextResponse.json({ error: "invalid_request", message: validated.message }, { status: validated.status });
 
-  const { question, mode: requestedMode, userDocuments, contextCandidates, contextMeta } = validated;
+  const { question, mode: requestedMode, userDocuments, contextCandidates, contextMeta, conversationSummary } = validated;
   const requestAction = sanitizeRequestAction(body["requestAction"]);
   const runId = createOpsAgentRunId();
   if (requestedMode === "real") {
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
           onStreamMetadata: (metadata) => {
             streamMetadata = metadata;
           },
-        });
+        }, conversationSummary);
 
         if (closed || runController.signal.aborted || request.signal.aborted) {
           await recordAbortOnce();
@@ -169,7 +169,8 @@ export async function POST(request: Request) {
         }
         const completedEmitted = emit({
           type: "answer_completed",
-          result: sanitizeAgentStreamResult(resultWithStreamMetadata),
+          result: sanitizeAgentStreamResult((({ conversationSummaryPatch: _conversationSummaryPatch, ...safeResult }) => safeResult)(resultWithStreamMetadata)),
+          ...(resultWithStreamMetadata.conversationSummaryPatch ? { conversationSummaryPatch: resultWithStreamMetadata.conversationSummaryPatch } : {}),
           streamingRequested: true,
           streamingUsed: streamMetadata.streamingUsed || deltaIndex > 0,
           streamFallback: streamMetadata.streamFallback,
@@ -181,7 +182,8 @@ export async function POST(request: Request) {
         }
         completionCommitted = true;
         try {
-          await recordAgentRun(resultWithStreamMetadata, {
+          const { conversationSummaryPatch: _conversationSummaryPatch, ...opsResult } = resultWithStreamMetadata;
+          await recordAgentRun(opsResult, {
             runId,
             streamingRequested: true,
             streamingUsed: streamMetadata.streamingUsed,

@@ -2,7 +2,8 @@ import { readClientStorageList, writeClientStorageList, type ClientStorageListOp
 import { loadChatHistory } from "@/lib/chat/history";
 import { MAX_CONTEXT_CHARACTERS, MAX_CONTEXT_MESSAGES, MAX_MESSAGE_CHARACTERS } from "@/lib/conversation/context";
 import { DEFAULT_CONVERSATION_TITLE, generateConversationTitle, normalizeConversationTitle, searchConversations, validateManualConversationTitle } from "@/lib/conversation/title";
-import type { AgentApiResponse, AgentIntent, AgentResponseMode, AgentScenario, Conversation, ConversationAssistantDetails, ConversationMessage, RetrievalConfidence, ToolName } from "@/types";
+import { sanitizeConversationSummaryPatch, sanitizeConversationSummaryState, validateConversationSummary } from "@/lib/conversation/context-summary";
+import type { AgentApiResponse, AgentIntent, AgentResponseMode, AgentScenario, Conversation, ConversationAssistantDetails, ConversationMessage, ConversationSummaryPatch, ConversationSummaryState, RetrievalConfidence, ToolName } from "@/types";
 
 export { searchConversations } from "@/lib/conversation/title";
 
@@ -122,6 +123,8 @@ function sanitizeConversation(value: unknown): Conversation | null {
   const titleSource = item.titleSource === "manual" && existingTitle ? "manual" : "auto";
   const firstQuestion = messages.find((message) => message.role === "user")?.content ?? "";
   const title = titleSource === "manual" ? validateManualConversationTitle(existingTitle) : null;
+  const rawSummary = sanitizeConversationSummaryState(item.conversationSummary);
+  const conversationSummary = rawSummary && validateConversationSummary(rawSummary, messages).valid ? rawSummary : undefined;
   return {
     id: item.id.slice(0, 128),
     title: title?.ok ? title.title : generateConversationTitle(firstQuestion),
@@ -130,6 +133,7 @@ function sanitizeConversation(value: unknown): Conversation | null {
     updatedAt: item.updatedAt,
     schemaVersion: 1,
     messages,
+    conversationSummary,
   };
 }
 
@@ -301,11 +305,19 @@ function replaceConversationInStore(store: ConversationStore, conversation: Conv
   });
 }
 
+export function applyConversationSummaryPatch(conversation: Conversation, patch?: ConversationSummaryPatch): Conversation | null {
+  if (!patch) return { ...conversation, messages: [...conversation.messages] };
+  const safePatch = sanitizeConversationSummaryPatch(patch);
+  if (!safePatch) return null;
+  return safePatch.clear ? { ...conversation, messages: [...conversation.messages], conversationSummary: undefined } : { ...conversation, messages: [...conversation.messages], conversationSummary: safePatch.set };
+}
+
 export function replaceLastCompletedAssistant(
   store: ConversationStore,
   conversationId: string,
   result: AgentApiResponse,
   expectedAssistantMessageId?: string,
+  summaryPatch?: ConversationSummaryPatch,
 ) {
   const conversation = store.conversations.find((item) => item.id === conversationId);
   if (!conversation) return { ok: false, data: store, error: "Conversation not found." };
@@ -317,11 +329,12 @@ export function replaceLastCompletedAssistant(
   const validationError = validateReplacementResult(conversation, result);
   if (validationError) return { ok: false, data: store, error: validationError };
   const now = new Date().toISOString();
-  const updated: Conversation = {
+  const updated = applyConversationSummaryPatch({
     ...conversation,
     updatedAt: now,
     messages: [...turn.contextMessages, turn.userMessage, createCompletedAssistantMessage(result, now)],
-  };
+  }, summaryPatch);
+  if (!updated) return { ok: false, data: store, error: "Conversation summary patch is invalid." };
   return replaceConversationInStore(store, updated);
 }
 
@@ -331,6 +344,7 @@ export function replaceLastCompletedTurn(
   nextQuestion: string,
   result: AgentApiResponse,
   expectedTurn?: ExpectedCompletedTurn,
+  summaryPatch?: ConversationSummaryPatch,
 ) {
   const conversation = store.conversations.find((item) => item.id === conversationId);
   if (!conversation) return { ok: false, data: store, error: "Conversation not found." };
@@ -345,7 +359,7 @@ export function replaceLastCompletedTurn(
   if (validationError) return { ok: false, data: store, error: validationError };
   const now = new Date().toISOString();
   const isFirstUserMessage = !turn.contextMessages.some((message) => message.role === "user");
-  const updated: Conversation = {
+  const updated = applyConversationSummaryPatch({
     ...conversation,
     title: conversation.titleSource === "auto" && isFirstUserMessage ? generateConversationTitle(question) : conversation.title,
     updatedAt: now,
@@ -354,11 +368,12 @@ export function replaceLastCompletedTurn(
       { id: makeId("message"), role: "user", content: question, createdAt: now },
       createCompletedAssistantMessage(result, now),
     ],
-  };
+  }, summaryPatch);
+  if (!updated) return { ok: false, data: store, error: "Conversation summary patch is invalid." };
   return replaceConversationInStore(store, updated);
 }
 
-export function appendConversationTurnToConversation(store: ConversationStore, conversationId: string, question: string, result: AgentApiResponse) {
+export function appendConversationTurnToConversation(store: ConversationStore, conversationId: string, question: string, result: AgentApiResponse, summaryPatch?: ConversationSummaryPatch) {
   const now = new Date().toISOString();
   const target = store.conversations.find((item) => item.id === conversationId);
   if (!target) return { ok: false, data: store, error: "Conversation not found." };
@@ -371,17 +386,18 @@ export function appendConversationTurnToConversation(store: ConversationStore, c
   ];
   const messages = [...target.messages, ...turn].slice(-MAX_MESSAGES);
   const shouldGenerateTitle = target.titleSource !== "manual" && !target.messages.some((message) => message.role === "user");
-  const updated = {
+  const updated = applyConversationSummaryPatch({
     ...target,
     title: shouldGenerateTitle ? generateConversationTitle(question) : target.title,
     titleSource: target.titleSource === "manual" ? "manual" as const : "auto" as const,
     updatedAt: new Date().toISOString(),
     messages,
-  };
+  }, summaryPatch);
+  if (!updated) return { ok: false, data: store, error: "Conversation summary patch is invalid." };
   const conversations = [updated, ...store.conversations.filter((item) => item.id !== updated.id)].slice(0, MAX_CONVERSATIONS);
   return writeStore({ ...store, conversations, legacyHistoryMigrated: true });
 }
 
-export function appendConversationTurn(store: ConversationStore, question: string, result: AgentApiResponse) {
-  return appendConversationTurnToConversation(store, store.activeConversationId, question, result);
+export function appendConversationTurn(store: ConversationStore, question: string, result: AgentApiResponse, summaryPatch?: ConversationSummaryPatch) {
+  return appendConversationTurnToConversation(store, store.activeConversationId, question, result, summaryPatch);
 }

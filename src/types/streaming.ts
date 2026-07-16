@@ -1,4 +1,4 @@
-import type { AgentApiResponse, LlmGenerateResult, LlmMode } from "./agent";
+import type { AgentApiResponse, ConversationSummaryPatch, LlmGenerateResult, LlmMode } from "./agent";
 
 export type AgentStreamPhase = "understand" | "retrieve" | "tool" | "generate" | "complete";
 
@@ -31,6 +31,7 @@ export type AgentStreamEvent =
   | ({
       type: "answer_completed";
       result: AgentApiResponse;
+      conversationSummaryPatch?: ConversationSummaryPatch;
     } & AgentStreamMetadata)
   | {
       type: "run_error";

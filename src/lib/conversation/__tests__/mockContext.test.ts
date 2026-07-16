@@ -23,4 +23,17 @@ describe("mock multi-turn context", () => {
     expect(result.route.scenario).toBe("enterprise");
     expect(result.finalAnswer).not.toContain("结合刚才的订单退货语境");
   });
+
+  it("builds one summary-backed context plan and returns only a safe trace", async () => {
+    const messages = Array.from({ length: 8 }, (_, index) => [
+      { id: `u-${index + 1}`, role: "user" as const, content: `订单 ORD-${index + 1} 不要取消` },
+      { id: `a-${index + 1}`, role: "assistant" as const, content: `订单 ORD-${index + 1} 已确认` },
+    ]).flat();
+    const result = await runAgentApiPipeline("订单 ORD-1 还需要什么？", "mock", [], messages);
+
+    expect(result.conversationSummaryPatch && "set" in result.conversationSummaryPatch ? result.conversationSummaryPatch.set?.throughMessageId : undefined).toBe("a-4");
+    expect(result.api.contextTrace).toMatchObject({ contextStrategy: "summary_selective", summaryUsed: true, summaryUpdated: true });
+    expect(JSON.stringify(result.api.contextTrace)).not.toContain("ORD-1");
+    expect(result.steps.filter((step) => step.id === "step-llm")).toHaveLength(0);
+  });
 });

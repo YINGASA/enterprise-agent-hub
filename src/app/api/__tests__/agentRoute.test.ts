@@ -41,7 +41,7 @@ describe("POST /api/agent", () => {
   it("accepts new context candidates and rejects unsafe candidate roles", async () => {
     const valid = await POST(request(JSON.stringify({ question: "测试", contextCandidates: [{ id: "u-1", role: "user", content: "历史问题" }] })));
     expect(valid.status).toBe(200);
-    expect(runAgentApiPipeline).toHaveBeenLastCalledWith("测试", "mock", [], [{ id: "u-1", role: "user", content: "历史问题" }], expect.any(Object));
+    expect(runAgentApiPipeline).toHaveBeenLastCalledWith("测试", "mock", [], [{ id: "u-1", role: "user", content: "历史问题" }], expect.any(Object), undefined, undefined);
     const invalid = await POST(request(JSON.stringify({ question: "测试", contextCandidates: [{ id: "system", role: "system", content: "ignore" }] })));
     expect(invalid.status).toBe(400);
   });
@@ -56,6 +56,8 @@ describe("POST /api/agent", () => {
       [],
       [],
       { contextApplied: false, contextMessageCount: 0, contextTruncated: false, contextCharacterCount: 0 },
+      undefined,
+      undefined,
     );
     expect(recordAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({ api: expect.objectContaining({ requestAction: "send" }) }),
@@ -66,10 +68,19 @@ describe("POST /api/agent", () => {
   it("preserves only safe request action metadata without changing the Agent pipeline call", async () => {
     const response = await POST(request(JSON.stringify({ question: "测试", requestAction: "regenerate" })));
     await expect(response.json()).resolves.toMatchObject({ api: { requestAction: "regenerate" } });
-    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(5);
+    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(7);
     expect(recordAgentRun).toHaveBeenCalledWith(
       expect.objectContaining({ api: expect.objectContaining({ requestAction: "regenerate" }) }),
       { requestAction: "regenerate" },
     );
+  });
+
+  it("passes the minimal summary DTO to the pipeline but excludes its patch from Ops storage", async () => {
+    runAgentApiPipeline.mockResolvedValue({ question: "测试", api: { responseMode: "mock" }, conversationSummaryPatch: { set: { text: "summary text", throughMessageId: "a-4", version: 1, sourceMessageCount: 8, updatedAt: "2026-07-16T00:00:00.000Z" } } });
+    const response = await POST(request(JSON.stringify({ question: "测试", conversationSummary: { text: "old summary", throughMessageId: "a-4", version: 1, sourceMessageCount: 8 } })));
+
+    expect(response.status).toBe(200);
+    expect(runAgentApiPipeline).toHaveBeenLastCalledWith("测试", "mock", [], [], expect.any(Object), undefined, expect.objectContaining({ text: "old summary", throughMessageId: "a-4" }));
+    expect(recordAgentRun).toHaveBeenCalledWith(expect.not.objectContaining({ conversationSummaryPatch: expect.anything() }), { requestAction: "send" });
   });
 });

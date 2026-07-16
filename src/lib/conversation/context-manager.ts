@@ -89,14 +89,13 @@ export function buildContextPlan(input: BuildContextPlanInput): ContextPlan {
     currentUserMessage: input.currentUserMessage,
     recentMessages: cloneMessages(input.recentMessages),
     selectedHistory: cloneMessages(input.selectedHistory),
-    // Rolling Summary starts in a later phase. Do not consume it yet.
-    conversationSummary: undefined,
+    conversationSummary: input.conversationSummary?.trim() || undefined,
     ragEvidence: cloneEvidence(input.ragEvidence),
     toolResults: cloneTools(input.toolResults),
   };
   const originalMessageCount = sections.recentMessages.length + sections.selectedHistory.length;
-  const strategy: ContextStrategy = sections.selectedHistory.length ? "recent_selective" : "recent_only";
-  const priorityUsage = estimateSections({ ...sections, recentMessages: [], selectedHistory: [], ragEvidence: [], toolResults: [] });
+  const strategy: ContextStrategy = sections.conversationSummary ? (sections.selectedHistory.length ? "summary_selective" : "summary_recent") : (sections.selectedHistory.length ? "recent_selective" : "recent_only");
+  const priorityUsage = estimateSections({ ...sections, conversationSummary: undefined, recentMessages: [], selectedHistory: [], ragEvidence: [], toolResults: [] });
   const priorityBudget = evaluateContextBudget(priorityUsage, config);
   if (priorityBudget.exceedsUsableSectionBudget || priorityUsage.systemInstructions > config.systemInstructionsTokens || priorityUsage.currentUserMessage > config.currentUserMessageTokens) {
     const trace = createContextTrace({ contextStrategy: strategy, totalInputEstimate: priorityUsage.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: false, summaryMessageCount: 0, recentMessageCount: 0, selectedHistoryCount: 0, droppedMessageCount: originalMessageCount, ragIncluded: false, toolResultsIncluded: false, truncationReason: "priority_sections_exceed_budget" });
@@ -112,6 +111,7 @@ export function buildContextPlan(input: BuildContextPlanInput): ContextPlan {
     if (sections.toolResults.length) sections.toolResults.pop();
     else if (sections.ragEvidence.length) sections.ragEvidence.pop();
     else if (sections.selectedHistory.length) sections.selectedHistory.shift();
+    else if (sections.conversationSummary) sections.conversationSummary = undefined;
     else if (sections.recentMessages.length) sections.recentMessages.shift();
     else break;
     estimate = estimateSections(sections);
@@ -121,7 +121,7 @@ export function buildContextPlan(input: BuildContextPlanInput): ContextPlan {
 
   const droppedMessageCount = originalMessageCount - sections.recentMessages.length - sections.selectedHistory.length;
   const finalReason = firstTruncationReason;
-  const finalStrategy: ContextStrategy = sections.selectedHistory.length ? "recent_selective" : "recent_only";
-  const trace = createContextTrace({ contextStrategy: finalStrategy, totalInputEstimate: estimate.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: false, summaryMessageCount: 0, recentMessageCount: sections.recentMessages.length, selectedHistoryCount: sections.selectedHistory.length, droppedMessageCount, ragIncluded: sections.ragEvidence.length > 0, toolResultsIncluded: sections.toolResults.length > 0, truncationReason: finalReason });
+  const finalStrategy: ContextStrategy = sections.conversationSummary ? (sections.selectedHistory.length ? "summary_selective" : "summary_recent") : (sections.selectedHistory.length ? "recent_selective" : "recent_only");
+  const trace = createContextTrace({ contextStrategy: finalStrategy, totalInputEstimate: estimate.totalInputEstimate, budgetLimit: config.maximumInputTokens, summaryUsed: Boolean(sections.conversationSummary), summaryMessageCount: sections.conversationSummary ? 1 : 0, recentMessageCount: sections.recentMessages.length, selectedHistoryCount: sections.selectedHistory.length, droppedMessageCount, ragIncluded: sections.ragEvidence.length > 0, toolResultsIncluded: sections.toolResults.length > 0, truncationReason: finalReason });
   return { ok: true, strategy: finalStrategy, sections, estimate, budget, trace };
 }

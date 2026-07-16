@@ -1,9 +1,10 @@
-import type { ContextStrategy, ContextTrace, ContextTruncationReason } from "@/types";
+import type { ContextStrategy, ContextTrace, ContextTruncationReason, SummaryInvalidReason } from "@/types";
 
 type ContextTraceInput = Partial<ContextTrace> & Record<string, unknown>;
 
 const strategies = new Set<ContextStrategy>(["recent_only", "recent_selective", "summary_recent", "summary_selective"]);
 const reasons = new Set<ContextTruncationReason>(["none", "tool_results", "rag_evidence", "selected_history", "recent_messages", "priority_sections_exceed_budget", "safety_margin_exceeded"]);
+const summaryFallbackReasons = new Set<SummaryInvalidReason>(["missing_cursor", "cursor_not_found", "cursor_not_assistant", "cursor_in_protected_recent", "unsupported_version", "invalid_text", "invalid_source_count"]);
 
 function safeCount(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
@@ -29,5 +30,8 @@ export function createContextTrace(input: ContextTraceInput): ContextTrace {
     truncationReason: typeof input.truncationReason === "string" && reasons.has(input.truncationReason as ContextTruncationReason) ? input.truncationReason as ContextTruncationReason : "none",
     candidateMessageCount: safeCount(input.candidateMessageCount),
     selectedTurnCount: safeCount(input.selectedTurnCount),
+    summaryUpdated: input.summaryUpdated === true,
+    ...(input.summaryVersion === 1 ? { summaryVersion: 1 as const } : {}),
+    ...(typeof input.summaryFallbackReason === "string" && summaryFallbackReasons.has(input.summaryFallbackReason as SummaryInvalidReason) ? { summaryFallbackReason: input.summaryFallbackReason as SummaryInvalidReason } : {}),
   };
 }

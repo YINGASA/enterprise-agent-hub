@@ -37,6 +37,17 @@ describe("stream client answer accumulation", () => {
     expect(completed.deltaCount).toBe(2);
   });
 
+  it("keeps a completed summary patch stable across duplicate completion and ignores deltas", () => {
+    const patch = { set: { text: "summary", throughMessageId: "a-4", updatedAt: "2026-07-16T00:00:00.000Z", version: 1 as const, sourceMessageCount: 8 } };
+    const first = completeStreamAnswer(createStreamAnswerAccumulator(), { ...completedEvent("answer"), conversationSummaryPatch: patch });
+    const afterDelta = appendStreamAnswerDelta(first, { type: "answer_delta", delta: "late", index: 9 });
+    const repeated = completeStreamAnswer(afterDelta, { ...completedEvent("answer"), conversationSummaryPatch: { clear: true } });
+
+    expect(first.conversationSummaryPatch).toEqual(patch);
+    expect(afterDelta.conversationSummaryPatch).toEqual(patch);
+    expect(repeated.conversationSummaryPatch).toEqual(patch);
+  });
+
   it("lets a completed event win over a late stop action", () => {
     expect(shouldStopStreamingRequest("request-1", null)).toBe(true);
     expect(shouldStopStreamingRequest("request-1", "request-1")).toBe(false);
