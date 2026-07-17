@@ -6,6 +6,7 @@ import { DocumentForm } from "@/components/DocumentForm";
 import { KnowledgeBackupPanel } from "@/components/KnowledgeBackupPanel";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { RagTestBench } from "@/components/RagTestBench";
+import { StorageStatusPanel } from "@/components/StorageStatusPanel";
 import { useKnowledgeWorkspace, type SourceFilter } from "@/components/knowledge-workspace/useKnowledgeWorkspace";
 import { documents as defaultDocuments } from "@/data/mock";
 import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
@@ -23,7 +24,7 @@ const ui = {
   userUpload: "\u7528\u6237\u4e0a\u4f20",
   userPaste: "\u7528\u6237\u7c98\u8d34",
   title: "\u771f\u5b9e\u77e5\u8bc6\u5e93\u7ba1\u7406",
-  intro: "\u7cfb\u7edf\u5185\u7f6e\u9ed8\u8ba4 Knowledge Packs \u53ea\u8bfb\u53ef\u68c0\u7d22\uff0c\u7528\u6237\u4e0a\u4f20\u548c\u7c98\u8d34\u6587\u6863\u9ed8\u8ba4\u4fdd\u5b58\u5728\u6d4f\u89c8\u5668 localStorage\uff0c\u53d1\u8d77\u804a\u5929\u65f6\u542f\u7528\u6587\u6863\u4f1a\u53d1\u9001\u7ed9\u672c\u5e94\u7528\u670d\u52a1\u7aef\u53c2\u4e0e RAG\u3002",
+  intro: "系统内置默认 Knowledge Packs 只读可检索；用户上传和粘贴文档会按当前存储模式保存到服务端工作区或浏览器本地，并在启用后参与 RAG。",
   clearUserDocs: "\u6e05\u7a7a\u7528\u6237\u6587\u6863",
   defaultDocCount: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u6587\u6863",
   userDocCount: "\u7528\u6237\u5bfc\u5165\u6587\u6863",
@@ -43,7 +44,7 @@ const ui = {
   readonly: "\u7cfb\u7edf\u5185\u7f6e / \u53ea\u8bfb",
   readonlyShort: "\u53ea\u8bfb",
   userImportTitle: "\u7528\u6237\u6587\u6863\u5bfc\u5165",
-  userImportDesc: "\u652f\u6301\u7c98\u8d34\u6587\u672c\u548c\u672c\u5730 .txt / .md / .json / .csv \u6587\u4ef6\u5bfc\u5165\uff0c\u9ed8\u8ba4\u4fdd\u5b58\u5728\u5f53\u524d\u6d4f\u89c8\u5668 localStorage\uff1bReal \u6a21\u5f0f\u4e0b\u4ec5\u76f8\u5173\u547d\u4e2d\u7247\u6bb5\u53ef\u80fd\u53d1\u9001\u81f3\u914d\u7f6e\u7684\u6a21\u578b\u670d\u52a1\u3002",
+  userImportDesc: "支持粘贴文本和本地 .txt / .md / .json / .csv 文件导入；文档按当前存储模式持久化，Real 模式下仅相关命中片段可能发送至配置的模型服务。",
   docList: "\u6587\u6863\u5217\u8868",
   currentFilterPrefix: "\u5f53\u524d\u7b5b\u9009 ",
   currentFilterSuffix: " \u7bc7\u3002\u9ed8\u8ba4\u6587\u6863\u4e0d\u53ef\u5220\u9664\uff0c\u7528\u6237\u6587\u6863\u53ef\u5220\u9664\u3002",
@@ -162,7 +163,7 @@ function ragTestHitRate(stats?: { total: number; hits: number }) {
 export function KnowledgeWorkspace() {
   const workspace = useKnowledgeWorkspace();
   const {
-    userDocuments, selectedPack, setSelectedPack, selectedCategory, setSelectedCategory,
+    userDocuments, storageStatus, refreshStorage, selectedPack, setSelectedPack, selectedCategory, setSelectedCategory,
     selectedSourceType, setSelectedSourceType, search, setSearch, selectedDocumentId,
     setSelectedDocumentId, notice, chatHistory, feedbackItems, ragTestHistory, setRagTestHistory,
     testBenchQuestion, setTestBenchQuestion, handleAdd, handleDelete, handleToggleEnabled,
@@ -232,7 +233,9 @@ export function KnowledgeWorkspace() {
     .slice(0, 6);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+    <>
+      <StorageStatusPanel status={storageStatus} onRetry={refreshStorage} onMigrationComplete={refreshStorage} className="mb-4 rounded-lg border shadow-sm" />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
       <section className="space-y-5 min-w-0">
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -470,11 +473,12 @@ export function KnowledgeWorkspace() {
               )) : <p className="text-ink-500">{ui.noQualityIssues}</p>}
             </div>
           </div>
-          <p className="mt-3 text-xs leading-5 text-ink-500">诊断数据基于当前浏览器 localStorage 中的 Chat 运行历史和反馈记录，当前版本不接服务端数据库。</p>
+          <p className="mt-3 text-xs leading-5 text-ink-500">诊断数据基于当前浏览器中的 Chat 运行历史和反馈记录；知识文档本身按页面显示的存储模式读取。</p>
         </section>
         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{ui.chunksTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.chunksDesc}</p><ChunkList chunks={chunks} /></section><MockJsonPanel title={ui.citationExample} data={chunks.slice(0, 4).map((chunk) => ({ documentId: chunk.documentId, packId: chunk.packId, sourceTitle: chunk.sourceTitle, sourceType: chunk.sourceType, category: chunk.category, tags: chunk.tags, chunkIndex: chunk.chunkIndex, keywords: chunk.keywords.slice(0, 8) }))} />
       </aside>
-    </div>
+      </div>
+    </>
   );
 }
 

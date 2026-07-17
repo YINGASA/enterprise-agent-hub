@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentApiResponse, AgentStreamEvent } from "@/types";
 
-const { runAgentApiPipeline, checkRealApiRateLimit, recordAgentRun, recordAgentError, recordAgentAbortedRun } = vi.hoisted(() => ({
+const { runAgentApiPipeline, checkRealApiRateLimit, recordAgentRun, recordAgentError, recordAgentAbortedRun, resolveAgentKnowledge } = vi.hoisted(() => ({
   runAgentApiPipeline: vi.fn(),
   checkRealApiRateLimit: vi.fn(() => ({ allowed: true, limit: 5, resetAt: Date.now() + 60_000 })),
   recordAgentRun: vi.fn().mockResolvedValue("run-stream-test"),
   recordAgentError: vi.fn().mockResolvedValue("run-stream-test"),
   recordAgentAbortedRun: vi.fn().mockResolvedValue("run-stream-test"),
+  resolveAgentKnowledge: vi.fn(),
 }));
 
 vi.mock("@/lib/agent/api", () => ({ runAgentApiPipeline }));
@@ -18,6 +19,7 @@ vi.mock("@/lib/ops/storage", () => ({
   recordAgentAbortedRun,
   sanitizeRequestAction: (value: unknown) => ["send", "retry", "regenerate", "edit_resend"].includes(String(value)) ? value : "send",
 }));
+vi.mock("@/lib/server-storage/agentKnowledge", () => ({ resolveAgentKnowledge }));
 
 import { POST } from "@/app/api/agent/stream/route";
 
@@ -39,7 +41,7 @@ function agentResult(answer = "这是一个确定性的模拟流式回答，用�
 function request(mode: "mock" | "real" = "mock", signal?: AbortSignal, requestAction: unknown = "send") {
   return new Request("http://test.local/api/agent/stream", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: "http://test.local" },
     body: JSON.stringify({ question: "测试问题", mode, requestAction }),
     signal,
   });
@@ -57,6 +59,32 @@ describe("POST /api/agent/stream", () => {
       runtime?.onPhase?.("generate");
       return agentResult();
     });
+    resolveAgentKnowledge.mockResolvedValue({ documents: [], source: "local" });
+  });
+
+  it("rejects cross-origin requests before creating a run or workspace", async () => {
+    const response = await POST(new Request("http://test.local/api/agent/stream", {
+      method: "POST",
+      headers: { "content-type": "text/plain", origin: "https://attacker.example" },
+      body: JSON.stringify({ question: "测试问题", mode: "mock" }),
+    }));
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    await expect(response.json()).resolves.toMatchObject({ error: "forbidden_origin" });
+    expect(resolveAgentKnowledge).not.toHaveBeenCalled();
+    expect(runAgentApiPipeline).not.toHaveBeenCalled();
+    expect(recordAgentRun).not.toHaveBeenCalled();
+  });
+
+  it("returns a safe 503 before starting a stream when server knowledge is unavailable", async () => {
+    const { StorageApiError } = await import("@/lib/server-storage/errors");
+    resolveAgentKnowledge.mockRejectedValueOnce(new StorageApiError("storage_unavailable", 503, "服务端存储暂不可用。", true));
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    await expect(response.json()).resolves.toMatchObject({ error: "storage_unavailable", retryable: true });
+    expect(runAgentApiPipeline).not.toHaveBeenCalled();
   });
 
   it("streams deterministic mock deltas and records only the completed run", async () => {
@@ -85,7 +113,8 @@ describe("POST /api/agent/stream", () => {
       expect.objectContaining({ api: expect.objectContaining({ requestAction: "edit_resend" }) }),
       expect.objectContaining({ requestAction: "edit_resend" }),
     );
-    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(7);
+    expect(runAgentApiPipeline.mock.calls[0]).toHaveLength(8);
+    expect(runAgentApiPipeline.mock.calls[0][7]).toBeUndefined();
 
     recordAgentRun.mockClear();
     runAgentApiPipeline.mockClear();

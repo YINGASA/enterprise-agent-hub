@@ -5,6 +5,9 @@ import { sanitizeAgentStreamResult } from "@/lib/agent/streamSafety";
 import { validateAgentRequest } from "@/lib/ops/agentRequest";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
 import { createOpsAgentRunId, recordAgentAbortedRun, recordAgentError, recordAgentRun, sanitizeRequestAction } from "@/lib/ops/storage";
+import { resolveAgentKnowledge } from "@/lib/server-storage/agentKnowledge";
+import { toStorageErrorResponse } from "@/lib/server-storage/errors";
+import { requireSameOrigin } from "@/lib/server-storage/request";
 import type { AgentApiResponse, AgentStreamEvent, AgentStreamMetadata } from "@/types";
 
 export const runtime = "nodejs";
@@ -20,6 +23,13 @@ function streamErrorResponse(event: AgentStreamEvent, status = 200) {
 }
 
 export async function POST(request: Request) {
+  try {
+    requireSameOrigin(request);
+  } catch (error) {
+    const safeError = toStorageErrorResponse(error);
+    return NextResponse.json(safeError.body, { status: safeError.status, headers: { "cache-control": "no-store" } });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -51,6 +61,14 @@ export async function POST(request: Request) {
       });
       return streamErrorResponse({ type: "run_error", code: "rate_limited", message: "请求过于频繁，请稍后再试。", retryable: true });
     }
+  }
+
+  let knowledge: Awaited<ReturnType<typeof resolveAgentKnowledge>>;
+  try {
+    knowledge = await resolveAgentKnowledge(request, userDocuments);
+  } catch (error) {
+    const safeError = toStorageErrorResponse(error);
+    return NextResponse.json(safeError.body, { status: safeError.status, headers: { "cache-control": "no-store" } });
   }
 
   const runController = new AbortController();
@@ -113,7 +131,7 @@ export async function POST(request: Request) {
         });
         emit({ type: "phase", phase: "understand" });
 
-        const result = await runAgentApiPipeline(question, requestedMode, userDocuments, contextCandidates, contextMeta, {
+        const result = await runAgentApiPipeline(question, requestedMode, knowledge.documents, contextCandidates, contextMeta, {
           streaming: requestedMode === "real",
           signal: runController.signal,
           onPhase: (phase) => emit({ type: "phase", phase }),
@@ -123,7 +141,7 @@ export async function POST(request: Request) {
           onStreamMetadata: (metadata) => {
             streamMetadata = metadata;
           },
-        }, conversationSummary);
+        }, conversationSummary, knowledge.chunks);
 
         if (closed || runController.signal.aborted || request.signal.aborted) {
           await recordAbortOnce();
@@ -235,5 +253,7 @@ export async function POST(request: Request) {
     },
   });
 
-  return new Response(responseStream, { headers: streamHeaders });
+  return new Response(responseStream, {
+    headers: { ...streamHeaders, ...(knowledge.setCookie ? { "Set-Cookie": knowledge.setCookie } : {}) },
+  });
 }

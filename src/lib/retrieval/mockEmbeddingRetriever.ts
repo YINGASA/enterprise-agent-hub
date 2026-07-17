@@ -70,7 +70,7 @@ function selectDiverse(candidates: RetrievedChunk[], topK: number) {
 }
 
 export function retrieveMockEmbedding(input: RetrieverInput): RetrieverResult {
-  const chunks = input.documents.flatMap((document) => splitDocument(document));
+  const chunks = input.chunks ?? input.documents.flatMap((document) => splitDocument(document));
   const topK = input.topK ?? 3;
   const queryVector = textToMockEmbedding(input.query);
   const reliableCandidates = scoreHybridCandidates(input.query, chunks, input.packId as KnowledgePackId | undefined);

@@ -22,7 +22,7 @@ let exitCode = 1;
 try {
   await waitForServer();
   exitCode = await new Promise((resolve) => {
-    const runner = spawn(process.execPath, [path.join(workspace, "node_modules", "@playwright", "test", "cli.js"), "test"], { cwd: workspace, stdio: "inherit" });
+    const runner = spawn(process.execPath, [path.join(workspace, "node_modules", "@playwright", "test", "cli.js"), "test", ...process.argv.slice(2)], { cwd: workspace, stdio: "inherit" });
     runner.on("exit", (code) => resolve(code ?? 1));
   });
 } finally {

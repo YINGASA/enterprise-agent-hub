@@ -3,10 +3,20 @@ import { runAgentApiPipeline } from "@/lib/agent/api";
 import { validateAgentRequest } from "@/lib/ops/agentRequest";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
 import { recordAgentError, recordAgentRun, sanitizeRequestAction } from "@/lib/ops/storage";
+import { resolveAgentKnowledge } from "@/lib/server-storage/agentKnowledge";
+import { toStorageErrorResponse } from "@/lib/server-storage/errors";
+import { requireSameOrigin } from "@/lib/server-storage/request";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  try {
+    requireSameOrigin(request);
+  } catch (error) {
+    const safeError = toStorageErrorResponse(error);
+    return NextResponse.json(safeError.body, { status: safeError.status, headers: { "cache-control": "no-store" } });
+  }
+
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -49,9 +59,18 @@ export async function POST(request: Request) {
     }
   }
 
-  const response = await runAgentApiPipeline(question, requestedMode, userDocuments, contextCandidates, contextMeta, undefined, conversationSummary);
+  let knowledge: Awaited<ReturnType<typeof resolveAgentKnowledge>>;
+  try {
+    knowledge = await resolveAgentKnowledge(request, userDocuments);
+  } catch (error) {
+    const safeError = toStorageErrorResponse(error);
+    return NextResponse.json(safeError.body, { status: safeError.status, headers: { "cache-control": "no-store" } });
+  }
+  const response = await runAgentApiPipeline(question, requestedMode, knowledge.documents, contextCandidates, contextMeta, undefined, conversationSummary, knowledge.chunks);
   const responseWithAction = { ...response, api: { ...response.api, requestAction } };
   const { conversationSummaryPatch: _conversationSummaryPatch, ...opsResponse } = responseWithAction;
   const runId = await recordAgentRun(opsResponse, { requestAction });
-  return NextResponse.json({ ...responseWithAction, runId });
+  const result = NextResponse.json({ ...responseWithAction, runId });
+  if (knowledge.setCookie) result.headers.append("Set-Cookie", knowledge.setCookie);
+  return result;
 }

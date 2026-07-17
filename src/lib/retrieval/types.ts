@@ -1,6 +1,7 @@
 import type {
   AgentIntent,
   AgentScenario,
+  KnowledgeChunk,
   KnowledgeDocument,
   RagRetrievalMetadata,
   RetrievedChunk,
@@ -10,6 +11,8 @@ import type {
 export type RetrieverInput = {
   query: string;
   documents: KnowledgeDocument[];
+  /** Optional persisted chunks. When omitted the retriever deterministically derives chunks from documents. */
+  chunks?: KnowledgeChunk[];
   scenario?: AgentScenario | "ai-engineering";
   intent?: AgentIntent;
   packId?: string;

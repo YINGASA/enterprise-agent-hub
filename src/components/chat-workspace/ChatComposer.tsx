@@ -10,6 +10,7 @@ type ChatComposerProps = {
   isLoading: boolean;
   isCheckingHealth: boolean;
   realApiUnavailable: boolean;
+  storageWritable: boolean;
   llmStatus: LlmStatus | null;
   llmStatusError: string;
   healthResult: LlmHealthResult | null;
@@ -31,7 +32,7 @@ function statusText(llmStatus: LlmStatus | null, healthResult: LlmHealthResult |
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
-  const sendDisabled = props.realApiUnavailable || !props.value.trim();
+  const sendDisabled = props.realApiUnavailable || !props.storageWritable || !props.value.trim();
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -52,7 +53,7 @@ export function ChatComposer(props: ChatComposerProps) {
     <div data-testid="chat-composer" className="shrink-0 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
       <div className="mx-auto max-w-4xl rounded-xl border border-slate-300 bg-white shadow-sm transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
         <label className="sr-only" htmlFor="agent-question">输入消息</label>
-        <textarea id="agent-question" ref={textareaRef} data-testid="agent-question" value={props.value} onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKeyDown} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={() => setIsComposing(false)} disabled={props.isLoading} rows={1} placeholder="输入问题，Enter 发送，Shift + Enter 换行" className="block max-h-40 min-h-12 w-full resize-none rounded-t-xl border-0 bg-transparent px-4 py-3 text-sm leading-6 text-ink-900 placeholder:text-ink-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50" />
+        <textarea id="agent-question" ref={textareaRef} data-testid="agent-question" value={props.value} onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKeyDown} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={() => setIsComposing(false)} disabled={props.isLoading || !props.storageWritable} rows={1} placeholder="输入问题，Enter 发送，Shift + Enter 换行" className="block max-h-40 min-h-12 w-full resize-none rounded-t-xl border-0 bg-transparent px-4 py-3 text-sm leading-6 text-ink-900 placeholder:text-ink-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50" />
         <div className="flex items-end justify-between gap-3 border-t border-slate-100 px-3 py-2">
           <details data-testid="agent-mode-options" className="relative min-w-0 text-xs text-ink-500">
             <summary className="cursor-pointer rounded px-1 py-1 font-medium hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">高级选项 · {props.mode === "real" ? "真实模型" : "模拟模式"}</summary>

@@ -8,8 +8,8 @@ import type { AgentApiResponse, AgentIntent, AgentResponseMode, AgentScenario, C
 export { searchConversations } from "@/lib/conversation/title";
 
 export const CONVERSATION_STORAGE_KEY = "enterprise-agent-hub:conversations";
-const MAX_CONVERSATIONS = 10;
-const MAX_MESSAGES = 100;
+export const MAX_CONVERSATIONS = 10;
+export const MAX_CONVERSATION_MESSAGES = 100;
 
 export type ConversationStore = { activeConversationId: string; conversations: Conversation[]; legacyHistoryMigrated: boolean };
 
@@ -49,7 +49,7 @@ function safeScore(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.min(1_000_000, Math.max(0, value)) : undefined;
 }
 
-function sanitizeAssistantDetails(value: unknown): ConversationAssistantDetails | undefined {
+export function sanitizeAssistantDetails(value: unknown): ConversationAssistantDetails | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const item = value as Record<string, unknown>;
   const sources = Array.isArray(item.sources) ? item.sources.flatMap((entry) => {
@@ -94,7 +94,7 @@ function sanitizeAssistantDetails(value: unknown): ConversationAssistantDetails 
   return Object.values(details).some((entry) => entry !== undefined) ? details : undefined;
 }
 
-function sanitizeMessage(value: unknown): ConversationMessage | null {
+export function sanitizeConversationMessage(value: unknown): ConversationMessage | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Partial<ConversationMessage>;
   if (typeof item.id !== "string" || (item.role !== "user" && item.role !== "assistant") || typeof item.content !== "string" || !item.content.trim() || item.content.length > MAX_MESSAGE_CHARACTERS || !validDate(item.createdAt)) return null;
@@ -114,11 +114,11 @@ function sanitizeMessage(value: unknown): ConversationMessage | null {
   };
 }
 
-function sanitizeConversation(value: unknown): Conversation | null {
+export function sanitizeConversation(value: unknown): Conversation | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Partial<Conversation>;
   if (typeof item.id !== "string" || !validDate(item.createdAt) || !validDate(item.updatedAt) || !Array.isArray(item.messages)) return null;
-  const messages = item.messages.map(sanitizeMessage).filter((entry): entry is ConversationMessage => Boolean(entry)).slice(-MAX_MESSAGES);
+  const messages = item.messages.map(sanitizeConversationMessage).filter((entry): entry is ConversationMessage => Boolean(entry)).slice(-MAX_CONVERSATION_MESSAGES);
   const existingTitle = typeof item.title === "string" ? normalizeConversationTitle(item.title) : "";
   const titleSource = item.titleSource === "manual" && existingTitle ? "manual" : "auto";
   const firstQuestion = messages.find((message) => message.role === "user")?.content ?? "";
@@ -131,6 +131,7 @@ function sanitizeConversation(value: unknown): Conversation | null {
     titleSource: title?.ok ? "manual" : "auto",
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
+    revision: safeInteger(item.revision, Number.MAX_SAFE_INTEGER) ?? 0,
     schemaVersion: 1,
     messages,
     conversationSummary,
@@ -153,7 +154,7 @@ const options: ClientStorageListOptions<ConversationStore> = { key: CONVERSATION
 
 export function createConversation(): Conversation {
   const now = new Date().toISOString();
-  return { id: makeId("conversation"), title: DEFAULT_CONVERSATION_TITLE, titleSource: "auto", createdAt: now, updatedAt: now, schemaVersion: 1, messages: [] };
+  return { id: makeId("conversation"), title: DEFAULT_CONVERSATION_TITLE, titleSource: "auto", createdAt: now, updatedAt: now, revision: 0, schemaVersion: 1, messages: [] };
 }
 
 function migrateLegacyHistory(): ConversationStore {
@@ -162,7 +163,7 @@ function migrateLegacyHistory(): ConversationStore {
   conversation.messages = history.flatMap((item) => [
     { id: makeId("message"), role: "user" as const, content: item.question.slice(0, MAX_MESSAGE_CHARACTERS), createdAt: item.createdAt },
     { id: makeId("message"), role: "assistant" as const, content: item.finalAnswer.slice(0, MAX_MESSAGE_CHARACTERS), createdAt: item.createdAt, responseMode: item.responseMode as ConversationMessage["responseMode"], intent: item.intent as ConversationMessage["intent"], scenario: item.scenario as ConversationMessage["scenario"] },
-  ]).slice(-MAX_MESSAGES);
+  ]).slice(-MAX_CONVERSATION_MESSAGES);
   conversation.updatedAt = conversation.messages.at(-1)?.createdAt ?? conversation.createdAt;
   conversation.title = generateConversationTitle(conversation.messages.find((message) => message.role === "user")?.content ?? "");
   return { activeConversationId: conversation.id, conversations: [conversation], legacyHistoryMigrated: true };
@@ -186,7 +187,7 @@ export function loadConversationStore() {
   return { ...loaded, data: store };
 }
 
-function writeStore(store: ConversationStore) {
+export function saveConversationStore(store: ConversationStore) {
   const normalized = sanitizeStore(store);
   if (!normalized) return { ok: false, data: store, error: "Conversation storage payload is invalid." };
   const saved = writeClientStorageList(options, [normalized]);
@@ -197,19 +198,23 @@ export function startNewConversation(store: ConversationStore) {
   const active = store.conversations.find((item) => item.id === store.activeConversationId);
   if (active && active.messages.length === 0) return { ok: true, data: store };
   const conversation = createConversation();
-  return writeStore({ activeConversationId: conversation.id, conversations: [conversation, ...store.conversations].slice(0, MAX_CONVERSATIONS), legacyHistoryMigrated: true });
+  return saveConversationStore({ activeConversationId: conversation.id, conversations: [conversation, ...store.conversations].slice(0, MAX_CONVERSATIONS), legacyHistoryMigrated: true });
 }
 
 export function selectConversation(store: ConversationStore, conversationId: string) {
   if (!store.conversations.some((item) => item.id === conversationId)) return { ok: false, data: store, error: "Conversation not found." };
-  return writeStore({ ...store, activeConversationId: conversationId });
+  return saveConversationStore({ ...store, activeConversationId: conversationId });
+}
+
+export function clearConversation(store: ConversationStore, conversationId: string) {
+  const active = store.conversations.find((item) => item.id === conversationId);
+  if (!active) return { ok: true, data: store };
+  const cleared = { ...active, title: DEFAULT_CONVERSATION_TITLE, titleSource: "auto" as const, messages: [], conversationSummary: undefined, updatedAt: new Date().toISOString(), revision: active.revision + 1 };
+  return saveConversationStore({ ...store, conversations: [cleared, ...store.conversations.filter((item) => item.id !== active.id)] });
 }
 
 export function clearCurrentConversation(store: ConversationStore) {
-  const active = store.conversations.find((item) => item.id === store.activeConversationId);
-  if (!active) return { ok: true, data: store };
-  const cleared = { ...active, title: DEFAULT_CONVERSATION_TITLE, titleSource: "auto" as const, messages: [], updatedAt: new Date().toISOString() };
-  return writeStore({ ...store, conversations: [cleared, ...store.conversations.filter((item) => item.id !== active.id)] });
+  return clearConversation(store, store.activeConversationId);
 }
 
 export function renameConversation(store: ConversationStore, conversationId: string, nextTitle: string) {
@@ -217,8 +222,8 @@ export function renameConversation(store: ConversationStore, conversationId: str
   if (!validated.ok) return { ok: false, data: store, error: validated.error };
   const conversation = store.conversations.find((item) => item.id === conversationId);
   if (!conversation) return { ok: false, data: store, error: "Conversation not found." };
-  const updated = { ...conversation, title: validated.title, titleSource: "manual" as const, updatedAt: new Date().toISOString() };
-  return writeStore({ ...store, conversations: [updated, ...store.conversations.filter((item) => item.id !== conversationId)] });
+  const updated = { ...conversation, title: validated.title, titleSource: "manual" as const, updatedAt: new Date().toISOString(), revision: conversation.revision + 1 };
+  return saveConversationStore({ ...store, conversations: [updated, ...store.conversations.filter((item) => item.id !== conversationId)] });
 }
 
 export function deleteConversation(store: ConversationStore, conversationId: string) {
@@ -226,10 +231,10 @@ export function deleteConversation(store: ConversationStore, conversationId: str
   const remaining = store.conversations.filter((item) => item.id !== conversationId);
   if (remaining.length) {
     const activeConversationId = store.activeConversationId === conversationId ? remaining[0]!.id : store.activeConversationId;
-    return writeStore({ ...store, activeConversationId, conversations: remaining });
+    return saveConversationStore({ ...store, activeConversationId, conversations: remaining });
   }
   const conversation = createConversation();
-  return writeStore({ activeConversationId: conversation.id, conversations: [conversation], legacyHistoryMigrated: true });
+  return saveConversationStore({ activeConversationId: conversation.id, conversations: [conversation], legacyHistoryMigrated: true });
 }
 
 export function deleteCurrentConversation(store: ConversationStore) {
@@ -270,9 +275,9 @@ function compactAssistantDetails(result: AgentApiResponse): ConversationAssistan
   };
 }
 
-function createCompletedAssistantMessage(result: AgentApiResponse, createdAt = new Date().toISOString()): ConversationMessage & { role: "assistant" } {
+export function createCompletedAssistantMessage(result: AgentApiResponse, createdAt = new Date().toISOString(), id = makeId("message")): ConversationMessage & { role: "assistant" } {
   return {
-    id: makeId("message"),
+    id,
     role: "assistant",
     content: result.finalAnswer.trim().slice(0, MAX_MESSAGE_CHARACTERS),
     createdAt,
@@ -298,7 +303,7 @@ function validateReplacementResult(conversation: Conversation, result: AgentApiR
 }
 
 function replaceConversationInStore(store: ConversationStore, conversation: Conversation) {
-  return writeStore({
+  return saveConversationStore({
     ...store,
     conversations: [conversation, ...store.conversations.filter((item) => item.id !== conversation.id)].slice(0, MAX_CONVERSATIONS),
     legacyHistoryMigrated: true,
@@ -332,6 +337,7 @@ export function replaceLastCompletedAssistant(
   const updated = applyConversationSummaryPatch({
     ...conversation,
     updatedAt: now,
+    revision: conversation.revision + 1,
     messages: [...turn.contextMessages, turn.userMessage, createCompletedAssistantMessage(result, now)],
   }, summaryPatch);
   if (!updated) return { ok: false, data: store, error: "Conversation summary patch is invalid." };
@@ -363,6 +369,7 @@ export function replaceLastCompletedTurn(
     ...conversation,
     title: conversation.titleSource === "auto" && isFirstUserMessage ? generateConversationTitle(question) : conversation.title,
     updatedAt: now,
+    revision: conversation.revision + 1,
     messages: [
       ...turn.contextMessages,
       { id: makeId("message"), role: "user", content: question, createdAt: now },
@@ -384,18 +391,19 @@ export function appendConversationTurnToConversation(store: ConversationStore, c
     { id: makeId("message"), role: "user", content: question.slice(0, MAX_MESSAGE_CHARACTERS), createdAt: now },
     createCompletedAssistantMessage(result),
   ];
-  const messages = [...target.messages, ...turn].slice(-MAX_MESSAGES);
+  const messages = [...target.messages, ...turn].slice(-MAX_CONVERSATION_MESSAGES);
   const shouldGenerateTitle = target.titleSource !== "manual" && !target.messages.some((message) => message.role === "user");
   const updated = applyConversationSummaryPatch({
     ...target,
     title: shouldGenerateTitle ? generateConversationTitle(question) : target.title,
     titleSource: target.titleSource === "manual" ? "manual" as const : "auto" as const,
     updatedAt: new Date().toISOString(),
+    revision: target.revision + 1,
     messages,
   }, summaryPatch);
   if (!updated) return { ok: false, data: store, error: "Conversation summary patch is invalid." };
   const conversations = [updated, ...store.conversations.filter((item) => item.id !== updated.id)].slice(0, MAX_CONVERSATIONS);
-  return writeStore({ ...store, conversations, legacyHistoryMigrated: true });
+  return saveConversationStore({ ...store, conversations, legacyHistoryMigrated: true });
 }
 
 export function appendConversationTurn(store: ConversationStore, question: string, result: AgentApiResponse, summaryPatch?: ConversationSummaryPatch) {

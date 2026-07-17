@@ -6,20 +6,20 @@ import { saveConversationMessageFeedback } from "@/lib/chat/feedback";
 import { readUserKnowledgeDocuments } from "@/lib/knowledge/storage";
 import {
   appendConversationTurnToConversation,
-  clearCurrentConversation,
   createConversation,
-  deleteConversation as deleteStoredConversation,
   loadConversationStore,
   getLastCompletedTurn,
   replaceLastCompletedAssistant,
   replaceLastCompletedTurn,
-  renameConversation as renameStoredConversation,
   selectConversation,
   type ConversationStore,
 } from "@/lib/conversation/storage";
 import { toContextCandidates, toConversationSummaryDto } from "@/lib/conversation/context-candidates";
 import { parseAgentStreamResponse } from "@/lib/agent/streamProtocol";
 import { appendStreamAnswerDelta, appendStreamPhase, completeStreamAnswer, createStreamAnswerAccumulator, shouldStopStreamingRequest } from "@/lib/agent/streamClientState";
+import { ConversationRepositoryError, LocalConversationRepository, ServerConversationRepository } from "@/lib/storage/conversationRepository";
+import { mergeConversationIntoStore, toConversationStore } from "@/lib/storage/conversationStoreState";
+import { getClientStorageStatus, type PublicStorageStatus } from "@/lib/storage/status";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
 import type { AgentApiResponse, AgentRequestAction, AgentStreamEvent, ChatAnswerFeedbackValue, Conversation, ConversationMessage, LlmMode } from "@/types";
 
@@ -39,6 +39,13 @@ type ExecuteTurnInput = {
 const emptyFeedbackDraft = (): MessageFeedbackDraft => ({ values: [], reason: "", message: "" });
 const makeRequestId = () => `request-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const makeMessageId = () => `message-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const localConversationRepository = new LocalConversationRepository();
+const serverConversationRepository = new ServerConversationRepository();
+const degradedStorageStatus: PublicStorageStatus = { configured: true, healthy: false, storageMode: "degraded", databaseType: "postgresql" };
+
+function isStorageUnavailable(error: unknown) {
+  return error instanceof ConversationRepositoryError && error.code === "unavailable";
+}
 
 function findAssistantMessage(store: ConversationStore, conversationId: string, result: AgentApiResponse) {
   const messages = store.conversations.find((conversation) => conversation.id === conversationId)?.messages ?? [];
@@ -62,6 +69,7 @@ export function useAgentWorkspace(initialQuestion = "") {
   const abortController = useRef<AbortController | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const completedRequestId = useRef<string | null>(null);
+  const storageHydrationEpoch = useRef(0);
   const storeRef = useRef<ConversationStore | null>(null);
   const draftConversationRef = useRef<Conversation | null>(null);
   const prefillApplied = useRef(false);
@@ -73,6 +81,7 @@ export function useAgentWorkspace(initialQuestion = "") {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [clientError, setClientError] = useState("");
+  const [storageStatus, setStorageStatus] = useState<PublicStorageStatus | null>(null);
   const [conversationStore, setConversationStore] = useState<ConversationStore | null>(null);
   const [draftConversation, setDraftConversation] = useState<Conversation | null>(null);
   const [transientTurn, setTransientTurn] = useState<TransientChatTurn | null>(null);
@@ -89,6 +98,39 @@ export function useAgentWorkspace(initialQuestion = "") {
     setDraftConversation(conversation);
   }, []);
 
+  const hydrateStorage = useCallback(async (force = false) => {
+    const hydrationEpoch = storageHydrationEpoch.current + 1;
+    storageHydrationEpoch.current = hydrationEpoch;
+    if (force) setStorageStatus(null);
+    const status = await getClientStorageStatus(force);
+    if (!mounted.current || hydrationEpoch !== storageHydrationEpoch.current) return;
+
+    if (status.storageMode !== "server") {
+      commitDraft(null);
+      commitStore(loadConversationStore().data);
+      setStorageStatus(status);
+      setClientError(status.storageMode === "degraded" ? "服务端存储暂不可用，当前仅可查看本地缓存，写操作已暂停。" : "");
+      return;
+    }
+
+    try {
+      const conversations = await serverConversationRepository.list();
+      if (!mounted.current || hydrationEpoch !== storageHydrationEpoch.current) return;
+      commitDraft(null);
+      commitStore(toConversationStore(conversations, storeRef.current?.activeConversationId));
+      setStorageStatus(status);
+      setClientError("");
+    } catch (error) {
+      if (!mounted.current || hydrationEpoch !== storageHydrationEpoch.current) return;
+      commitDraft(null);
+      commitStore(loadConversationStore().data);
+      setStorageStatus(degradedStorageStatus);
+      setClientError(error instanceof Error ? error.message : "服务端存储暂不可用，写操作已暂停。");
+    }
+  }, [commitDraft, commitStore]);
+
+  const refreshStorage = useCallback(() => hydrateStorage(true), [hydrateStorage]);
+
   const cancelActiveRequest = useCallback(() => {
     conversationEpoch.current += 1;
     abortController.current?.abort();
@@ -103,13 +145,13 @@ export function useAgentWorkspace(initialQuestion = "") {
 
   useEffect(() => {
     mounted.current = true;
-    const loaded = loadConversationStore().data;
-    commitStore(loaded);
+    void hydrateStorage();
     return () => {
+      storageHydrationEpoch.current += 1;
       mounted.current = false;
       abortController.current?.abort();
     };
-  }, [commitStore]);
+  }, [hydrateStorage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,16 +195,41 @@ export function useAgentWorkspace(initialQuestion = "") {
       return;
     }
 
-    const baseStore = storeRef.current ?? loadConversationStore().data;
+    if (!storageStatus) {
+      setClientError("正在加载存储工作区，请稍后再试。");
+      return;
+    }
+    const effectiveStorageStatus = storageStatus;
+    if (effectiveStorageStatus.storageMode === "degraded") {
+      setClientError("服务端存储暂不可用，本次写入未执行。请等待恢复后重试。");
+      return;
+    }
+    let baseStore = storeRef.current ?? (effectiveStorageStatus.storageMode === "local" ? loadConversationStore().data : toConversationStore([]));
     if (!storeRef.current) commitStore(baseStore);
-    let originConversation = draftConversationRef.current ?? baseStore.conversations.find((conversation) => conversation.id === baseStore.activeConversationId) ?? null;
+    const targetsRevision = Boolean(input.targetAssistantMessageId || input.targetUserMessageId);
+    let originConversation = effectiveStorageStatus.storageMode === "local"
+      ? draftConversationRef.current ?? baseStore.conversations.find((conversation) => conversation.id === baseStore.activeConversationId) ?? null
+      : baseStore.conversations.find((conversation) => conversation.id === baseStore.activeConversationId) ?? null;
     if (!originConversation) {
-      if (input.targetAssistantMessageId || input.targetUserMessageId) return;
-      originConversation = createConversation();
-      commitDraft(originConversation);
+      if (targetsRevision) return;
+      if (effectiveStorageStatus.storageMode === "server") {
+        try {
+          originConversation = await serverConversationRepository.create();
+          if (!mounted.current) return;
+          baseStore = mergeConversationIntoStore(storeRef.current ?? baseStore, originConversation, { activate: true });
+          commitDraft(null);
+          commitStore(baseStore);
+        } catch (error) {
+          if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
+          setClientError(error instanceof Error ? error.message : "服务端存储暂不可用，本次写入未执行。");
+          return;
+        }
+      } else {
+        originConversation = createConversation();
+        commitDraft(originConversation);
+      }
     }
     const completedTurn = getLastCompletedTurn(originConversation);
-    const targetsRevision = Boolean(input.targetAssistantMessageId || input.targetUserMessageId);
     if (targetsRevision && (!completedTurn
       || completedTurn.userMessage.id !== input.targetUserMessageId
       || completedTurn.assistantMessage.id !== input.targetAssistantMessageId)) return;
@@ -196,7 +263,9 @@ export function useAgentWorkspace(initialQuestion = "") {
       const contextMessages = targetsRevision && completedTurn ? completedTurn.contextMessages : originConversation.messages;
       const contextCandidates = toContextCandidates(contextMessages);
       const conversationSummary = toConversationSummaryDto(originConversation.conversationSummary, contextMessages);
-      const enabledUserDocuments = readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
+      const enabledUserDocuments = effectiveStorageStatus.storageMode === "server"
+        ? []
+        : readUserKnowledgeDocuments().filter((document) => document.enabled !== false);
       const requestBody = JSON.stringify({ question: submittedQuestion, mode, requestAction: input.action, userDocuments: enabledUserDocuments, contextCandidates, ...(conversationSummary ? { conversationSummary } : {}) });
       const streamReadingSupported = typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined";
       const response = await fetch(streamReadingSupported ? "/api/agent/stream" : "/api/agent", {
@@ -291,22 +360,55 @@ export function useAgentWorkspace(initialQuestion = "") {
       const completedResult = nextResult;
       if (!mounted.current || controller.signal.aborted || requestEpoch !== conversationEpoch.current) return;
 
-      const latestStore = storeRef.current ?? baseStore;
-      let workingStore = latestStore;
-      if (!latestStore.conversations.some((conversation) => conversation.id === originConversation.id)) {
-        if (draftConversationRef.current?.id !== originConversation.id) return;
-        workingStore = { ...latestStore, activeConversationId: originConversation.id, conversations: [originConversation, ...latestStore.conversations] };
-      }
       const summaryPatch = answerAccumulator.conversationSummaryPatch ?? completedResult.conversationSummaryPatch;
-      const saved = input.targetAssistantMessageId
-        ? (input.action === "edit_resend" || (input.action === "retry" && input.targetUserMessageId && submittedQuestion !== completedTurn?.userMessage.content)
-          ? replaceLastCompletedTurn(workingStore, originConversation.id, submittedQuestion, completedResult, { userMessageId: input.targetUserMessageId!, assistantMessageId: input.targetAssistantMessageId }, summaryPatch)
-          : replaceLastCompletedAssistant(workingStore, originConversation.id, completedResult, input.targetAssistantMessageId, summaryPatch))
-        : appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult, summaryPatch);
-      if (!saved.ok) throw new Error("error" in saved && typeof saved.error === "string" ? saved.error : "会话写入失败。");
-      const assistantMessage = findAssistantMessage(saved.data, originConversation.id, completedResult);
+      let savedStore: ConversationStore;
+      if (effectiveStorageStatus.storageMode === "server") {
+        if (!(storeRef.current ?? baseStore).conversations.some((conversation) => conversation.id === originConversation.id)) return;
+        const savedConversation = input.targetAssistantMessageId
+          ? (input.action === "edit_resend" || (input.action === "retry" && input.targetUserMessageId && submittedQuestion !== completedTurn?.userMessage.content)
+            ? await serverConversationRepository.editAndResendLastTurn({
+              conversationId: originConversation.id,
+              expectedRevision: originConversation.revision,
+              expectedUserMessageId: input.targetUserMessageId!,
+              expectedAssistantMessageId: input.targetAssistantMessageId,
+              question: submittedQuestion,
+              result: completedResult,
+              conversationSummaryPatch: summaryPatch,
+            })
+            : await serverConversationRepository.regenerateLastAssistant({
+              conversationId: originConversation.id,
+              expectedRevision: originConversation.revision,
+              expectedAssistantMessageId: input.targetAssistantMessageId,
+              result: completedResult,
+              conversationSummaryPatch: summaryPatch,
+            }))
+          : await serverConversationRepository.appendTurn({
+            conversationId: originConversation.id,
+            expectedRevision: originConversation.revision,
+            question: submittedQuestion,
+            result: completedResult,
+            conversationSummaryPatch: summaryPatch,
+          });
+        if (!mounted.current || controller.signal.aborted || requestEpoch !== conversationEpoch.current) return;
+        savedStore = mergeConversationIntoStore(storeRef.current ?? baseStore, savedConversation);
+      } else {
+        const latestStore = storeRef.current ?? baseStore;
+        let workingStore = latestStore;
+        if (!latestStore.conversations.some((conversation) => conversation.id === originConversation.id)) {
+          if (draftConversationRef.current?.id !== originConversation.id) return;
+          workingStore = { ...latestStore, activeConversationId: originConversation.id, conversations: [originConversation, ...latestStore.conversations] };
+        }
+        const saved = input.targetAssistantMessageId
+          ? (input.action === "edit_resend" || (input.action === "retry" && input.targetUserMessageId && submittedQuestion !== completedTurn?.userMessage.content)
+            ? replaceLastCompletedTurn(workingStore, originConversation.id, submittedQuestion, completedResult, { userMessageId: input.targetUserMessageId!, assistantMessageId: input.targetAssistantMessageId }, summaryPatch)
+            : replaceLastCompletedAssistant(workingStore, originConversation.id, completedResult, input.targetAssistantMessageId, summaryPatch))
+          : appendConversationTurnToConversation(workingStore, originConversation.id, submittedQuestion, completedResult, summaryPatch);
+        if (!saved.ok) throw new Error("error" in saved && typeof saved.error === "string" ? saved.error : "会话写入失败。");
+        savedStore = saved.data;
+      }
+      const assistantMessage = findAssistantMessage(savedStore, originConversation.id, completedResult);
       if (!assistantMessage) throw new Error("回答已生成，但无法关联到当前会话。");
-      commitStore(saved.data);
+      commitStore(savedStore);
       if (draftConversationRef.current?.id === originConversation.id) commitDraft(null);
       setResultsByMessageId((current) => {
         const next = { ...current };
@@ -324,6 +426,7 @@ export function useAgentWorkspace(initialQuestion = "") {
       if (!input.targetAssistantMessageId) setQuestion("");
     } catch (error) {
       if (controller.signal.aborted || requestEpoch !== conversationEpoch.current) return;
+      if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
       const message = error instanceof Error ? error.message : "请求失败，请稍后重试。";
       setClientError(message);
       const retryable = typeof error === "object" && error !== null && "retryable" in error ? error.retryable !== false : true;
@@ -337,7 +440,7 @@ export function useAgentWorkspace(initialQuestion = "") {
         if (mounted.current) setIsLoading(false);
       }
     }
-  }, [commitDraft, commitStore, mode, question, realApiUnavailable]);
+  }, [commitDraft, commitStore, mode, question, realApiUnavailable, storageStatus]);
 
   const runAgent = useCallback((retryQuestion?: string) => executeTurn({ action: retryQuestion ? "retry" : "send", question: retryQuestion }), [executeTurn]);
 
@@ -387,36 +490,87 @@ export function useAgentWorkspace(initialQuestion = "") {
   }, []);
 
   const newConversation = useCallback(() => {
-    cancelActiveRequest();
-    const current = draftConversationRef.current ?? storeRef.current?.conversations.find((conversation) => conversation.id === storeRef.current?.activeConversationId) ?? null;
-    setQuestion("");
-    if (current && current.messages.length === 0) return;
-    commitDraft(createConversation());
-  }, [cancelActiveRequest, commitDraft]);
+    void (async () => {
+      if (!storageStatus) {
+        setClientError("正在加载存储工作区，请稍后再试。");
+        return;
+      }
+      const status = storageStatus;
+      if (status.storageMode === "degraded") {
+        setClientError("服务端存储暂不可用，无法新建会话。");
+        return;
+      }
+      cancelActiveRequest();
+      const current = draftConversationRef.current ?? storeRef.current?.conversations.find((conversation) => conversation.id === storeRef.current?.activeConversationId) ?? null;
+      setQuestion("");
+      if (current && current.messages.length === 0) return;
+      if (status.storageMode === "local") {
+        commitDraft(createConversation());
+        return;
+      }
+      try {
+        const activeConversationIdBeforeCreate = storeRef.current?.activeConversationId ?? "";
+        const created = await serverConversationRepository.create();
+        if (!mounted.current) return;
+        commitDraft(null);
+        const latestStore = storeRef.current ?? toConversationStore([]);
+        commitStore(mergeConversationIntoStore(latestStore, created, { activate: latestStore.activeConversationId === activeConversationIdBeforeCreate }));
+      } catch (error) {
+        if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
+        if (mounted.current) setClientError(error instanceof Error ? error.message : "新建会话失败。");
+      }
+    })();
+  }, [cancelActiveRequest, commitDraft, commitStore, storageStatus]);
 
   const switchConversation = useCallback((conversationIdToSelect: string) => {
     const store = storeRef.current;
     if (!store || !store.conversations.some((conversation) => conversation.id === conversationIdToSelect)) return;
     cancelActiveRequest();
     commitDraft(null);
-    const selected = selectConversation(store, conversationIdToSelect);
-    if (selected.ok) commitStore(selected.data);
+    if (storageStatus?.storageMode === "server") {
+      commitStore({ ...store, activeConversationId: conversationIdToSelect });
+    } else {
+      const selected = selectConversation(store, conversationIdToSelect);
+      if (selected.ok) commitStore(selected.data);
+    }
     setQuestion("");
-  }, [cancelActiveRequest, commitDraft, commitStore]);
+  }, [cancelActiveRequest, commitDraft, commitStore, storageStatus?.storageMode]);
 
   const clearConversation = useCallback(() => {
-    cancelActiveRequest();
-    if (draftConversationRef.current) {
-      commitDraft(createConversation());
-      setQuestion("");
-      return;
-    }
-    const store = storeRef.current;
-    if (!store) return;
-    const cleared = clearCurrentConversation(store);
-    if (cleared.ok) commitStore(cleared.data);
-    setQuestion("");
-  }, [cancelActiveRequest, commitDraft, commitStore]);
+    void (async () => {
+      if (!storageStatus) {
+        setClientError("正在加载存储工作区，请稍后再试。");
+        return;
+      }
+      const status = storageStatus;
+      if (status.storageMode === "degraded") {
+        setClientError("服务端存储暂不可用，无法清空会话。");
+        return;
+      }
+      cancelActiveRequest();
+      if (draftConversationRef.current && status.storageMode === "local") {
+        commitDraft(createConversation());
+        setQuestion("");
+        return;
+      }
+      const store = storeRef.current;
+      const current = store?.conversations.find((item) => item.id === store.activeConversationId);
+      if (!store || !current) return;
+      try {
+        const cleared = status.storageMode === "server"
+          ? await serverConversationRepository.clear({ conversationId: current.id, expectedRevision: current.revision })
+          : await localConversationRepository.clear({ conversationId: current.id, expectedRevision: current.revision });
+        if (!mounted.current) return;
+        commitStore(status.storageMode === "server"
+          ? mergeConversationIntoStore(storeRef.current ?? store, cleared)
+          : loadConversationStore().data);
+        setQuestion("");
+      } catch (error) {
+        if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
+        if (mounted.current) setClientError(error instanceof Error ? error.message : "清空会话失败。");
+      }
+    })();
+  }, [cancelActiveRequest, commitDraft, commitStore, storageStatus]);
 
   const deleteConversation = useCallback((conversationIdToDelete: string) => {
     if (draftConversationRef.current?.id === conversationIdToDelete) {
@@ -425,25 +579,61 @@ export function useAgentWorkspace(initialQuestion = "") {
       setQuestion("");
       return;
     }
-    const store = storeRef.current;
-    if (!store) return;
-    const deletingVisiblePersistedConversation = !draftConversationRef.current && store.activeConversationId === conversationIdToDelete;
-    if (deletingVisiblePersistedConversation) cancelActiveRequest();
-    const deleted = deleteStoredConversation(store, conversationIdToDelete);
-    if (deleted.ok) {
-      commitStore(deleted.data);
-      if (deletingVisiblePersistedConversation) commitDraft(null);
-    }
-  }, [cancelActiveRequest, commitDraft, commitStore]);
+    void (async () => {
+      if (!storageStatus) {
+        setClientError("正在加载存储工作区，请稍后再试。");
+        return;
+      }
+      const status = storageStatus;
+      if (status.storageMode === "degraded") {
+        setClientError("服务端存储暂不可用，无法删除会话。");
+        return;
+      }
+      const store = storeRef.current;
+      const target = store?.conversations.find((item) => item.id === conversationIdToDelete);
+      if (!store || !target) return;
+      const deletingVisiblePersistedConversation = !draftConversationRef.current && store.activeConversationId === conversationIdToDelete;
+      if (deletingVisiblePersistedConversation) cancelActiveRequest();
+      try {
+        const repository = status.storageMode === "server" ? serverConversationRepository : localConversationRepository;
+        await repository.remove({ conversationId: target.id, expectedRevision: target.revision });
+        if (!mounted.current) return;
+        if (status.storageMode === "local") {
+          commitStore(loadConversationStore().data);
+        } else {
+          const latestStore = storeRef.current ?? store;
+          const remaining = latestStore.conversations.filter((item) => item.id !== target.id);
+          commitStore(toConversationStore(remaining, latestStore.activeConversationId === target.id ? undefined : latestStore.activeConversationId));
+        }
+        if (deletingVisiblePersistedConversation) commitDraft(null);
+      } catch (error) {
+        if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
+        if (mounted.current) setClientError(error instanceof Error ? error.message : "删除会话失败。");
+      }
+    })();
+  }, [cancelActiveRequest, commitDraft, commitStore, storageStatus]);
 
-  const renameConversation = useCallback((conversationIdToRename: string, title: string) => {
+  const renameConversation = useCallback(async (conversationIdToRename: string, title: string) => {
+    if (!storageStatus) return "正在加载存储工作区，请稍后再试。";
+    const status = storageStatus;
+    if (status.storageMode === "degraded") return "服务端存储暂不可用，无法重命名会话。";
     const store = storeRef.current;
     if (!store) return "会话尚未加载完成。";
-    const renamed = renameStoredConversation(store, conversationIdToRename, title);
-    if (!renamed.ok) return renamed.error ?? "重命名会话失败。";
-    commitStore(renamed.data);
-    return null;
-  }, [commitStore]);
+    const target = store.conversations.find((item) => item.id === conversationIdToRename);
+    if (!target) return "会话不存在。";
+    try {
+      const repository = status.storageMode === "server" ? serverConversationRepository : localConversationRepository;
+      const renamed = await repository.rename({ conversationId: target.id, expectedRevision: target.revision, title });
+      if (!mounted.current) return "";
+      commitStore(status.storageMode === "server"
+        ? mergeConversationIntoStore(storeRef.current ?? store, renamed)
+        : loadConversationStore().data);
+      return null;
+    } catch (error) {
+      if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
+      return error instanceof Error ? error.message : "重命名会话失败。";
+    }
+  }, [commitStore, storageStatus]);
 
   const checkHealth = useCallback(async () => {
     setIsCheckingHealth(true);
@@ -507,7 +697,7 @@ export function useAgentWorkspace(initialQuestion = "") {
 
   return {
     question, setQuestion, mode, setMode, result: currentResult, llmStatus, llmStatusError, healthResult,
-    isLoading, isCheckingHealth, clientError, realApiUnavailable, runAgent, retryLastTurn, regenerateLastAnswer, editAndResendLastQuestion, stopGeneration, checkHealth,
+    isLoading, isCheckingHealth, clientError, storageStatus, refreshStorage, realApiUnavailable, runAgent, retryLastTurn, regenerateLastAnswer, editAndResendLastQuestion, stopGeneration, checkHealth,
     conversationId, conversations: conversationStore?.conversations ?? [], conversationMessages,
     activeConversation, transientTurn, resultsByMessageId, feedbackByMessageId,
     newConversation, switchConversation, clearConversation, deleteConversation, renameConversation,

@@ -213,6 +213,7 @@ export type Conversation = {
   titleSource: "auto" | "manual";
   createdAt: string;
   updatedAt: string;
+  revision: number;
   messages: ConversationMessage[];
   schemaVersion: 1;
   conversationSummary?: ConversationSummaryState;
