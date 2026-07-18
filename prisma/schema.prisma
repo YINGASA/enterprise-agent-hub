@@ -19,10 +19,30 @@ enum KnowledgeSourceType {
 }
 
 enum ImportJobStatus {
-  PENDING   @map("pending")
-  RUNNING   @map("running")
-  COMPLETED @map("completed")
-  FAILED    @map("failed")
+  PENDING        @map("pending")
+  RUNNING        @map("running")
+  PREVIEW_READY  @map("preview_ready")
+  PROCESSING     @map("processing")
+  COMPLETED      @map("completed")
+  PARTIAL_FAILED @map("partial_failed")
+  FAILED         @map("failed")
+  CANCELLED      @map("cancelled")
+}
+
+enum KnowledgePackStatus {
+  ACTIVE   @map("active")
+  ARCHIVED @map("archived")
+}
+
+enum ImportItemStatus {
+  PREVIEW_READY @map("preview_ready")
+  READY         @map("ready")
+  PROCESSING    @map("processing")
+  COMPLETED     @map("completed")
+  FAILED        @map("failed")
+  SKIPPED       @map("skipped")
+  CONFLICTED    @map("conflicted")
+  CANCELLED     @map("cancelled")
 }
 
 enum StorageMigrationStatus {
@@ -43,7 +63,9 @@ model Workspace {
   messages         Message[]
   knowledgeDocuments KnowledgeDocument[]
   knowledgeChunks  KnowledgeChunk[]
+  knowledgePacks   KnowledgePack[]
   importJobs       ImportJob[]
+  importItems      ImportItem[]
   storageMigrations StorageMigration[]
 
   @@map("workspaces")
@@ -100,20 +122,30 @@ model KnowledgeDocument {
   tags              Json                @default("[]") @db.JsonB
   metadata          Json                @default("{}") @db.JsonB
   checksum          String              @db.VarChar(128)
+  contentChecksum   String?             @map("content_checksum") @db.VarChar(64)
+  revision          Int                 @default(0)
   category          String?             @db.VarChar(160)
   summary           String?             @db.Text
   packId            String?             @map("pack_id") @db.VarChar(128)
+  knowledgePackId   String?             @map("knowledge_pack_id") @db.VarChar(128)
   originalFileName  String?             @map("original_file_name") @db.VarChar(260)
+  mimeType          String?             @map("mime_type") @db.VarChar(160)
+  sizeBytes         Int?                @map("size_bytes")
+  importJobId       String?             @map("import_job_id") @db.VarChar(128)
   importedAt        DateTime?           @map("imported_at") @db.Timestamptz(3)
   suggestedQuestions Json               @default("[]") @map("suggested_questions") @db.JsonB
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  knowledgePack     KnowledgePack?      @relation(fields: [workspaceId, knowledgePackId], references: [workspaceId, id], onDelete: Restrict)
   chunks            KnowledgeChunk[]
 
   @@id([workspaceId, id])
   @@index([workspaceId, enabled, updatedAt])
   @@index([workspaceId, checksum])
+  @@index([workspaceId, contentChecksum])
+  @@index([workspaceId, knowledgePackId])
+  @@index([workspaceId, importJobId])
   @@map("knowledge_documents")
 }
 
@@ -134,19 +166,93 @@ model KnowledgeChunk {
   @@map("knowledge_chunks")
 }
 
-model ImportJob {
-  workspaceId String          @map("workspace_id") @db.VarChar(64)
-  id          String          @db.VarChar(128)
-  status      ImportJobStatus @default(PENDING)
-  documentId  String?         @map("document_id") @db.VarChar(128)
-  errorCode   String?         @map("error_code") @db.VarChar(64)
-  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
-  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+model KnowledgePack {
+  workspaceId   String              @map("workspace_id") @db.VarChar(64)
+  id            String              @db.VarChar(128)
+  name          String              @db.VarChar(160)
+  normalizedName String             @map("normalized_name") @db.VarChar(160)
+  description   String?             @db.VarChar(1000)
+  status        KnowledgePackStatus @default(ACTIVE)
+  revision      Int                 @default(0)
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  documents     KnowledgeDocument[]
+  importJobs    ImportJob[]
 
   @@id([workspaceId, id])
+  @@unique([workspaceId, normalizedName])
+  @@index([workspaceId, updatedAt])
+  @@map("knowledge_packs")
+}
+
+model ImportJob {
+  workspaceId      String          @map("workspace_id") @db.VarChar(64)
+  id               String          @db.VarChar(128)
+  status           ImportJobStatus @default(PENDING)
+  documentId       String?         @map("document_id") @db.VarChar(128)
+  knowledgePackId  String?         @map("knowledge_pack_id") @db.VarChar(128)
+  idempotencyKey   String?         @map("idempotency_key") @db.VarChar(128)
+  totalItems       Int             @default(0) @map("total_items")
+  completedItems   Int             @default(0) @map("completed_items")
+  failedItems      Int             @default(0) @map("failed_items")
+  skippedItems     Int             @default(0) @map("skipped_items")
+  conflictedItems  Int             @default(0) @map("conflicted_items")
+  revision         Int             @default(0)
+  completedAt      DateTime?       @map("completed_at") @db.Timestamptz(3)
+  durationMs       Int?            @map("duration_ms")
+  errorCode        String?         @map("error_code") @db.VarChar(64)
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace        Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  knowledgePack    KnowledgePack?  @relation(fields: [workspaceId, knowledgePackId], references: [workspaceId, id], onDelete: Restrict)
+  items            ImportItem[]
+
+  @@id([workspaceId, id])
+  @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, updatedAt])
   @@map("import_jobs")
+}
+
+model ImportItem {
+  workspaceId             String           @map("workspace_id") @db.VarChar(64)
+  id                      String           @db.VarChar(128)
+  importJobId             String           @map("import_job_id") @db.VarChar(128)
+  itemIndex               Int              @map("item_index")
+  originalFileName        String           @map("original_file_name") @db.VarChar(260)
+  normalizedTitle         String           @map("normalized_title") @db.VarChar(240)
+  mimeType                String           @map("mime_type") @db.VarChar(160)
+  sizeBytes               Int              @map("size_bytes")
+  checksum                String           @db.VarChar(64)
+  status                  ImportItemStatus @default(PREVIEW_READY)
+  conflictType            String?          @map("conflict_type") @db.VarChar(64)
+  conflictDocumentId      String?          @map("conflict_document_id") @db.VarChar(128)
+  conflictDocumentRevision Int?            @map("conflict_document_revision")
+  conflictResolution      String?          @map("conflict_resolution") @db.VarChar(32)
+  extractedText           String?          @map("extracted_text") @db.Text
+  previewMetadata         Json             @default("{}") @map("preview_metadata") @db.JsonB
+  chunkPreview            Json             @default("[]") @map("chunk_preview") @db.JsonB
+  documentId              String?          @map("document_id") @db.VarChar(128)
+  errorCode               String?          @map("error_code") @db.VarChar(64)
+  errorMessageSafe        String?          @map("error_message_safe") @db.VarChar(400)
+  retryCount              Int              @default(0) @map("retry_count")
+  revision                Int              @default(0)
+  claimToken              String?          @map("claim_token") @db.VarChar(128)
+  claimedAt               DateTime?        @map("claimed_at") @db.Timestamptz(3)
+  leaseExpiresAt          DateTime?        @map("lease_expires_at") @db.Timestamptz(3)
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  workspace               Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  importJob               ImportJob        @relation(fields: [workspaceId, importJobId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@id([workspaceId, id])
+  @@unique([workspaceId, importJobId, itemIndex])
+  @@index([workspaceId, importJobId, status])
+  @@index([workspaceId, checksum])
+  @@index([workspaceId, conflictDocumentId])
+  @@index([workspaceId, documentId])
+  @@map("import_items")
 }
 
 model StorageMigration {

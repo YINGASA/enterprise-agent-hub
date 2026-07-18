@@ -3,6 +3,7 @@
 ## 1. 前置条件
 
 - Node.js 20。
+- V2.2.1 发布基线为 Node.js 20.19.5。
 - npm 与当前锁文件一致。
 - 一个与生产隔离的 PostgreSQL 测试数据库。
 - 不需要 Node 22，不要运行依赖自动升级或 `npm audit fix`。
@@ -83,6 +84,7 @@ npm run dev
 - Chat 和 Knowledge 沿用 V2.1.0 localStorage。
 - 不要求数据库连接。
 - 原 storage key 与 Legacy 迁移保持不变。
+- 原有单文档粘贴和 txt / md / json / csv 本地导入保持可用；企业知识包批量任务明确提示需要服务端存储。
 
 ### server
 
@@ -90,6 +92,7 @@ npm run dev
 
 - 页面显示服务端存储状态。
 - 创建会话、完整 turn、Summary Patch 和用户知识文档写入当前匿名工作区。
+- `/knowledge` 可创建企业知识包，预览并导入 TXT、Markdown、文本型 PDF 和 DOCX；任务刷新后可从 PostgreSQL 恢复。
 - 刷新后通过 REST API 重新读取。
 - 另一个无 Cookie 的浏览器上下文不能读取该工作区。
 
@@ -101,12 +104,15 @@ npm run dev
 - 可展示浏览器中已有的本地兼容数据（如有）。
 - 写操作明确失败并提示重试。
 - 不会静默把写入当作 localStorage 成功。
+- 不允许新建或推进企业批量导入任务。
 
 ## 6. 验证命令
 
 ```bash
 npm run test:storage
 npm run test:storage:postgres
+npm run test:migration:v221
+npm run test:knowledge-import
 npm run test:run
 npm run typecheck
 npm run build
@@ -115,7 +121,7 @@ npm run e2e
 git diff --check
 ```
 
-`test:storage:postgres` 仅在同时设置 `RUN_POSTGRES_INTEGRATION=1` 和独立的 `TEST_DATABASE_URL` 时执行真实 PostgreSQL 用例；否则明确跳过。CI 使用一次性 PostgreSQL 16 service，运行 migration deploy/status 后验证工作区隔离、事务/CAS、知识级联和迁移幂等。不要输出连接信息。
+`test:storage:postgres` 与 `test:migration:v221` 仅在同时设置 `RUN_POSTGRES_INTEGRATION=1` 和独立的 `TEST_DATABASE_URL` 时执行真实 PostgreSQL 用例；否则明确跳过。CI 使用一次性 PostgreSQL 16 service，分别验证全新 deploy、带 V2.2.0 数据升级、工作区隔离、事务/CAS、知识级联、任务处理和真实 server-mode E2E。不要输出连接信息。
 
 ## 7. 手工冒烟
 
@@ -123,10 +129,11 @@ git diff --check
 2. 刷新，确认会话与消息仍在。
 3. 建立足够多完整 turn，确认 Summary 存储后仍能增量推进。
 4. 验证 Regenerate、Edit & Resend 和 Stop；CAS 冲突不应产生部分写入。
-5. 在 `/knowledge` 导入受支持的文本，刷新后确认文档与 chunks 可读。
-6. 从 `/chat` 提问，确认 RAG 可引用当前工作区的已启用服务端知识。
-7. 使用无 Cookie 的新浏览器上下文，确认无法读取第一工作区数据。
-8. 模拟数据库不可用，确认 degraded 写入不会显示为成功。
+5. 在 `/knowledge` 新建企业知识包，选择多个小型测试文件，检查预览、冲突选项、分块质量和结果汇总。
+6. 刷新 `/knowledge`，确认导入任务、文档与 chunks 可读；失败项重试不重复导入成功项。
+7. 从 `/chat` 提问，确认 RAG 可引用当前工作区的已启用服务端知识。
+8. 使用无 Cookie 的新浏览器上下文，确认无法读取第一工作区的知识包、任务和文档。
+9. 模拟数据库不可用，确认 degraded 写入不会显示为成功。
 
 ## 8. 常见问题
 

@@ -17,6 +17,7 @@ function record() {
   return {
     workspaceId: "ws-1", id: "doc-1", title: "退款规则", content: "订单签收后 7 天内可以申请退款。", sourceType: KnowledgeSourceType.USER_PASTE,
     enabled: true, tags: ["退款"], metadata: {}, checksum: createKnowledgeChecksum(document()), category: "售后", summary: "退款摘要", packId: null,
+    contentChecksum: null, revision: 0, knowledgePackId: null, mimeType: null, sizeBytes: null, importJobId: null,
     originalFileName: null, importedAt: now, suggestedQuestions: [], createdAt: now, updatedAt: now,
   };
 }
@@ -68,6 +69,23 @@ describe("PrismaKnowledgeRepository", () => {
     expect(prisma.knowledgeDocument.delete).toHaveBeenCalledWith({ where: { workspaceId_id: { workspaceId: "ws-1", id: "doc-1" } } });
   });
 
+  it("loads only enabled workspace documents for RAG and keeps enterprise pack metadata on chunks", async () => {
+    const packedRecord = { ...record(), knowledgePackId: "pack-1", chunks: [{
+      workspaceId: "ws-1", id: "chunk-1", documentId: "doc-1", chunkIndex: 0,
+      content: "退款规则 chunk", keywords: ["退款"], createdAt: now,
+    }] };
+    const findMany = vi.fn().mockResolvedValue([packedRecord]);
+    const repository = new PrismaKnowledgeRepository("ws-1", { knowledgeDocument: { findMany } } as never);
+
+    await expect(repository.listEnabledWithChunks()).resolves.toMatchObject({
+      documents: [{ id: "doc-1", knowledgePackId: "pack-1" }],
+      chunks: [{ documentId: "doc-1", knowledgePackId: "pack-1", content: "退款规则 chunk" }],
+    });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workspaceId: "ws-1", enabled: true },
+    }));
+  });
+
   it("creates the document, rebuilt chunks and import job in one transaction", async () => {
     const tx = {
       knowledgeDocument: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue(record()) },
@@ -108,14 +126,13 @@ describe("PrismaKnowledgeRepository", () => {
       ...record(), id: restored.id, summary: "", metadata: { source: "pasted text", owner: "用户导入" }, checksum: createKnowledgeChecksum(restored),
     };
     const tx = {
-      importJob: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), create: vi.fn().mockResolvedValue({}) },
+      importJob: { create: vi.fn().mockResolvedValue({}) },
       knowledgeDocument: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }), create: vi.fn().mockResolvedValue(restoredRecord) },
       knowledgeChunk: { createMany: vi.fn().mockResolvedValue({ count: 1 }) },
     };
     const prisma = { $transaction: vi.fn(async (operation: (client: typeof tx) => unknown, _options?: unknown) => operation(tx)) };
     const repository = new PrismaKnowledgeRepository("ws-1", prisma as never);
     await expect(repository.replaceAll([restored])).resolves.toEqual([expect.objectContaining({ id: "doc-restored", summary: "", owner: "用户导入", packId: undefined, originalFileName: undefined })]);
-    expect(tx.importJob.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: "ws-1" } });
     expect(tx.knowledgeDocument.deleteMany).toHaveBeenCalledWith({ where: { workspaceId: "ws-1" } });
     expect(tx.knowledgeDocument.create).toHaveBeenCalledWith({ data: expect.objectContaining({ workspaceId: "ws-1", id: "doc-restored", summary: "", packId: undefined, originalFileName: undefined, metadata: { source: "pasted text", owner: "用户导入" } }) });
     expect(tx.knowledgeChunk.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ workspaceId: "ws-1", documentId: "doc-restored" })] });

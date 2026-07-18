@@ -7,11 +7,12 @@ import {
   writeUserKnowledgeDocuments,
 } from "@/lib/knowledge/storage";
 import { agentRequestLimits } from "@/lib/ops/securityLimits";
+import { sanitizeSafeMetadata } from "@/lib/knowledge/safe-metadata";
 import type { ImportedKnowledgeDocument, KnowledgeChunk } from "@/types";
 
 export type KnowledgeDocumentUpdate = Partial<Pick<
   ImportedKnowledgeDocument,
-  "title" | "category" | "tags" | "summary" | "content" | "packId" | "originalFileName" | "enabled" | "suggestedQuestions"
+  "title" | "category" | "tags" | "summary" | "content" | "packId" | "knowledgePackId" | "originalFileName" | "mimeType" | "sizeBytes" | "enabled" | "suggestedQuestions" | "metadata"
 >>;
 
 export interface KnowledgeRepository {
@@ -38,17 +39,22 @@ function validStringArray(value: unknown, maximumItems: number, maximumChars: nu
 export function sanitizeKnowledgeDocumentUpdate(value: unknown): KnowledgeDocumentUpdate | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
-  const allowed = new Set(["title", "category", "tags", "summary", "content", "packId", "originalFileName", "enabled", "suggestedQuestions"]);
+  const allowed = new Set(["title", "category", "tags", "summary", "content", "packId", "knowledgePackId", "originalFileName", "mimeType", "sizeBytes", "enabled", "suggestedQuestions", "metadata"]);
   if (Object.keys(input).some((key) => !allowed.has(key)) || Object.keys(input).length === 0) return null;
   if (input.title !== undefined && (typeof input.title !== "string" || !input.title.trim() || input.title.length > agentRequestLimits.documentTitleChars)) return null;
   if (input.category !== undefined && (typeof input.category !== "string" || input.category.length > agentRequestLimits.documentCategoryChars)) return null;
   if (input.content !== undefined && (typeof input.content !== "string" || !input.content.trim() || input.content.length > agentRequestLimits.documentContentChars)) return null;
   if (input.summary !== undefined && (typeof input.summary !== "string" || input.summary.length > agentRequestLimits.documentSummaryChars)) return null;
   if (input.packId !== undefined && (typeof input.packId !== "string" || input.packId.length > 80)) return null;
+  if (input.knowledgePackId !== undefined && (typeof input.knowledgePackId !== "string" || !input.knowledgePackId.trim() || input.knowledgePackId.length > 128)) return null;
   if (input.originalFileName !== undefined && (typeof input.originalFileName !== "string" || input.originalFileName.length > 240)) return null;
+  if (input.mimeType !== undefined && (typeof input.mimeType !== "string" || input.mimeType.length > 160)) return null;
+  if (input.sizeBytes !== undefined && (typeof input.sizeBytes !== "number" || !Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0)) return null;
   if (input.enabled !== undefined && typeof input.enabled !== "boolean") return null;
   if (input.tags !== undefined && !validStringArray(input.tags, agentRequestLimits.documentTags, agentRequestLimits.documentTagChars)) return null;
   if (input.suggestedQuestions !== undefined && !validStringArray(input.suggestedQuestions, agentRequestLimits.documentSuggestedQuestions, agentRequestLimits.documentSuggestedQuestionChars)) return null;
+  const safeMetadata = input.metadata === undefined ? undefined : sanitizeSafeMetadata(input.metadata);
+  if (input.metadata !== undefined && safeMetadata === null) return null;
   const result: KnowledgeDocumentUpdate = {};
   if (typeof input.title === "string") result.title = input.title.trim();
   if (typeof input.category === "string") result.category = input.category.trim();
@@ -56,9 +62,13 @@ export function sanitizeKnowledgeDocumentUpdate(value: unknown): KnowledgeDocume
   if (typeof input.summary === "string") result.summary = input.summary.trim();
   if (typeof input.content === "string") result.content = input.content.trim();
   if (typeof input.packId === "string") result.packId = input.packId.trim();
+  if (typeof input.knowledgePackId === "string") result.knowledgePackId = input.knowledgePackId.trim();
   if (typeof input.originalFileName === "string") result.originalFileName = input.originalFileName.trim();
+  if (typeof input.mimeType === "string") result.mimeType = input.mimeType.trim();
+  if (typeof input.sizeBytes === "number") result.sizeBytes = input.sizeBytes;
   if (typeof input.enabled === "boolean") result.enabled = input.enabled;
   if (Array.isArray(input.suggestedQuestions)) result.suggestedQuestions = input.suggestedQuestions.map((question) => String(question).trim());
+  if (safeMetadata) result.metadata = safeMetadata;
   return result;
 }
 

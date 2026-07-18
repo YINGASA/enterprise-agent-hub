@@ -32,8 +32,7 @@ export async function resolveAgentKnowledge(
   try {
     const workspace = await resolveRequestWorkspace(request);
     const repository = new PrismaKnowledgeRepository(workspace.workspaceId, getPrismaClient());
-    const documents = (await repository.list()).filter((document) => document.enabled !== false);
-    const chunks = (await Promise.all(documents.map((document) => repository.listChunks(document.id)))).flat();
+    const { documents, chunks } = await repository.listEnabledWithChunks();
     return { documents, chunks, setCookie: workspace.setCookie, source: "server" };
   } catch (error) {
     if (error instanceof StorageApiError) throw error;

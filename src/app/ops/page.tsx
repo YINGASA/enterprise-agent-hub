@@ -197,7 +197,13 @@ export default function OpsPage() {
             <article className={`rounded-lg border p-5 shadow-sm ${summary.serverStorage?.storageMode === "server" ? "border-emerald-200 bg-emerald-50/50" : summary.serverStorage?.storageMode === "degraded" ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"}`}>
               <p className="text-sm text-ink-600">当前匿名工作区持久化</p>
               <p className="mt-2 text-2xl font-semibold text-ink-900">{summary.serverStorage?.storageMode ?? "local"}</p>
-              <p className="mt-2 text-xs leading-5 text-ink-600">会话 {summary.serverStorage?.conversationCount ?? 0} · 消息 {summary.serverStorage?.messageCount ?? 0} · 知识文档 {summary.serverStorage?.knowledgeDocumentCount ?? 0} · 迁移 {summary.serverStorage?.migrationCount ?? 0}。仅统计此浏览器匿名工作区。</p>
+              <p className="mt-2 text-xs leading-5 text-ink-600">会话 {summary.serverStorage?.conversationCount ?? 0} · 消息 {summary.serverStorage?.messageCount ?? 0} · 知识包 {summary.serverStorage?.knowledgePackCount ?? 0} · 知识文档 {summary.serverStorage?.knowledgeDocumentCount ?? 0} · 迁移 {summary.serverStorage?.migrationCount ?? 0}。仅统计此浏览器匿名工作区。</p>
+            </article>
+            <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm text-ink-600">企业知识导入</p>
+              <p className="mt-2 text-2xl font-semibold text-ink-900">{summary.serverStorage?.importSuccessCount ?? 0}/{summary.serverStorage?.importItemCount ?? 0}</p>
+              <p className="mt-2 text-xs leading-5 text-ink-600">任务 {summary.serverStorage?.importJobCount ?? 0} · 失败 {summary.serverStorage?.importFailureCount ?? 0} · 冲突 {summary.serverStorage?.importConflictCount ?? 0} · 重试 {summary.serverStorage?.importRetryCount ?? 0}</p>
+              <p className="mt-1 text-xs text-ink-500">平均任务耗时 {summary.serverStorage?.averageImportDuration ?? 0} ms</p>
             </article>
           </section>
 
@@ -217,6 +223,22 @@ export default function OpsPage() {
             <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="font-semibold text-ink-900">工具调用统计</h2>
               <div className="mt-4"><DistributionList items={summary.toolDistribution} emptyText="最近调用尚未使用业务工具。" /></div>
+            </article>
+            <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="font-semibold text-ink-900">文件解析错误分布</h2>
+              <div className="mt-4 space-y-2 text-sm text-ink-600">
+                {summary.serverStorage?.parserErrorDistribution.length
+                  ? summary.serverStorage.parserErrorDistribution.map((item) => <p key={item.key}>{item.key}：{item.count}</p>)
+                  : <p>暂无解析错误。</p>}
+              </div>
+            </article>
+            <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="font-semibold text-ink-900">重复类型分布</h2>
+              <div className="mt-4 space-y-2 text-sm text-ink-600">
+                {summary.serverStorage?.duplicateTypeDistribution.length
+                  ? summary.serverStorage.duplicateTypeDistribution.map((item) => <p key={item.key}>{item.key}：{item.count}</p>)
+                  : <p>暂无重复检测记录。</p>}
+              </div>
             </article>
             <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="font-semibold text-ink-900">错误类型分布</h2>

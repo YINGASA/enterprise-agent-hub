@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { ImportItemStatus, ImportJobStatus, KnowledgeSourceType, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaConversationRepository } from "@/lib/server-storage/conversationRepository";
 import { PrismaKnowledgeRepository } from "@/lib/server-storage/knowledgeRepository";
+import { PrismaKnowledgePackRepository } from "@/lib/server-storage/knowledgePackRepository";
+import { PrismaKnowledgeImportRepository } from "@/lib/server-storage/knowledgeImportRepository";
 import { executeStorageMigration, sanitizeStorageMigrationInput } from "@/lib/server-storage/migration";
 import type { ConversationMessage, ImportedKnowledgeDocument } from "@/types";
 
@@ -262,6 +264,210 @@ describePostgres("PostgreSQL storage integration", () => {
     } })).rejects.toMatchObject({ code: "P2003" });
     await repositoryA.remove(restored.id);
     await expect(prisma.knowledgeChunk.count({ where: { workspaceId: workspaceA, documentId: restored.id } })).resolves.toBe(0);
+  });
+
+  it("persists workspace-scoped packs and keeps V2.2.0-shaped knowledge rows readable", async () => {
+    const workspaceA = await createWorkspace("knowledge-pack-a");
+    const workspaceB = await createWorkspace("knowledge-pack-b");
+    const packRepositoryA = new PrismaKnowledgePackRepository(workspaceA, prisma);
+    const packA = await packRepositoryA.create({ name: "Enterprise Policies", description: "PostgreSQL integration fixture" });
+    const packB = await new PrismaKnowledgePackRepository(workspaceB, prisma).create({ name: "Enterprise Policies" });
+
+    expect(packA).toMatchObject({ revision: 0, documentCount: 0 });
+    expect(packB).toMatchObject({ revision: 0, documentCount: 0 });
+
+    const legacyDocumentId = `legacy-knowledge-${randomUUID()}`;
+    await prisma.knowledgeDocument.create({
+      data: {
+        workspaceId: workspaceA,
+        id: legacyDocumentId,
+        title: "V2.2.0 compatible document",
+        content: "This row intentionally omits every V2.2.1 optional column.",
+        sourceType: KnowledgeSourceType.USER_PASTE,
+        checksum: randomUUID(),
+      },
+    });
+    await expect(prisma.knowledgeDocument.findUnique({
+      where: { workspaceId_id: { workspaceId: workspaceA, id: legacyDocumentId } },
+    })).resolves.toMatchObject({
+      revision: 0,
+      contentChecksum: null,
+      knowledgePackId: null,
+      mimeType: null,
+      sizeBytes: null,
+      importJobId: null,
+    });
+
+    const packedDocumentId = `packed-knowledge-${randomUUID()}`;
+    await prisma.knowledgeDocument.create({
+      data: {
+        workspaceId: workspaceA,
+        id: packedDocumentId,
+        title: "Packed document",
+        content: "Workspace A knowledge pack content.",
+        sourceType: KnowledgeSourceType.USER_UPLOAD,
+        checksum: randomUUID(),
+        knowledgePackId: packA.id,
+      },
+    });
+    const packedJobId = `packed-job-${randomUUID()}`;
+    await prisma.importJob.create({
+      data: {
+        workspaceId: workspaceA,
+        id: packedJobId,
+        status: ImportJobStatus.COMPLETED,
+        knowledgePackId: packA.id,
+      },
+    });
+    await expect(prisma.knowledgeDocument.create({
+      data: {
+        workspaceId: workspaceA,
+        id: `foreign-pack-document-${randomUUID()}`,
+        title: "Cross-workspace pack reference",
+        content: "This insert must be rejected.",
+        sourceType: KnowledgeSourceType.USER_UPLOAD,
+        checksum: randomUUID(),
+        knowledgePackId: packB.id,
+      },
+    })).rejects.toMatchObject({ code: "P2003" });
+
+    const detached = await packRepositoryA.remove(packA.id, { expectedRevision: 0 });
+    expect(detached).toEqual({ detachedDocumentCount: 1, deletedDocumentCount: 0 });
+    await expect(prisma.knowledgeDocument.findUnique({
+      where: { workspaceId_id: { workspaceId: workspaceA, id: packedDocumentId } },
+    })).resolves.toMatchObject({ knowledgePackId: null, revision: 1 });
+    await expect(prisma.importJob.findUnique({
+      where: { workspaceId_id: { workspaceId: workspaceA, id: packedJobId } },
+    })).resolves.toMatchObject({ knowledgePackId: null, revision: 1 });
+
+    const deletePack = await packRepositoryA.create({ name: "Disposable Pack" });
+    const deleteDocumentId = `delete-with-pack-${randomUUID()}`;
+    await prisma.knowledgeDocument.create({
+      data: {
+        workspaceId: workspaceA,
+        id: deleteDocumentId,
+        title: "Delete with pack",
+        content: "This document is deleted only after explicit confirmation.",
+        sourceType: KnowledgeSourceType.USER_UPLOAD,
+        checksum: randomUUID(),
+        knowledgePackId: deletePack.id,
+      },
+    });
+    await expect(packRepositoryA.remove(deletePack.id, {
+      expectedRevision: 0,
+      deleteDocuments: true,
+      confirmation: "DELETE_DOCUMENTS",
+    })).resolves.toEqual({ detachedDocumentCount: 0, deletedDocumentCount: 1 });
+    await expect(prisma.knowledgeDocument.count({ where: { workspaceId: workspaceA, id: deleteDocumentId } })).resolves.toBe(0);
+  });
+
+  it("persists import jobs and items with composite workspace isolation and cascade semantics", async () => {
+    const workspaceA = await createWorkspace("import-model-a");
+    const workspaceB = await createWorkspace("import-model-b");
+    const jobId = `import-job-${randomUUID()}`;
+    const otherJobId = `import-job-${randomUUID()}`;
+    const job = await prisma.importJob.create({
+      data: {
+        workspaceId: workspaceA,
+        id: jobId,
+        status: ImportJobStatus.PREVIEW_READY,
+        idempotencyKey: `idempotency-${randomUUID()}`,
+      },
+    });
+    await prisma.importJob.create({ data: { workspaceId: workspaceB, id: otherJobId, status: ImportJobStatus.PREVIEW_READY } });
+    expect(job).toMatchObject({
+      totalItems: 0,
+      completedItems: 0,
+      failedItems: 0,
+      skippedItems: 0,
+      conflictedItems: 0,
+      revision: 0,
+    });
+    await expect(prisma.importJob.create({
+      data: {
+        workspaceId: workspaceA,
+        id: `duplicate-idempotency-job-${randomUUID()}`,
+        idempotencyKey: job.idempotencyKey,
+      },
+    })).rejects.toMatchObject({ code: "P2002" });
+    await expect(prisma.importJob.create({
+      data: {
+        workspaceId: workspaceB,
+        id: `other-workspace-idempotency-job-${randomUUID()}`,
+        idempotencyKey: job.idempotencyKey,
+      },
+    })).resolves.toMatchObject({ revision: 0 });
+
+    const itemId = `import-item-${randomUUID()}`;
+    const item = await prisma.importItem.create({
+      data: {
+        workspaceId: workspaceA,
+        id: itemId,
+        importJobId: jobId,
+        itemIndex: 0,
+        originalFileName: "policy.txt",
+        normalizedTitle: "Policy",
+        mimeType: "text/plain",
+        sizeBytes: 42,
+        checksum: "a".repeat(64),
+      },
+    });
+    expect(item).toMatchObject({
+      status: ImportItemStatus.PREVIEW_READY,
+      retryCount: 0,
+      revision: 0,
+      extractedText: null,
+    });
+    await expect(prisma.importItem.findUnique({
+      where: { workspaceId_id: { workspaceId: workspaceB, id: itemId } },
+    })).resolves.toBeNull();
+    await expect(prisma.importItem.create({
+      data: {
+        workspaceId: workspaceA,
+        id: `cross-workspace-item-${randomUUID()}`,
+        importJobId: otherJobId,
+        itemIndex: 0,
+        originalFileName: "cross-workspace.txt",
+        normalizedTitle: "Cross workspace",
+        mimeType: "text/plain",
+        sizeBytes: 1,
+        checksum: "b".repeat(64),
+      },
+    })).rejects.toMatchObject({ code: "P2003" });
+
+    await prisma.importJob.delete({ where: { workspaceId_id: { workspaceId: workspaceA, id: jobId } } });
+    await expect(prisma.importItem.count({ where: { workspaceId: workspaceA, importJobId: jobId } })).resolves.toBe(0);
+    await expect(prisma.importJob.count({ where: { workspaceId: workspaceB, id: otherJobId } })).resolves.toBe(1);
+  });
+
+  it("creates a real PostgreSQL import preview through the nested repository path", async () => {
+    const workspaceId = await createWorkspace("import-preview");
+    const pack = await new PrismaKnowledgePackRepository(workspaceId, prisma).create({ name: "Import Preview Pack" });
+    const repository = new PrismaKnowledgeImportRepository(workspaceId, prisma);
+    const content = "星河审批码 Q7X9 是员工设备申请的唯一业务编号。".repeat(30);
+
+    const preview = await repository.preview({
+      files: [{
+        fileName: "employee-policy.txt",
+        mimeType: "text/plain",
+        sizeBytes: Buffer.byteLength(content),
+        bytes: Buffer.from(content),
+      }],
+      knowledgePackId: pack.id,
+      idempotencyKey: `preview-${randomUUID()}`,
+    });
+
+    expect(preview).toMatchObject({
+      status: "preview_ready",
+      totalItems: 1,
+      items: [expect.objectContaining({
+        status: "preview_ready",
+        originalFileName: "employee-policy.txt",
+        checksumStatus: "computed",
+      })],
+    });
+    await expect(prisma.knowledgeDocument.count({ where: { workspaceId } })).resolves.toBe(0);
+    await expect(prisma.importItem.count({ where: { workspaceId, importJobId: preview.id } })).resolves.toBe(1);
   });
 
   it("imports local data idempotently and keeps server records on conflict", async () => {

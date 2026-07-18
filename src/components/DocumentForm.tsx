@@ -7,7 +7,7 @@ import { findDuplicateKnowledgeDocuments } from "@/lib/knowledge/quality";
 import type { ImportedKnowledgeDocument, KnowledgeDocument, KnowledgeSourceType } from "@/types";
 
 type DocumentFormProps = {
-  onAdd: (document: ImportedKnowledgeDocument) => void;
+  onAdd: (document: ImportedKnowledgeDocument) => boolean | Promise<boolean>;
   existingDocuments: KnowledgeDocument[];
 };
 
@@ -81,7 +81,11 @@ export function DocumentForm({ onAdd, existingDocuments }: DocumentFormProps) {
       }
 
       const duplicates = findDuplicateKnowledgeDocuments(result.document, existingDocuments);
-      onAdd(result.document);
+      const saved = await onAdd(result.document);
+      if (!saved) {
+        setError("文档未保存，请检查存储状态后重试。");
+        return;
+      }
       setSuccess(
         duplicates.length
           ? `已成功导入：${result.document.title}。检测到可能重复内容：${duplicates.map((item) => `${item.title}（${item.similarity}%）`).join("、")}，建议核对后决定是否保留。`
