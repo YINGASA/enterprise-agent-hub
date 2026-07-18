@@ -59,8 +59,8 @@ test("PostgreSQL 服务端知识包导入可恢复、可检索且工作区隔离
     await expect(page.getByTestId("knowledge-batch-import")).toContainText("completed");
     await expect(page.getByText(`${marker}-员工设备制度`, { exact: true }).first()).toBeVisible();
     await page.getByText(`${marker}-员工设备制度`, { exact: true }).first().click();
-    const testBench = page.locator("section").filter({ hasText: "RAG 检索测试台" }).first();
-    await testBench.locator("textarea").fill("星河审批码 Q7X9 用于什么申请？");
+    const testBench = page.getByRole("heading", { name: "RAG 检索测试台", exact: true }).locator("xpath=ancestor::section[1]");
+    await testBench.getByRole("textbox").fill("星河审批码 Q7X9 用于什么申请？");
     await testBench.getByRole("button", { name: "测试当前文档" }).click();
     await expect(testBench.getByText("用户文档命中", { exact: true }).locator("..")).toContainText("是");
 
