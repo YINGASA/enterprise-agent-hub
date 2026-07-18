@@ -4,8 +4,7 @@ import type { ImportedKnowledgeDocument, KnowledgeChunk } from "@/types";
 const mocks = vi.hoisted(() => ({
   getSafeStorageStatus: vi.fn(),
   resolveRequestWorkspace: vi.fn(),
-  list: vi.fn(),
-  listChunks: vi.fn(),
+  listEnabledWithChunks: vi.fn(),
 }));
 
 vi.mock("@/lib/server-storage/status", () => ({ getSafeStorageStatus: mocks.getSafeStorageStatus }));
@@ -13,8 +12,7 @@ vi.mock("@/lib/server-storage/workspace", () => ({ resolveRequestWorkspace: mock
 vi.mock("@/lib/server-storage/prisma", () => ({ getPrismaClient: () => ({}) }));
 vi.mock("@/lib/server-storage/knowledgeRepository", () => ({
   PrismaKnowledgeRepository: class {
-    list = mocks.list;
-    listChunks = mocks.listChunks;
+    listEnabledWithChunks = mocks.listEnabledWithChunks;
   },
 }));
 
@@ -48,8 +46,7 @@ describe("Agent workspace knowledge resolution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveRequestWorkspace.mockResolvedValue({ workspaceId: "workspace-1", setCookie: "workspace-cookie" });
-    mocks.list.mockResolvedValue([document]);
-    mocks.listChunks.mockResolvedValue([chunk]);
+    mocks.listEnabledWithChunks.mockResolvedValue({ documents: [document], chunks: [chunk] });
   });
 
   it("uses validated browser documents only in local mode", async () => {
@@ -62,7 +59,7 @@ describe("Agent workspace knowledge resolution", () => {
     mocks.getSafeStorageStatus.mockResolvedValue({ configured: true, healthy: true, storageMode: "server", databaseType: "postgresql" });
     const result = await resolveAgentKnowledge(new Request("http://test.local/api/agent"), []);
     expect(result).toEqual({ documents: [document], chunks: [chunk], setCookie: "workspace-cookie", source: "server" });
-    expect(mocks.listChunks).toHaveBeenCalledWith("doc-1");
+    expect(mocks.listEnabledWithChunks).toHaveBeenCalledTimes(1);
   });
 
   it("fails explicitly instead of silently dropping workspace knowledge", async () => {
@@ -70,7 +67,7 @@ describe("Agent workspace knowledge resolution", () => {
     await expect(resolveAgentKnowledge(new Request("http://test.local/api/agent"), [])).rejects.toMatchObject({ code: "storage_unavailable", status: 503, retryable: true });
 
     mocks.getSafeStorageStatus.mockResolvedValue({ configured: true, healthy: true, storageMode: "server", databaseType: "postgresql" });
-    mocks.list.mockRejectedValueOnce(new Error("database body must stay private"));
+    mocks.listEnabledWithChunks.mockRejectedValueOnce(new Error("database body must stay private"));
     await expect(resolveAgentKnowledge(new Request("http://test.local/api/agent"), [])).rejects.toMatchObject({ code: "storage_unavailable", status: 503, retryable: true });
   });
 });

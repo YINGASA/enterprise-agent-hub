@@ -50,6 +50,11 @@ jobs:
           TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
           RUN_POSTGRES_INTEGRATION: "1"
         run: npm run test:storage:postgres
+      - name: Verify V2.2.0 to V2.2.1 migration with retained data
+        env:
+          TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
+          RUN_POSTGRES_INTEGRATION: "1"
+        run: npm run test:migration:v221
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Run security regression tests
@@ -58,6 +63,13 @@ jobs:
         run: npm run typecheck
       - name: Run browser E2E
         run: npm run e2e
+      - name: Run PostgreSQL server-mode knowledge import E2E
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
+          SERVER_STORAGE_ENABLED: "true"
+          STORAGE_SESSION_SECRET: ci-only-enterprise-agent-hub-storage-session-secret
+          RUN_SERVER_STORAGE_E2E: "1"
+        run: npm run e2e -- e2e/knowledge-import-postgres.spec.ts
       - name: Run full Mock evaluation
         run: npm run evaluation:mock
       - name: Build production bundle

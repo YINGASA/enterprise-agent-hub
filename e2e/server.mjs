@@ -8,6 +8,11 @@ const runtimeEnv = {};
 for (const key of ["APPDATA", "ComSpec", "LOCALAPPDATA", "NUMBER_OF_PROCESSORS", "PATH", "PATHEXT", "PROCESSOR_ARCHITECTURE", "SystemRoot", "TEMP", "TMP", "USERPROFILE", "WINDIR"]) {
   if (process.env[key] !== undefined) runtimeEnv[key] = process.env[key];
 }
+if (process.env.RUN_SERVER_STORAGE_E2E === "1") {
+  for (const key of ["DATABASE_URL", "SERVER_STORAGE_ENABLED", "STORAGE_SESSION_SECRET"]) {
+    if (process.env[key] !== undefined) runtimeEnv[key] = process.env[key];
+  }
+}
 for (const entry of ["src", "package.json", "package-lock.json", "next-env.d.ts", "tsconfig.json", "postcss.config.mjs", "tailwind.config.ts"]) {
   await cp(path.join(workspace, entry), path.join(tempRoot, entry), { recursive: true });
 }
