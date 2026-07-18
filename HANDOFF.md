@@ -1,25 +1,26 @@
 # Enterprise Agent Hub 项目交接文档
 
-最后更新：2026-07-16（Asia/Shanghai）
+最后更新：2026-07-18（Asia/Shanghai）
 
-这份文档面向没有当前上下文的新会话。先核对 Git 和工作区，再执行测试、提交、发布或服务器操作。不要读取或打印 `.env.local`、数据库连接串、Cookie、Token、API Key 或 Secret。
+这份文档面向没有当前对话上下文的接手者。任何提交、发布或部署前，先实时核对 Git、工作区和测试，不要依据本文预填尚未产生的 commit。不得读取或打印 `.env.local`、数据库连接串、Cookie、Token、API Key 或 Secret。
 
-## 1. 当前任务与边界
+## 1. 当前版本与边界
 
-当前开发版本是 **V2.2.0：服务端存储与持久化**，开发分支为 `feature/v2.2.0-server-storage`。本版本在 V2.1.0 Conversation Context Manager 上增加可选 PostgreSQL 服务端存储，但不增加完整登录系统、长期记忆、跨会话记忆、对象存储、向量数据库或新业务场景。
+当前开发版本是 **V2.2.1：企业知识包与导入流程**，开发分支为 `feature/v2.2.1-knowledge-pack-import`，基线 master 为 `e24215b7cc84037195842ddec9de5b7f5b2bc34e`，上一稳定标签为 `v2.2.0-stable`。
 
-当前 Git 基线：
+V2.2.1 在 V2.2.0 PostgreSQL 服务端存储上增加：
 
-- V2.1.0 正式 master merge commit：`60314ce063dda4eba7436aa0c414a108a8abe2a8`
-- V2.1.0 Stable Tag：`v2.1.0-stable`
-- 项目级设计审查 Skill 提交：`cf36ea5c1b29b2300f5a51e1b9648dc198633eaf`
-- V2.2.0 feature 分支建立在上述本地提交之后；接手时必须用 `git rev-parse HEAD` 和 `git log` 实时核对，不要依赖本文档猜测尚未创建的最终 commit。
+- 工作区隔离的企业知识包。
+- TXT、Markdown、文本型 PDF 和 DOCX 多文件导入。
+- 服务端解析、预览、分块质量、重复检测与冲突处理。
+- PostgreSQL 持久化 ImportJob / ImportItem、进度恢复、部分失败、重试与取消。
+- 成功文档与 chunks 的事务写入，以及当前工作区 RAG 即时读取。
 
-V2.2.0 最终门禁、feature push、master merge 和 `v2.2.0-stable` 只在全部实现与验证通过后执行。当前文档不预填尚未得到的测试数字或 Git commit。
+明确不包含：对象存储、OCR、扫描版 PDF 文字识别、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22、无关 UI 重构或腾讯云部署。原始上传文件不会长期保存。
 
-云端边界：本轮不更新腾讯云应用版本、不切换 PM2、不执行 Canary；腾讯云线上应用仍保持 V2.0.4。只有在真实 PostgreSQL 集成验证无法由独立本地/测试数据库完成时，才可使用隔离的测试数据库基础设施，且不得覆盖线上应用或生产数据。
+腾讯云应用仍运行 V2.0.4。本轮只发布 Git 版本，不执行生产 PostgreSQL migration、服务器 Release、Canary 或 PM2 切换。
 
-## 2. 接手后的第一组检查
+## 2. 接手检查
 
 ```powershell
 Set-Location 'E:\codex\enterprise-agent-hub'
@@ -33,135 +34,90 @@ git tag --list 'v2.*-stable' --sort=version:refname
 git diff --check
 ```
 
-同时读取：
+如果工作区包含 V2.2.1 未提交实现，必须原地保留并继续；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时上传文件、真实凭据或无关改动，停止并报告。
 
-- `C:\Users\LENOVO\.codex\memories\PROFILE.md`
-- `C:\Users\LENOVO\.codex\memories\ACTIVE.md`
+## 3. 数据与工作区模型
 
-若工作区包含 V2.2.0 的未提交实现，保留并继续，不要 reset、restore、stash、clean 或覆盖。若出现 `.env.local`、运行数据、真实凭据或与 V2.2.0 无关的改动，停止并先报告。
+- PostgreSQL 是 server 模式正式数据源；ORM 保持 Prisma 6.19.3，Node 基线保持 20.19.5。
+- HttpOnly、SameSite=Lax 的签名不透明 Cookie 解析匿名 Workspace；生产环境使用 Secure。
+- 客户端传入的 `workspaceId` 不作为授权依据。KnowledgePack、ImportJob、ImportItem、KnowledgeDocument 和 KnowledgeChunk 查询必须限定服务端解析的 workspaceId。
+- `KnowledgeDocument.packId` 是现有内置 RAG 分类；V2.2.1 `knowledgePackId` 是工作区企业知识包，不能混用。
+- KnowledgePack 使用 revision/CAS；同工作区规范化名称唯一，文档计数由可靠查询计算。
+- ImportJob 保存状态、总数、成功/失败/跳过/冲突计数、revision 和完成信息。
+- ImportItem 保存受限提取文本、预览、冲突、安全错误、retry、claim token 和 lease；不保存原始文件。
 
-## 3. V2.2.0 技术方案
+正式新增 migration：`prisma/migrations/20260717000000_v221_knowledge_pack_import/migration.sql`。它从 V2.2.0 追加表、字段、枚举、复合外键和索引，不删除旧数据。
 
-### 数据库
-
-- PostgreSQL 为正式数据源。
-- ORM 使用 Prisma 6.19.3，明确兼容 Node 20。
-- Schema 与初始 migration 位于 `prisma/`。
-- 不使用 SQLite、内存库或 JSONL 代替生产数据库。
-- 不执行 `prisma migrate reset`，也不接触腾讯云生产数据库。
-
-### 匿名工作区隔离
-
-- 服务端生成随机匿名工作区和不透明会话令牌。
-- Cookie 名称由服务端固定，使用签名值、HttpOnly、SameSite=Lax；生产环境使用 Secure。
-- 数据库存储令牌哈希，不保存 Cookie 原文。
-- 客户端提供的 `workspaceId` 不被信任，也不作为授权依据；服务端始终以 Cookie 解析的工作区为准。
-- Conversation、Message、KnowledgeDocument、KnowledgeChunk、ImportJob 和 StorageMigration 都带 `workspaceId`，所有查询与修改必须限定该值。
-- 这是浏览器级隔离基础，不是完整身份认证，也不支持跨浏览器账号恢复。
-
-### 数据模型
-
-- `Workspace`：匿名工作区、会话令牌哈希和时间戳。
-- `Conversation`：标题、时间戳、`revision`、可选原子 `conversationSummary` JSON、软删除时间。
-- `Message`：user/assistant、正文、稳定顺序、runId、responseMode 和安全 assistant details。
-- `KnowledgeDocument`：受限文本正文、来源类型、启用状态、tags、metadata、checksum 和现有知识诊断字段。
-- `KnowledgeChunk`：稳定 chunkIndex、正文、keywords，与文档同工作区关联。
-- `ImportJob`：单文档导入基础状态与安全 errorCode。
-- `StorageMigration`：幂等 migrationId、聚合数量和迁移结果。
-
-### Repository 与存储模式
-
-- `ConversationRepository` 同时提供 Local / Server 适配器，保持 list/get/create/rename/delete/appendTurn/regenerate/editAndResend 语义一致。
-- `KnowledgeRepository` 同时提供 Local / Server 适配器，保持文档 CRUD、启用状态和 chunks 读取语义一致。
-- `local`：服务端存储未启用，继续使用 V2.1.0 localStorage。
-- `server`：数据库已配置且健康，服务端为唯一写入数据源。
-- `degraded`：数据库已配置但不可用，可展示浏览器中已有的本地兼容数据（如有），写操作明确失败，不静默回写 localStorage。
-
-## 4. 数据一致性与上下文链路
-
-服务端 Conversation 写入使用 PostgreSQL 事务和 revision CAS：
-
-- 普通发送：写入完整 user + assistant turn、应用 Summary Patch、revision + 1。
-- Regenerate：校验 expectedRevision 和最后 assistant ID，替换回答、应用 Patch、revision + 1。
-- Edit & Resend：校验 expectedRevision 和 user/assistant ID，截断旧尾部、写入新 turn、应用 Patch、revision + 1。
-- CAS 失败返回 409，消息与 Summary 均不发生部分写入。
-- pending、partial、aborted 或失败回答不写入 Message。
-
-V2.1.0 上下文链路保持：
+## 4. 导入链路
 
 ```text
-有效历史前缀
-→ Context Candidates
-→ 请求校验
-→ Router
-→ RAG
-→ Tool
-→ History Selector
-→ Rolling Summary
-→ Context Manager
-→ Mock / Real
-→ Streaming / Non-streaming
-→ Completion Fence
-→ Repository 原子写入
+客户端选择文件并基础校验
+→ 同源 multipart 请求
+→ 服务端 Workspace 解析
+→ 扩展名 / MIME / 签名 / 实际结构校验
+→ 文本提取
+→ 幂等 checksum 预检
+→ checksum 与工作区既有文档、同批文件重复检测
+→ 生产 RAG 分块器生成预览与质量诊断
+→ 持久化 preview_ready Job / Items（不写正式文档）
+→ 用户编辑元数据并确认 skip / replace / import_as_new
+→ process 每次 claim 一个 Item
+→ 文档与 chunks 同事务提交
+→ 汇总、恢复、失败重试或取消
 ```
 
-服务端存储不新增第二次摘要模型调用。Rolling Summary 仍使用确定性增量逻辑；Summary 正文不得进入 Ops、Context Trace 或默认日志。
+并发安全：任务确认、处理、重试与取消使用 revision；处理器使用 claim/lease 防重复消费；单项写入事务失败不会留下半文档；已成功项不会因重试重复导入；replace 复核同工作区目标及其 revision。
 
-## 5. localStorage 迁移
+支持限制集中在 `src/lib/knowledge/import-limits.ts`：单批 10 个、单文件 5 MiB、单批 25 MiB、提取后 120,000 字符、最多 500 chunks、PDF 最多 200 页、DOCX 总解压 50 MiB。扫描型 PDF 无可提取文本时明确失败，不执行 OCR。
 
-迁移流程：发现本地数据 → 预检 → 用户确认 → 上传受限迁移包 → 服务端事务导入 → 返回 imported/skipped/conflicted/failed → 写入本地迁移状态标记。
+## 5. Repository 与存储模式
 
-- 保留原 Conversation、Message、Summary 和 KnowledgeDocument ID、时间与消息顺序。
-- 使用由本地已净化数据确定性生成的 `migrationId`；重复提交返回既有结果，不重复生成记录。
-- 服务器已有相同 ID 且内容一致：skipped。
-- 相同 ID 但内容不一致：conflicted；服务器记录优先，不静默覆盖。
-- 本地独有且容量允许：imported。
-- localStorage 原 key 和原数据始终保留，只新增迁移状态标记。
-- 迁移仅作用于 Cookie 解析出的当前工作区；即使请求出现 workspaceId，也不能据此改变授权范围。
+- KnowledgePack：`src/lib/storage/knowledgePackRepository.ts`、`src/lib/server-storage/knowledgePackRepository.ts`。
+- KnowledgeImport：`src/lib/storage/knowledgeImportRepository.ts`、`src/lib/server-storage/knowledgeImportRepository.ts`。
+- KnowledgeDocument：`src/lib/storage/knowledgeRepository.ts`、`src/lib/server-storage/knowledgeRepository.ts`。
 
-详细说明见 `docs/local-storage-migration.md`。
+模式语义：
+
+- `local`：保留 V2.2.0 单文档本地导入和本地 RAG；企业知识包与批量任务提示需要服务端存储。
+- `server`：知识包、任务、文档和 chunks 以 PostgreSQL 为唯一正式来源。
+- `degraded`：可展示已加载内容，不启动或推进正式任务，不静默写 localStorage 假装成功。
+
+任务自身保存在数据库。浏览器 `sessionStorage` 只保留当前任务 ID，用于刷新后重新 GET，不保存完整正文或任务结果；指针丢失、失效或只指向旧完成结果时，客户端会从当前 Workspace 最近 10 个可恢复任务中发现最新任务。
 
 ## 6. 关键文件
 
-- Prisma Schema：`prisma/schema.prisma`
-- 初始迁移：`prisma/migrations/`
-- 服务端存储配置与 Prisma Client：`src/lib/server-storage/config.ts`、`src/lib/server-storage/prisma.ts`
-- 匿名工作区：`src/lib/server-storage/workspace.ts`
-- Conversation Repository：`src/lib/storage/conversationRepository.ts`、`src/lib/server-storage/conversationRepository.ts`
-- Knowledge Repository：`src/lib/storage/knowledgeRepository.ts`、`src/lib/server-storage/knowledgeRepository.ts`
-- 存储状态：`src/lib/storage/status.ts`、`src/app/api/storage/status/route.ts`
-- 迁移：`src/lib/server-storage/migration.ts`、`src/lib/storage/migrationClient.ts`、`src/app/api/storage/migration/`
-- REST API：`src/app/api/storage/conversations/`、`src/app/api/storage/knowledge/`
-- UI 状态与迁移入口：`src/components/StorageStatusPanel.tsx`
-- 会话 Hook：`src/components/agent-workspace/useAgentWorkspace.ts`
-- 知识 Hook：`src/components/knowledge-workspace/useKnowledgeWorkspace.ts`
-- 安全聚合状态：`src/lib/server-storage/status.ts`、`src/app/api/ops/summary/route.ts`
+- Schema / migration：`prisma/schema.prisma`、`prisma/migrations/20260717000000_v221_knowledge_pack_import/`
+- 文件限制、解析和质量：`src/lib/knowledge/import-limits.ts`、`file-parser.ts`、`import-quality.ts`
+- 安全 metadata：`src/lib/knowledge/safe-metadata.ts`
+- 服务端任务：`src/lib/server-storage/knowledgeImportRepository.ts`
+- API：`src/app/api/storage/knowledge/packs/`、`src/app/api/storage/knowledge/import/`
+- 前端控制器与面板：`src/components/knowledge-workspace/useKnowledgeImportWorkspace.ts`、`KnowledgeBatchImportPanel.tsx`、`WorkspaceKnowledgePackPanel.tsx`
+- 工作区知识 RAG：`src/lib/server-storage/agentKnowledge.ts`
+- 安全 Ops 聚合：`src/lib/server-storage/status.ts`
+- 架构和限制：`docs/knowledge-import-architecture.md`、`docs/knowledge-import-limits.md`
+- Migration：`docs/v2.2.1-database-migration.md`
+- Release Notes：`docs/v2.2.1-release-notes.md`
 
-## 7. 环境变量与安全
+## 7. API 与安全
 
-仅记录变量名，不记录值：
+- Knowledge Pack：`/api/storage/knowledge/packs`、`/api/storage/knowledge/packs/:id`。
+- Import：`/api/storage/knowledge/import/preview`、`/jobs`、`/jobs/:id`、`/process`、`/retry`、`/cancel`。
+- 所有写接口必须执行同源/Origin 检查、严格大小与结构校验，并通过 Cookie 获取 Workspace。
+- API 和日志不得返回完整 extractedText、完整 checksum、原始文件、本机路径、Prisma 堆栈、数据库 URL 或 Secret。
+- metadata 只接受受限 JSON，并拒绝 `__proto__`、`constructor`、`prototype`。
+- Ops 只记录聚合计数和白名单化 parser/duplicate 枚举；无口令或错误口令继续返回 401。
 
-- `DATABASE_URL`
-- `SERVER_STORAGE_ENABLED`
-- `STORAGE_SESSION_SECRET`
+## 8. 验证门禁
 
-安全规则：
-
-- `.env.local` 不得读取、打印、修改或提交。
-- 状态 API 只输出 configured、healthy、storageMode 和 databaseType。
-- Ops 只记录存储模式和聚合计数，不记录数据库 URL、Cookie、Secret、消息正文、Summary 正文、知识正文、RAG 原文或 Tool 原始输出。
-- 所有写 API 执行同源检查、Payload 校验和大小限制。
-- 不运行 `npm audit fix`，不升级 Node 22，也不做无关依赖大版本升级。
-
-## 8. 本地命令与发布门禁
-
-先按 `package.json` 的真实脚本执行：
+按 `package.json` 真实脚本执行：
 
 ```powershell
 npm.cmd run db:generate
 npm.cmd run db:validate
+npm.cmd run test:knowledge-import
 npm.cmd run test:storage
 npm.cmd run test:storage:postgres
+npm.cmd run test:migration:v221
 npm.cmd run test:run
 npm.cmd run typecheck
 npm.cmd run build
@@ -170,41 +126,26 @@ npm.cmd run e2e
 git diff --check
 ```
 
-如果需要 migration 状态或部署验证，使用隔离测试数据库：
+真实 PostgreSQL 门禁只能使用独立 PostgreSQL 16 测试库，设置测试专用 `RUN_POSTGRES_INTEGRATION=1` 与 `TEST_DATABASE_URL`；不得连接腾讯云生产数据库、输出连接串或执行 `prisma migrate reset`。`test:migration:v221` 验证带旧数据的 V2.2.0 升级路径；CI 还会在临时 PostgreSQL 中运行真实 server-mode 知识导入与第二浏览器 Workspace 隔离 E2E。
 
-```powershell
-npm.cmd run db:status
-npm.cmd run db:migrate:deploy
-```
+最后一次代码变化后必须完整重跑。任一关键门禁失败，不提交稳定 master、不创建 Tag、不部署。
 
-不得用真实生产 `.env.local` 运行测试。若当前环境没有独立 PostgreSQL，必须把“Prisma generate/validate 与静态 migration 验证”和“真实 PostgreSQL 集成测试”区分报告，不能把前者冒充后者。
+## 9. Git 发布
 
-## 9. Git 发布规则
+全部 feature 门禁通过后：
 
-只有最终代码和文档门禁全部通过后才可以：
+1. 按逻辑提交 V2.2.1 实现、测试和文档。
+2. 普通 push `feature/v2.2.1-knowledge-pack-import`，等待 GitHub feature CI。
+3. fetch 并确认 `origin/master` 仍是预期基线；未知前进立即停止。
+4. `--no-ff` 合并到 master，不 squash、rebase 或改写历史。
+5. 从 merge commit 重新执行全部门禁。
+6. push master，并确认 GitHub master CI。
+7. 在最终 master merge commit 创建附注 `v2.2.1-stable` 并 push。
 
-1. 在 feature 分支按逻辑提交。
-2. 普通 push `feature/v2.2.0-server-storage`，不 force。
-3. fetch 后确认远端 master 没有未知前进。
-4. 以 `--no-ff` 合并到 master。
-5. 从合并后的 master 重新执行完整门禁。
-6. 普通 push master。
-7. 在 master merge commit 创建附注 `v2.2.0-stable` 并 push。
+禁止 force push、tag -f、移动 `v2.2.0-stable`、删除 feature 分支或自动部署腾讯云。
 
-禁止 reset --hard、clean、rebase/squash 已发布历史、tag -f、force push、移动旧 Stable Tag 或删除历史分支。
+## 10. 当前发布状态
 
-## 10. 腾讯云状态
+V2.2.1 的最终 commit、feature/master CI、合并 commit、门禁数字和 Stable Tag 只能在操作实际成功后写入最终报告，不在交接文档中预填。
 
-- 腾讯云当前应用版本仍为 V2.0.4。
-- 本轮 Git 发布完成后停止，不创建服务器 Release、不切换 PM2、不做 Canary、不更新云端应用代码。
-- 即使使用腾讯云上的独立 PostgreSQL 测试基础设施，也必须与线上 V2.0.4 应用和生产数据隔离，并且不能把连接信息写入仓库或日志。
-- 后续云端部署必须单独授权，并按 `docs/server-storage-deployment-prerequisites.md` 完成备份、Secret、migration、健康检查与回滚准备。
-
-## 11. 当前仍需完成
-
-- 完成 V2.2.0 代码审计与缺口修复。
-- 补齐 Repository、API、迁移、工作区隔离、degraded、RAG 与 E2E 回归。
-- 执行最终 feature 门禁。
-- 生成正式 commit、push feature、非快进合并 master。
-- 从 master 重新完整验证后 push 并创建 `v2.2.0-stable`。
-- 最终报告必须明确真实 PostgreSQL 测试方式、所有门禁结果、Git 指向，以及未更新腾讯云应用的事实。
+截至本文更新时，腾讯云仍为 V2.0.4，V2.2.1 尚未部署云端。
