@@ -633,7 +633,6 @@ export class PrismaKnowledgeImportRepository {
           items: {
             create: parsed.map((item) => ({
               id: `knowledge-import-item-${randomUUID()}`,
-              workspaceId: this.workspaceId,
               itemIndex: item.itemIndex,
               originalFileName: item.file.fileName,
               normalizedTitle: readStoredMetadata(item.previewMetadata).title,

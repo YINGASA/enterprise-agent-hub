@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaConversationRepository } from "@/lib/server-storage/conversationRepository";
 import { PrismaKnowledgeRepository } from "@/lib/server-storage/knowledgeRepository";
 import { PrismaKnowledgePackRepository } from "@/lib/server-storage/knowledgePackRepository";
+import { PrismaKnowledgeImportRepository } from "@/lib/server-storage/knowledgeImportRepository";
 import { executeStorageMigration, sanitizeStorageMigrationInput } from "@/lib/server-storage/migration";
 import type { ConversationMessage, ImportedKnowledgeDocument } from "@/types";
 
@@ -437,6 +438,36 @@ describePostgres("PostgreSQL storage integration", () => {
     await prisma.importJob.delete({ where: { workspaceId_id: { workspaceId: workspaceA, id: jobId } } });
     await expect(prisma.importItem.count({ where: { workspaceId: workspaceA, importJobId: jobId } })).resolves.toBe(0);
     await expect(prisma.importJob.count({ where: { workspaceId: workspaceB, id: otherJobId } })).resolves.toBe(1);
+  });
+
+  it("creates a real PostgreSQL import preview through the nested repository path", async () => {
+    const workspaceId = await createWorkspace("import-preview");
+    const pack = await new PrismaKnowledgePackRepository(workspaceId, prisma).create({ name: "Import Preview Pack" });
+    const repository = new PrismaKnowledgeImportRepository(workspaceId, prisma);
+    const content = "星河审批码 Q7X9 是员工设备申请的唯一业务编号。".repeat(30);
+
+    const preview = await repository.preview({
+      files: [{
+        fileName: "employee-policy.txt",
+        mimeType: "text/plain",
+        sizeBytes: Buffer.byteLength(content),
+        bytes: Buffer.from(content),
+      }],
+      knowledgePackId: pack.id,
+      idempotencyKey: `preview-${randomUUID()}`,
+    });
+
+    expect(preview).toMatchObject({
+      status: "preview_ready",
+      totalItems: 1,
+      items: [expect.objectContaining({
+        status: "preview_ready",
+        originalFileName: "employee-policy.txt",
+        checksumStatus: "computed",
+      })],
+    });
+    await expect(prisma.knowledgeDocument.count({ where: { workspaceId } })).resolves.toBe(0);
+    await expect(prisma.importItem.count({ where: { workspaceId, importJobId: preview.id } })).resolves.toBe(1);
   });
 
   it("imports local data idempotently and keeps server records on conflict", async () => {

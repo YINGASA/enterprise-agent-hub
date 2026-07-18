@@ -35,7 +35,13 @@ test("PostgreSQL 服务端知识包导入可恢复、可检索且工作区隔离
         buffer: Buffer.from(`# 差旅规则\n\n${marker} 的差旅申请需要在出发前完成主管审批，并保留报销凭证。\n`.repeat(30)),
       },
     ]);
+    const previewResponsePromise = page.waitForResponse((response) => (
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/storage/knowledge/import/preview"
+    ));
     await page.getByTestId("knowledge-import-preview").click();
+    const previewResponse = await previewResponsePromise;
+    expect(previewResponse.status(), await safeImportErrorCode(previewResponse)).toBe(201);
     const previewItems = page.locator('[data-testid^="knowledge-import-item-"]');
     await expect(previewItems).toHaveCount(2);
     await expect(previewItems.first()).toContainText("checksum 已计算");
@@ -93,3 +99,14 @@ test("PostgreSQL 服务端知识包导入可恢复、可检索且工作区隔离
     await second.close();
   }
 });
+
+async function safeImportErrorCode(response: import("@playwright/test").Response) {
+  if (response.ok()) return "knowledge import preview succeeded";
+  try {
+    const body = await response.json() as { errorCode?: unknown; error?: unknown };
+    const code = typeof body.errorCode === "string" ? body.errorCode : typeof body.error === "string" ? body.error : "unknown_error";
+    return `knowledge import preview failed: HTTP ${response.status()} (${code})`;
+  } catch {
+    return `knowledge import preview failed: HTTP ${response.status()} (invalid_error_response)`;
+  }
+}

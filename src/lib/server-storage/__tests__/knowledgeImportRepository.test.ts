@@ -302,6 +302,9 @@ describe("PrismaKnowledgeImportRepository preview and confirmation", () => {
     expect(createFormalDocument).not.toHaveBeenCalled();
     expect(createChunks).not.toHaveBeenCalled();
     expect(createPreviewJob).toHaveBeenCalledTimes(1);
+    const nestedItems = createPreviewJob.mock.calls[0]?.[0].data.items.create as Array<Record<string, unknown>>;
+    expect(nestedItems).toHaveLength(2);
+    expect(nestedItems.every((item) => !("workspaceId" in item))).toBe(true);
     expect(tx.importJob.deleteMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ workspaceId: "ws-1", status: ImportJobStatus.PREVIEW_READY }),
     }));
