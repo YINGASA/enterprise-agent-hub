@@ -27,8 +27,9 @@ export function workspaceJson(body: unknown, init: ResponseInit | undefined, res
 
 export function knowledgeRouteError(error: unknown, resolution?: WorkspaceResolution) {
   if (error instanceof KnowledgeRepositoryError) {
-    const mappedError = error.status === 404 ? "not_found" : error.status === 409 ? "id_conflict" : error.status === 413 ? "payload_too_large" : error.status >= 500 ? "storage_unavailable" : "invalid_request";
-    return workspaceJson({ ok: false, error: mappedError, message: error.message, retryable: error.status >= 500 }, { status: error.status }, resolution);
+    const mappedError = error.status === 404 ? "not_found" : error.status === 409 ? "id_conflict" : error.status === 413 ? "payload_too_large" : error.status === 429 ? "rate_limited" : error.status >= 500 ? "storage_unavailable" : "invalid_request";
+    const errorCode = /^[a-z0-9_]{1,64}$/.test(error.code) ? error.code : mappedError;
+    return workspaceJson({ ok: false, error: mappedError, errorCode, message: error.message, retryable: error.status >= 500 }, { status: error.status }, resolution);
   }
   if (error && typeof error === "object") {
     const name = "name" in error && typeof error.name === "string" ? error.name : "";

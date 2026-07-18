@@ -1,6 +1,6 @@
 {
   "name": "enterprise-agent-hub",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "engines": {
     "node": ">=20.19.0 <21"
@@ -15,6 +15,8 @@
     "test:coverage": "vitest run --coverage",
     "test:storage": "vitest run src/lib/storage src/lib/server-storage src/app/api/storage src/app/api/__tests__/conversationStorageRoutes.test.ts src/app/api/__tests__/opsStorageSummary.test.ts src/app/api/__tests__/agentRoute.test.ts src/app/api/__tests__/agentStreamRoute.test.ts",
     "test:storage:postgres": "vitest run src/lib/server-storage/__tests__/postgres.integration.test.ts --reporter=verbose",
+    "test:migration:v221": "node scripts/test-v221-migration-upgrade.mjs",
+    "test:knowledge-import": "vitest run src/lib/knowledge/__tests__/file-parser.test.ts src/lib/knowledge/__tests__/import-quality.test.ts src/lib/storage/__tests__/knowledgePackRepository.test.ts src/lib/storage/__tests__/knowledgeImportRepository.test.ts src/lib/server-storage/__tests__/knowledgePackRepository.test.ts src/lib/server-storage/__tests__/knowledgeImportRepository.test.ts src/app/api/storage/__tests__/knowledgePackRoutes.test.ts src/app/api/storage/__tests__/knowledgeImportRoutes.test.ts src/components/knowledge-workspace/__tests__/useKnowledgeImportWorkspace.test.ts",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
     "db:migrate:dev": "prisma migrate dev",
@@ -26,16 +28,20 @@
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
+    "mammoth": "1.12.0",
     "next": "16.2.10",
+    "pdfjs-dist": "5.6.205",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "undici": "^8.5.0"
+    "undici": "^8.5.0",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@types/node": "22.15.32",
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.4",
+    "@types/yauzl": "2.10.3",
     "autoprefixer": "10.4.21",
     "postcss": "8.5.16",
     "prisma": "6.19.3",

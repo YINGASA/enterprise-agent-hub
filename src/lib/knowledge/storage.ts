@@ -1,5 +1,6 @@
 import { agentRequestLimits, knowledgeStorageLimits } from "@/lib/ops/securityLimits";
 import { clearKnowledgeDerivedCache, invalidateKnowledgeDerived } from "@/lib/knowledge/derived";
+import { sanitizeSafeMetadata } from "@/lib/knowledge/safe-metadata";
 import type { ImportedKnowledgeDocument, KnowledgeDocument, RagTestDiagnostic, RagTestHistoryItem } from "@/types";
 
 export const USER_KNOWLEDGE_STORAGE_KEY = "enterprise-agent-hub:user-knowledge-documents";
@@ -58,6 +59,13 @@ export function sanitizeImportedKnowledgeDocument(value: unknown): ImportedKnowl
   if (item.tags !== undefined && !isStringArray(item.tags, agentRequestLimits.documentTags, agentRequestLimits.documentTagChars)) return null;
   if (item.suggestedQuestions !== undefined && !isStringArray(item.suggestedQuestions, agentRequestLimits.documentSuggestedQuestions, agentRequestLimits.documentSuggestedQuestionChars)) return null;
   if (item.enabled !== undefined && typeof item.enabled !== "boolean") return null;
+  if (item.knowledgePackId !== undefined && (typeof item.knowledgePackId !== "string" || !item.knowledgePackId.trim() || item.knowledgePackId.length > 128)) return null;
+  if (item.mimeType !== undefined && (typeof item.mimeType !== "string" || item.mimeType.length > 160)) return null;
+  if (item.sizeBytes !== undefined && (!Number.isSafeInteger(item.sizeBytes) || item.sizeBytes < 0)) return null;
+  if (item.importJobId !== undefined && (typeof item.importJobId !== "string" || !item.importJobId.trim() || item.importJobId.length > 128)) return null;
+  if (item.revision !== undefined && (!Number.isSafeInteger(item.revision) || item.revision < 0)) return null;
+  const safeMetadata = item.metadata === undefined ? {} : sanitizeSafeMetadata(item.metadata);
+  if (safeMetadata === null) return null;
 
   const now = new Date().toISOString();
   const importedAt = dateOrFallback(item.importedAt, dateOrFallback(item.createdAt, now));
@@ -65,6 +73,7 @@ export function sanitizeImportedKnowledgeDocument(value: unknown): ImportedKnowl
   return {
     id: item.id.trim(),
     packId: typeof item.packId === "string" && item.packId.length <= 80 ? item.packId : undefined,
+    knowledgePackId: typeof item.knowledgePackId === "string" ? item.knowledgePackId.trim() : undefined,
     title: item.title.trim(),
     category: asString(item.category, "用户导入"),
     tags: Array.isArray(item.tags) ? item.tags.map((tag) => tag.trim()) : [],
@@ -77,6 +86,11 @@ export function sanitizeImportedKnowledgeDocument(value: unknown): ImportedKnowl
     isDefault: false,
     sourceType,
     originalFileName: typeof item.originalFileName === "string" && item.originalFileName.length <= 240 ? item.originalFileName : undefined,
+    mimeType: typeof item.mimeType === "string" ? item.mimeType.trim() : undefined,
+    sizeBytes: typeof item.sizeBytes === "number" ? item.sizeBytes : undefined,
+    importJobId: typeof item.importJobId === "string" ? item.importJobId.trim() : undefined,
+    revision: typeof item.revision === "number" ? item.revision : 0,
+    metadata: safeMetadata,
     importedAt,
     enabled: item.enabled !== false,
     suggestedQuestions: Array.isArray(item.suggestedQuestions) ? item.suggestedQuestions.map((question) => question.trim()) : [],

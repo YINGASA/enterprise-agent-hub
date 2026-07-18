@@ -11,7 +11,7 @@ import type { ImportedKnowledgeDocument } from "@/types";
 
 type Props = {
   documents: ImportedKnowledgeDocument[];
-  onDocumentsChange: (documents: ImportedKnowledgeDocument[]) => void;
+  onDocumentsChange: (documents: ImportedKnowledgeDocument[]) => boolean | Promise<boolean>;
 };
 
 export function KnowledgeBackupPanel({ documents, onDocumentsChange }: Props) {
@@ -58,7 +58,7 @@ export function KnowledgeBackupPanel({ documents, onDocumentsChange }: Props) {
     }
   }
 
-  function applyRestore() {
+  async function applyRestore() {
     if (!preview?.ok) {
       setNotice(preview?.errors.join(" ") || "请先选择有效备份文件。");
       return;
@@ -69,7 +69,11 @@ export function KnowledgeBackupPanel({ documents, onDocumentsChange }: Props) {
       setNotice(saved.error);
       return;
     }
-    onDocumentsChange(saved.data);
+    const persisted = await onDocumentsChange(saved.data);
+    if (!persisted) {
+      setNotice("知识库备份未保存，请检查存储状态后重试。");
+      return;
+    }
     setNotice(mode === "replace" ? `已替换恢复 ${saved.data.length} 篇用户文档。` : `已合并恢复 ${preview.counts.new} 篇新用户文档。`);
     setRawBackup("");
     setFileName("");

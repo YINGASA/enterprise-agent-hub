@@ -4,6 +4,8 @@ import type { AgentRoute } from "./agent";
 export type KnowledgeDocument = {
   id: string;
   packId?: string;
+  /** Workspace-owned enterprise pack. `packId` remains the built-in RAG category. */
+  knowledgePackId?: string;
   title: string;
   category: string;
   tags?: string[];
@@ -22,6 +24,11 @@ export type KnowledgeDocument = {
   isDefault?: boolean;
   sourceType?: KnowledgeSourceType;
   originalFileName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  importJobId?: string;
+  revision?: number;
+  metadata?: Record<string, unknown>;
   importedAt?: string;
   enabled?: boolean;
   suggestedQuestions?: string[];
@@ -40,6 +47,7 @@ export type KnowledgeChunk = {
   id: string;
   documentId: string;
   packId?: string;
+  knowledgePackId?: string;
   sourceTitle: string;
   category: string;
   tags?: string[];
@@ -197,4 +205,124 @@ export type KnowledgePack = {
   name: string;
   description: string;
   scenario: AgentScenario | "ai-engineering";
+};
+
+export type WorkspaceKnowledgePackStatus = "active" | "archived";
+
+export type WorkspaceKnowledgePack = {
+  id: string;
+  name: string;
+  description?: string;
+  status: WorkspaceKnowledgePackStatus;
+  documentCount: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KnowledgeImportJobStatus =
+  | "pending"
+  | "preview_ready"
+  | "processing"
+  | "completed"
+  | "partial_failed"
+  | "failed"
+  | "cancelled";
+
+export type KnowledgeImportItemStatus =
+  | "preview_ready"
+  | "ready"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "conflicted"
+  | "cancelled";
+
+export type KnowledgeDuplicateType =
+  | "none"
+  | "exact_content"
+  | "same_title"
+  | "same_file_name"
+  | "possible_duplicate";
+
+export type KnowledgeConflictResolution = "skip" | "replace" | "import_as_new";
+export type KnowledgeImportQualityLevel = "excellent" | "usable" | "needs_attention" | "blocked";
+
+export type KnowledgeImportChunkPreview = {
+  chunkIndex: number;
+  characterCount: number;
+  approximateTokens: number;
+  keywords: string[];
+  contentPreview: string;
+  tooShort: boolean;
+  tooLong: boolean;
+  possibleDuplicate: boolean;
+  lowInformation: boolean;
+  qualityLevel: Exclude<KnowledgeImportQualityLevel, "blocked">;
+};
+
+export type KnowledgeImportPreviewMetadata = {
+  title: string;
+  category: string;
+  tags: string[];
+  sourceType: Extract<KnowledgeSourceType, "user_upload" | "user_paste">;
+  enabled: boolean;
+  suggestedQuestions: string[];
+  /** `null` explicitly overrides a batch-level pack and imports without a pack. */
+  knowledgePackId?: string | null;
+  metadata: Record<string, unknown>;
+};
+
+export type KnowledgeImportItem = {
+  id: string;
+  importJobId: string;
+  itemIndex: number;
+  originalFileName: string;
+  normalizedTitle: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: KnowledgeImportItemStatus;
+  duplicateType: KnowledgeDuplicateType;
+  conflictDocumentId?: string;
+  conflictResolution?: KnowledgeConflictResolution;
+  extractedCharacterCount: number;
+  estimatedChunkCount: number;
+  checksumStatus: "computed";
+  qualityLevel: KnowledgeImportQualityLevel;
+  qualityLabel: "优秀" | "可用" | "需处理" | "无法导入";
+  warnings: string[];
+  metadata: KnowledgeImportPreviewMetadata;
+  chunkPreview: KnowledgeImportChunkPreview[];
+  documentId?: string;
+  errorCode?: string;
+  errorMessageSafe?: string;
+  retryable?: boolean;
+  retryCount: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KnowledgeImportJob = {
+  id: string;
+  knowledgePackId?: string;
+  status: KnowledgeImportJobStatus;
+  totalItems: number;
+  completedItems: number;
+  failedItems: number;
+  skippedItems: number;
+  conflictedItems: number;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  items: KnowledgeImportItem[];
+};
+
+export type KnowledgeImportJobItemConfirmation = {
+  itemId: string;
+  expectedRevision: number;
+  metadata: KnowledgeImportPreviewMetadata;
+  conflictResolution: KnowledgeConflictResolution;
 };

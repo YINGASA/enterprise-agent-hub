@@ -85,12 +85,12 @@ export function useKnowledgeWorkspace() {
   async function handleAdd(document: ImportedKnowledgeDocument, allDocuments: KnowledgeDocument[]) {
     if (!storageStatus) {
       setNotice("正在加载存储工作区，请稍后再试。");
-      return;
+      return false;
     }
     const status = storageStatus;
     if (status.storageMode === "degraded") {
       setNotice("服务端存储暂不可用，文档未保存。请恢复后重试。");
-      return;
+      return false;
     }
     const duplicates = findDuplicateKnowledgeDocuments(document, allDocuments);
     let savedDocument: ImportedKnowledgeDocument | null = null;
@@ -105,6 +105,7 @@ export function useKnowledgeWorkspace() {
       setSelectedCategory(allCategoryOption);
       setSelectedSourceType(savedDocument.sourceType);
       setNotice(`已成功导入：${savedDocument.title}。${status.storageMode === "server" ? "已保存到服务端工作区" : "已保存到当前浏览器本地"}，刷新页面后仍会保留；已生成 ${chunkCount} 个 chunks，${savedDocument.enabled === false ? "当前未启用 RAG 检索" : "已加入 RAG 检索"}。${duplicates.length ? ` 检测到可能重复文档：${duplicates.map((item) => item.title).join("、")}。` : ""}`);
+      return true;
     } catch (error) {
       if (savedDocument) {
         if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
@@ -113,11 +114,11 @@ export function useKnowledgeWorkspace() {
         setSelectedCategory(allCategoryOption);
         setSelectedSourceType(savedDocument.sourceType);
         setNotice(`已成功导入：${savedDocument.title}，但 chunk 统计暂时无法刷新。文档已经保存，请稍后重试查看。`);
-        return;
+        return true;
       }
       if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
       setNotice(`导入失败：${error instanceof Error ? error.message : "存储请求失败。"}`);
-      return;
+      return false;
     }
   }
 
@@ -126,7 +127,7 @@ export function useKnowledgeWorkspace() {
     if (!target) return;
     if (!storageStatus) {
       setNotice("正在加载存储工作区，请稍后再试。");
-      return;
+      return false;
     }
     const status = storageStatus;
     if (status.storageMode === "degraded") {
@@ -202,12 +203,12 @@ export function useKnowledgeWorkspace() {
   async function handleRestore(documents: ImportedKnowledgeDocument[]) {
     if (!storageStatus) {
       setNotice("正在加载存储工作区，请稍后再试。");
-      return;
+      return false;
     }
     const status = storageStatus;
     if (status.storageMode === "degraded") {
       setNotice("服务端存储暂不可用，知识库备份未恢复。");
-      return;
+      return false;
     }
     try {
       const repository = status.storageMode === "server" ? serverKnowledgeRepository : localKnowledgeRepository;
@@ -219,9 +220,11 @@ export function useKnowledgeWorkspace() {
       setSelectedDocumentId(savedDocuments[0]?.id ?? defaultDocuments[0]?.id ?? "");
       setSelectedSourceType(allSourceOption);
       setNotice(`用户知识库备份已恢复，默认知识库未受影响；当前存储中共有 ${savedDocuments.length} 篇用户文档。`);
+      return true;
     } catch (error) {
       if (isStorageUnavailable(error)) setStorageStatus(degradedStorageStatus);
       setNotice(`备份恢复失败：${error instanceof Error ? error.message : "存储请求失败。"}`);
+      return false;
     }
   }
 

@@ -4,9 +4,12 @@ import { useMemo } from "react";
 import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
 import { KnowledgeBackupPanel } from "@/components/KnowledgeBackupPanel";
+import { KnowledgeBatchImportPanel } from "@/components/KnowledgeBatchImportPanel";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
 import { RagTestBench } from "@/components/RagTestBench";
 import { StorageStatusPanel } from "@/components/StorageStatusPanel";
+import { WorkspaceKnowledgePackPanel } from "@/components/WorkspaceKnowledgePackPanel";
+import { useKnowledgeImportWorkspace } from "@/components/knowledge-workspace/useKnowledgeImportWorkspace";
 import { useKnowledgeWorkspace, type SourceFilter } from "@/components/knowledge-workspace/useKnowledgeWorkspace";
 import { documents as defaultDocuments } from "@/data/mock";
 import { enterpriseKnowledgePacks } from "@/data/enterpriseKnowledgePacks";
@@ -169,6 +172,10 @@ export function KnowledgeWorkspace() {
     testBenchQuestion, setTestBenchQuestion, handleAdd, handleDelete, handleToggleEnabled,
     handleClearUserDocuments, handleRestore,
   } = workspace;
+  const importWorkspace = useKnowledgeImportWorkspace({
+    storageStatus,
+    onImportComplete: async () => { await refreshStorage(); },
+  });
 
   const allDocuments = useMemo<KnowledgeDocument[]>(() => [...defaultDocuments, ...userDocuments], [userDocuments]);
   const enabledDocuments = useMemo<KnowledgeDocument[]>(() => allDocuments.filter(isDocumentEnabled), [allDocuments]);
@@ -212,7 +219,7 @@ export function KnowledgeWorkspace() {
   }, [ragTestHistory]);
 
   const filteredDocuments = allDocuments.filter((document) => {
-    const packMatched = selectedPack === allPackOption || document.packId === selectedPack;
+    const packMatched = selectedPack === allPackOption || document.packId === selectedPack || document.knowledgePackId === selectedPack;
     const categoryMatched = selectedCategory === allCategoryOption || document.category === selectedCategory;
     const sourceMatched = selectedSourceType === allSourceOption || (document.sourceType ?? "default") === selectedSourceType;
     return packMatched && categoryMatched && sourceMatched && includesText(document, search);
@@ -244,7 +251,7 @@ export function KnowledgeWorkspace() {
           </div>
           <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-6"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.defaultDocCount}</p><p className="mt-1 font-semibold text-ink-900">{defaultDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.userDocCount}</p><p className="mt-1 font-semibold text-ink-900">{userDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.enabledDocs}</p><p className="mt-1 font-semibold text-ink-900">{enabledDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.totalChunks}</p><p className="mt-1 font-semibold text-ink-900">{defaultChunkCount + userChunkCount} {ui.chunkUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.activeChunks}</p><p className="mt-1 font-semibold text-ink-900">{activeChunkCount} {ui.chunkUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.lastImportedAt}</p><p className="mt-1 break-words font-semibold text-ink-900">{lastImportedAt ? new Date(lastImportedAt).toLocaleDateString() : ui.neverImported}</p></div></div>
           <p className="mt-3 break-words text-xs text-ink-500">{ui.activeSources}：{activeSourceTypes.join(" / ")}。用户文档禁用后仍会保留在列表中，但不会参与 /chat RAG 检索。</p>
-          <div className="mt-5 grid gap-3 md:grid-cols-3"><select value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allPackOption}>{ui.allPacks}</option>{knowledgePacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</select><select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allCategoryOption}>{ui.allCategories}</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><select value={selectedSourceType} onChange={(event) => setSelectedSourceType(event.target.value as SourceFilter)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allSourceOption}>{ui.allSources}</option><option value="default">{ui.defaultSource}</option><option value="user_upload">{ui.userUpload}</option><option value="user_paste">{ui.userPaste}</option></select></div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3"><select value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allPackOption}>{ui.allPacks}</option><optgroup label="内置知识库包">{knowledgePacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</optgroup>{importWorkspace.packs.length ? <optgroup label="企业知识包">{importWorkspace.packs.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</optgroup> : null}</select><select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allCategoryOption}>{ui.allCategories}</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><select value={selectedSourceType} onChange={(event) => setSelectedSourceType(event.target.value as SourceFilter)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allSourceOption}>{ui.allSources}</option><option value="default">{ui.defaultSource}</option><option value="user_upload">{ui.userUpload}</option><option value="user_paste">{ui.userPaste}</option></select></div>
           <input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder={ui.searchPlaceholder} />
           {notice ? <p className="mt-3 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{notice}</p> : null}
         </div>
@@ -282,6 +289,8 @@ export function KnowledgeWorkspace() {
             })}
           </div>
         </div>
+        <WorkspaceKnowledgePackPanel workspace={importWorkspace} />
+        <KnowledgeBatchImportPanel workspace={importWorkspace} />
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3>
