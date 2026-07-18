@@ -2,10 +2,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+function readTextFixture(...segments: string[]): string {
+  return readFileSync(join(process.cwd(), ...segments), "utf8").replace(/\r\n?/g, "\n");
+}
+
 describe("PostgreSQL server storage schema", () => {
-  const schema = readFileSync(join(process.cwd(), "prisma", "schema.prisma"), "utf8");
-  const v220Migration = readFileSync(join(process.cwd(), "prisma", "migrations", "20260716000000_v220_server_storage", "migration.sql"), "utf8");
-  const v221Migration = readFileSync(join(process.cwd(), "prisma", "migrations", "20260717000000_v221_knowledge_pack_import", "migration.sql"), "utf8");
+  const schema = readTextFixture("prisma", "schema.prisma");
+  const v220Migration = readTextFixture("prisma", "migrations", "20260716000000_v220_server_storage", "migration.sql");
+  const v221Migration = readTextFixture("prisma", "migrations", "20260717000000_v221_knowledge_pack_import", "migration.sql");
 
   it("defines the required workspace-scoped models", () => {
     for (const model of [
