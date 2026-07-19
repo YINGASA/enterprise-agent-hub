@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { knowledgeImportLimits, SUPPORTED_ENTERPRISE_IMPORT_EXTENSIONS } from "@/lib/knowledge/import-limits";
+import { knowledgeImportJobLimits, knowledgeImportLimits, SUPPORTED_ENTERPRISE_IMPORT_EXTENSIONS } from "@/lib/knowledge/import-limits";
 import {
   KnowledgeImportRepositoryError,
   ServerKnowledgeImportRepository,
@@ -101,6 +101,70 @@ export function buildKnowledgeImportConfirmations(job: KnowledgeImportJob): Know
   }));
 }
 
+type ContinueKnowledgeImportOptions = {
+  now?: () => number;
+  wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
+  onProgress?: (job: KnowledgeImportJob) => void | Promise<void>;
+};
+
+function waitForKnowledgeImportRecovery(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Import processing aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Import processing aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Drives the database-backed cooperative worker. A process rebuilt while an
+ * item still owns an unexpired lease polls within a bounded session and then
+ * reclaims it after expiry; it never spins indefinitely in the browser.
+ */
+export async function continueKnowledgeImportJob(
+  repository: KnowledgeImportRepository,
+  initial: KnowledgeImportJob,
+  signal: AbortSignal,
+  options: ContinueKnowledgeImportOptions = {},
+) {
+  const now = options.now ?? Date.now;
+  const wait = options.wait ?? waitForKnowledgeImportRecovery;
+  const startedAt = now();
+  const maximumTransitions = Math.max(initial.totalItems + knowledgeImportJobLimits.maximumRetryCount + 2, 2);
+  let transitions = 0;
+  let recoveryPolls = 0;
+  let current = initial;
+
+  while (!signal.aborted && shouldContinueKnowledgeImportJob(current)) {
+    if (now() - startedAt >= knowledgeImportLimits.processingSessionTimeoutMs) break;
+    const previousRevision = current.revision;
+    current = await repository.processNext(current.id, current.revision, signal);
+    if (signal.aborted) return current;
+    await options.onProgress?.(current);
+    if (current.revision !== previousRevision) {
+      transitions += 1;
+      recoveryPolls = 0;
+      if (transitions >= maximumTransitions) break;
+      continue;
+    }
+    recoveryPolls += 1;
+    if (recoveryPolls >= knowledgeImportLimits.maximumProcessingRecoveryPolls) break;
+    const remaining = knowledgeImportLimits.processingSessionTimeoutMs - (now() - startedAt);
+    if (remaining <= 0) break;
+    await wait(Math.min(knowledgeImportLimits.processingRecoveryPollMs, remaining), signal);
+  }
+  return current;
+}
+
 type Options = {
   storageStatus: PublicStorageStatus | null;
   onImportComplete?: (job: KnowledgeImportJob) => void | Promise<void>;
@@ -146,15 +210,7 @@ export function useKnowledgeImportWorkspace({
   }, []);
 
   const processUntilSettled = useCallback(async (initial: KnowledgeImportJob, signal: AbortSignal) => {
-    let current = initial;
-    const maximumSteps = Math.max(current.totalItems + current.failedItems + 2, 2);
-    for (let step = 0; step < maximumSteps && !signal.aborted && shouldContinueKnowledgeImportJob(current); step += 1) {
-      const previousRevision = current.revision;
-      current = await importRepository.processNext(current.id, current.revision, signal);
-      if (signal.aborted) return current;
-      rememberJob(current);
-      if (current.revision === previousRevision && shouldContinueKnowledgeImportJob(current)) break;
-    }
+    const current = await continueKnowledgeImportJob(importRepository, initial, signal, { onProgress: rememberJob });
     if (isTerminalKnowledgeImportJob(current)) {
       setNotice(`导入结果：成功 ${current.completedItems}，跳过 ${current.skippedItems}，冲突 ${current.conflictedItems}，失败 ${current.failedItems}。`);
       await onImportCompleteRef.current?.(current);

@@ -77,7 +77,9 @@ function isParserFailure(value: unknown): value is ParserFailure {
 }
 
 function asBuffer(value: ParseKnowledgeFileInput["buffer"]) {
-  if (Buffer.isBuffer(value)) return Buffer.from(value);
+  // Parsers never mutate the input. Reusing the existing backing store avoids
+  // another full-file allocation for every upload in a batch.
+  if (Buffer.isBuffer(value)) return value;
   if (value instanceof ArrayBuffer) return Buffer.from(value);
   return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
 }
@@ -135,7 +137,11 @@ function validateExtractedText(text: string): ParserFailure | null {
   return null;
 }
 
-function withTimeout<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+export function withKnowledgeParserDeadline<T>(
+  operation: Promise<T>,
+  signal?: AbortSignal,
+  timeoutMs: number = knowledgeImportLimits.parserTimeoutMs,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     let settled = false;
     const finish = (callback: () => void) => {
@@ -148,7 +154,7 @@ function withTimeout<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T>
     const onAbort = () => finish(() => reject(failure("parser_cancelled", "文件解析已取消。")));
     const timer = setTimeout(
       () => finish(() => reject(failure("parser_timeout", "文件解析超时，请缩小文件后重试。"))),
-      knowledgeImportLimits.parserTimeoutMs,
+      timeoutMs,
     );
     if (signal?.aborted) {
       onAbort();
@@ -172,24 +178,32 @@ async function parseUtf8(buffer: Buffer) {
 
 async function parsePdf(buffer: Buffer, signal?: AbortSignal) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const loadingTask = pdfjs.getDocument({ data: Uint8Array.from(buffer), isEvalSupported: false, verbosity: 0 });
+  const pdfBytes = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  const loadingTask = pdfjs.getDocument({ data: pdfBytes, isEvalSupported: false, verbosity: 0 });
   try {
-    const document = await withTimeout(loadingTask.promise, signal);
+    const document = await withKnowledgeParserDeadline(loadingTask.promise, signal);
     if (document.numPages > knowledgeImportLimits.maximumPdfPages) {
       throw failure("pdf_page_limit", `PDF 页数不能超过 ${knowledgeImportLimits.maximumPdfPages} 页。`);
     }
     const pages: string[] = [];
+    let extractedCharacters = 0;
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      const page = await withTimeout(document.getPage(pageNumber), signal);
-      const textContent = await withTimeout(page.getTextContent(), signal);
-      const parts = textContent.items.flatMap((item) => {
-        if (!item || typeof item !== "object" || !("str" in item) || typeof item.str !== "string") return [];
-        return [item.str + ("hasEOL" in item && item.hasEOL ? "\n" : " ")];
-      });
-      pages.push(parts.join("").trim());
-      page.cleanup();
-      if (pages.reduce((total, value) => total + value.length, 0) > knowledgeImportLimits.maximumExtractedCharacters) {
-        throw failure("extracted_content_too_large", "提取后的正文超过 120,000 个字符。");
+      if (signal?.aborted) throw failure("parser_cancelled", "文件解析已取消。");
+      const page = await withKnowledgeParserDeadline(document.getPage(pageNumber), signal);
+      try {
+        const textContent = await withKnowledgeParserDeadline(page.getTextContent(), signal);
+        const parts = textContent.items.flatMap((item) => {
+          if (!item || typeof item !== "object" || !("str" in item) || typeof item.str !== "string") return [];
+          return [item.str + ("hasEOL" in item && item.hasEOL ? "\n" : " ")];
+        });
+        const pageText = parts.join("").trim();
+        extractedCharacters += pageText.length;
+        if (extractedCharacters > knowledgeImportLimits.maximumExtractedCharacters) {
+          throw failure("extracted_content_too_large", "提取后的正文超过 120,000 个字符。");
+        }
+        pages.push(pageText);
+      } finally {
+        page.cleanup();
       }
     }
     const text = normalizeExtractedText(pages.filter(Boolean).join("\n\n"));
@@ -209,7 +223,7 @@ function unsafeZipPath(fileName: string) {
   return Boolean(validateFileName(fileName));
 }
 
-function consumeEntry(zipFile: ZipFile, entry: Entry) {
+function consumeEntry(zipFile: ZipFile, entry: Entry, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     zipFile.openReadStream(entry, (openError, stream) => {
       if (openError) {
@@ -217,12 +231,24 @@ function consumeEntry(zipFile: ZipFile, entry: Entry) {
         return;
       }
       let bytes = 0;
+      const onAbort = () => stream.destroy(Object.assign(
+        new Error("Knowledge import parser cancelled"),
+        failure("parser_cancelled", "文件解析已取消。"),
+      ));
+      signal?.addEventListener("abort", onAbort, { once: true });
+      const cleanup = () => signal?.removeEventListener("abort", onAbort);
       stream.on("data", (chunk: Buffer) => {
         bytes += chunk.length;
         if (bytes > knowledgeImportLimits.maximumDocxEntryBytes) stream.destroy(new Error("entry limit"));
       });
-      stream.once("error", reject);
-      stream.once("end", () => resolve());
+      stream.once("error", (error) => {
+        cleanup();
+        reject(error);
+      });
+      stream.once("end", () => {
+        cleanup();
+        resolve();
+      });
       stream.resume();
     });
   });
@@ -299,7 +325,9 @@ export function inspectDocxArchive(buffer: Buffer, signal?: AbortSignal): Promis
             return;
           }
           seenRequired.add(entry.fileName);
-          void consumeEntry(zipFile, entry).then(() => zipFile.readEntry()).catch(() => rejectSafely(failure("docx_invalid_archive", "DOCX 关键内部文件无法读取。")));
+          void consumeEntry(zipFile, entry, signal).then(() => zipFile.readEntry()).catch((error) => rejectSafely(
+            isParserFailure(error) ? error : failure("docx_invalid_archive", "DOCX 关键内部文件无法读取。"),
+          ));
           return;
         }
         zipFile.readEntry();
@@ -320,9 +348,9 @@ export function inspectDocxArchive(buffer: Buffer, signal?: AbortSignal): Promis
 }
 
 async function parseDocx(buffer: Buffer, signal?: AbortSignal) {
-  await withTimeout(inspectDocxArchive(buffer, signal), signal);
+  await withKnowledgeParserDeadline(inspectDocxArchive(buffer, signal), signal);
   try {
-    const result = await withTimeout(mammoth.extractRawText({ buffer }), signal);
+    const result = await withKnowledgeParserDeadline(mammoth.extractRawText({ buffer }), signal);
     return { text: normalizeExtractedText(result.value), warned: result.messages.length > 0 };
   } catch (error) {
     if (isParserFailure(error)) throw error;

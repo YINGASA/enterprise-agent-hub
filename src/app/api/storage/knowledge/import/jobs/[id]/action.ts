@@ -19,7 +19,7 @@ export async function runKnowledgeImportAction(request: Request, context: RouteC
     }
     resolution = await resolveRequestWorkspace(request);
     const repository = new PrismaKnowledgeImportRepository(resolution.workspaceId);
-    const job = await repository[action](id, expectedRevision);
+    const job = await repository[action](id, expectedRevision, request.signal);
     return workspaceJson({ ok: true, job }, undefined, resolution);
   } catch (error) {
     return knowledgeRouteError(error, resolution);

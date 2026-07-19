@@ -86,7 +86,7 @@ model Conversation {
   messages           Message[]
 
   @@id([workspaceId, id])
-  @@index([workspaceId, updatedAt])
+  @@index([workspaceId, deletedAt, updatedAt, id], map: "conversations_active_updated_idx")
   @@map("conversations")
 }
 
@@ -109,6 +109,7 @@ model Message {
   @@id([workspaceId, id])
   @@unique([workspaceId, conversationId, messageOrder])
   @@index([workspaceId, conversationId, createdAt])
+  @@index([workspaceId, conversationId, role, runId], map: "messages_run_id_lookup_idx")
   @@map("messages")
 }
 
@@ -116,6 +117,7 @@ model KnowledgeDocument {
   workspaceId       String              @map("workspace_id") @db.VarChar(64)
   id                String              @db.VarChar(128)
   title             String              @db.VarChar(240)
+  normalizedTitle   String?             @map("normalized_title") @db.VarChar(240)
   content           String              @db.Text
   sourceType        KnowledgeSourceType @map("source_type")
   enabled           Boolean             @default(true)
@@ -129,6 +131,7 @@ model KnowledgeDocument {
   packId            String?             @map("pack_id") @db.VarChar(128)
   knowledgePackId   String?             @map("knowledge_pack_id") @db.VarChar(128)
   originalFileName  String?             @map("original_file_name") @db.VarChar(260)
+  normalizedFileName String?            @map("normalized_file_name") @db.VarChar(260)
   mimeType          String?             @map("mime_type") @db.VarChar(160)
   sizeBytes         Int?                @map("size_bytes")
   importJobId       String?             @map("import_job_id") @db.VarChar(128)
@@ -144,6 +147,8 @@ model KnowledgeDocument {
   @@index([workspaceId, enabled, updatedAt])
   @@index([workspaceId, checksum])
   @@index([workspaceId, contentChecksum])
+  @@index([workspaceId, normalizedTitle], map: "knowledge_documents_normalized_title_idx")
+  @@index([workspaceId, normalizedFileName], map: "knowledge_documents_normalized_file_name_idx")
   @@index([workspaceId, knowledgePackId])
   @@index([workspaceId, importJobId])
   @@map("knowledge_documents")
@@ -211,7 +216,7 @@ model ImportJob {
   @@id([workspaceId, id])
   @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, createdAt])
-  @@index([workspaceId, status, updatedAt])
+  @@index([workspaceId, status, updatedAt, id], map: "import_jobs_status_updated_idx")
   @@map("import_jobs")
 }
 
@@ -248,7 +253,11 @@ model ImportItem {
 
   @@id([workspaceId, id])
   @@unique([workspaceId, importJobId, itemIndex])
-  @@index([workspaceId, importJobId, status])
+  @@index([workspaceId, importJobId, status, itemIndex], map: "import_items_job_status_order_idx")
+  @@index([workspaceId, importJobId, status, leaseExpiresAt, itemIndex], map: "import_items_claim_queue_idx")
+  @@index([workspaceId, status], map: "import_items_workspace_status_idx")
+  @@index([workspaceId, errorCode], map: "import_items_workspace_error_idx")
+  @@index([workspaceId, conflictType], map: "import_items_workspace_conflict_idx")
   @@index([workspaceId, checksum])
   @@index([workspaceId, conflictDocumentId])
   @@index([workspaceId, documentId])

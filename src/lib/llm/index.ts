@@ -100,6 +100,19 @@ async function createProxyAgent(proxyUrl: string | undefined) {
   return new ProxyAgent(proxyUrl);
 }
 
+async function disposeProxyAgent(
+  proxyAgent: Awaited<ReturnType<typeof createProxyAgent>>,
+  force: boolean,
+) {
+  if (!proxyAgent) return;
+  try {
+    if (force) await proxyAgent.destroy();
+    else await proxyAgent.close();
+  } catch {
+    // Transport cleanup must not replace the already classified request result.
+  }
+}
+
 export function getLlmConfig(): LlmClientConfig {
   const apiKey = process.env.AI_API_KEY?.trim();
   const rawBaseUrl = process.env.AI_BASE_URL?.trim() || defaultBaseUrl;
@@ -266,13 +279,17 @@ export async function callOpenAICompatibleChat(
   }
 
   const controller = new AbortController();
+  let timedOut = false;
   const abortFromCaller = () => controller.abort(options.signal?.reason);
   if (options.signal?.aborted) abortFromCaller();
   else options.signal?.addEventListener("abort", abortFromCaller, { once: true });
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, config.timeoutMs);
+  let proxyAgent: Awaited<ReturnType<typeof createProxyAgent>> = undefined;
 
   async function send(includeResponseFormat: boolean) {
-    const proxyAgent = await createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
     const body = buildRequestBody(messages, options, includeResponseFormat);
     const requestInit: FetchInitWithDispatcher = {
       method: "POST",
@@ -294,6 +311,7 @@ export async function callOpenAICompatibleChat(
   }
 
   try {
+    proxyAgent = await createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
     let response = await send(options.responseFormat === "json_object");
     let rawText = await response.text();
     let responseBodyPreview = rawText.slice(0, 500);
@@ -372,20 +390,21 @@ export async function callOpenAICompatibleChat(
       error: parsed.error,
     };
   } catch (error) {
+    if (options.signal?.aborted) throw error;
     const typedError = error instanceof Error ? (error as ErrorWithCause) : null;
-    const isTimeout = controller.signal.aborted || typedError?.name === "AbortError";
     return failedResult({
       config,
       startedAt,
-      errorType: isTimeout ? "timeout_error" : "network_error",
+      errorType: timedOut ? "timeout_error" : "network_error",
       errorName: typedError?.name ?? "UnknownError",
-      errorMessage: isTimeout ? `Request timed out after ${config.timeoutMs}ms.` : typedError?.message ?? "Unknown network error.",
+      errorMessage: timedOut ? `Request timed out after ${config.timeoutMs}ms.` : typedError?.message ?? "Unknown network error.",
       causeMessage: typedError?.cause?.message,
       causeCode: typedError?.cause?.code,
     });
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromCaller);
+    await disposeProxyAgent(proxyAgent, controller.signal.aborted);
   }
 }
 
@@ -423,9 +442,9 @@ export async function streamOpenAICompatibleChat(
     timedOut = true;
     controller.abort();
   }, config.timeoutMs);
+  let proxyAgent: Awaited<ReturnType<typeof createProxyAgent>> = undefined;
 
   async function send(includeResponseFormat: boolean) {
-    const proxyAgent = await createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
     const requestInit: FetchInitWithDispatcher = {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${config.apiKey}` },
@@ -451,13 +470,14 @@ export async function streamOpenAICompatibleChat(
     onAnswerDelta(delta);
   };
   const fallbackToComplete = async () => {
-    const result = await callOpenAICompatibleChat(messages, options);
+    const result = await callOpenAICompatibleChat(messages, { ...options, signal: controller.signal });
     const answer = result.parsedJson && typeof result.parsedJson.answer === "string" ? result.parsedJson.answer : "";
     emitAnswer(answer);
     return streamResultFromComplete(result, true, deltaCount);
   };
 
   try {
+    proxyAgent = await createProxyAgent(config.hasProxy ? process.env[config.proxyType] : undefined);
     let response = await send(options.responseFormat === "json_object");
     if (!response.ok && options.responseFormat === "json_object") {
       const preview = (await response.text()).slice(0, 500);
@@ -585,5 +605,6 @@ export async function streamOpenAICompatibleChat(
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromCaller);
+    await disposeProxyAgent(proxyAgent, controller.signal.aborted);
   }
 }

@@ -1,4 +1,5 @@
 import { readKnowledgeImportMultipart } from "@/app/api/storage/knowledge/import/request";
+import { knowledgeImportLimits } from "@/lib/knowledge/import-limits";
 import { tryAcquireKnowledgeImportPreviewSlot } from "@/lib/server-storage/knowledgeImportConcurrency";
 import { PrismaKnowledgeImportRepository } from "@/lib/server-storage/knowledgeImportRepository";
 import { knowledgeRouteError, workspaceJson } from "@/lib/server-storage/knowledgeRequest";
@@ -7,6 +8,33 @@ import { resolveRequestWorkspace, type WorkspaceResolution } from "@/lib/server-
 import { KnowledgeRepositoryError } from "@/lib/storage/knowledgeRepository";
 
 export const runtime = "nodejs";
+
+async function previewWithDeadline(
+  request: Request,
+  workspaceId: string,
+  input: Awaited<ReturnType<typeof readKnowledgeImportMultipart>>,
+) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const onRequestAbort = () => controller.abort();
+  if (request.signal.aborted) controller.abort();
+  request.signal.addEventListener("abort", onRequestAbort, { once: true });
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, knowledgeImportLimits.previewTimeoutMs);
+  try {
+    return await new PrismaKnowledgeImportRepository(workspaceId).preview({ ...input, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      throw new KnowledgeRepositoryError("导入预览处理超时，请缩小批次后重试。", 504, "knowledge_import_preview_timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    request.signal.removeEventListener("abort", onRequestAbort);
+  }
+}
 
 export async function POST(request: Request) {
   let resolution: WorkspaceResolution | undefined;
@@ -26,7 +54,7 @@ export async function POST(request: Request) {
     }
     releasePreviewSlot = slot.release;
     const input = await readKnowledgeImportMultipart(request);
-    const job = await new PrismaKnowledgeImportRepository(resolution.workspaceId).preview({ ...input, signal: request.signal });
+    const job = await previewWithDeadline(request, resolution.workspaceId, input);
     return workspaceJson({ ok: true, job }, { status: 201 }, resolution);
   } catch (error) {
     return knowledgeRouteError(error, resolution);

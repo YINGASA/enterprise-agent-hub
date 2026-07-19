@@ -256,9 +256,9 @@ describe("knowledge import job routes", () => {
     expect((await processImport(jsonRequest("/process", "POST", { expectedRevision: 1 }), context)).status).toBe(200);
     expect((await retryImport(jsonRequest("/retry", "POST", { expectedRevision: 2 }), context)).status).toBe(200);
     expect((await cancelImport(jsonRequest("/cancel", "POST", { expectedRevision: 2 }), context)).status).toBe(200);
-    expect(mocks.processNext).toHaveBeenCalledWith("job-1", 1);
-    expect(mocks.retryFailed).toHaveBeenCalledWith("job-1", 2);
-    expect(mocks.cancel).toHaveBeenCalledWith("job-1", 2);
+    expect(mocks.processNext).toHaveBeenCalledWith("job-1", 1, expect.any(AbortSignal));
+    expect(mocks.retryFailed).toHaveBeenCalledWith("job-1", 2, expect.any(AbortSignal));
+    expect(mocks.cancel).toHaveBeenCalledWith("job-1", 2, expect.any(AbortSignal));
 
     expect((await processImport(jsonRequest("/process", "POST", { expectedRevision: 1, workspaceId: "other" }), context)).status).toBe(400);
     expect((await retryImport(jsonRequest("/retry", "POST", { expectedRevision: -1 }), context)).status).toBe(400);

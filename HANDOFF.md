@@ -6,17 +6,18 @@
 
 ## 1. 当前版本与边界
 
-当前开发版本是 **V2.2.1：企业知识包与导入流程**，开发分支为 `feature/v2.2.1-knowledge-pack-import`，基线 master 为 `e24215b7cc84037195842ddec9de5b7f5b2bc34e`，上一稳定标签为 `v2.2.0-stable`。
+当前开发版本是 **V2.2.2：依赖兼容与生产导入加固**，开发分支为 `feature/v2.2.2-production-hardening`，基线 master 为 `1a392bdb4d88f0b52c49b6641b5e28e335c11721`，上一稳定标签为 `v2.2.1-stable`。
 
-V2.2.1 在 V2.2.0 PostgreSQL 服务端存储上增加：
+V2.2.2 在 V2.2.1 企业知识包和 PostgreSQL 服务端存储上加固：
 
-- 工作区隔离的企业知识包。
-- TXT、Markdown、文本型 PDF 和 DOCX 多文件导入。
-- 服务端解析、预览、分块质量、重复检测与冲突处理。
-- PostgreSQL 持久化 ImportJob / ImportItem、进度恢复、部分失败、重试与取消。
-- 成功文档与 chunks 的事务写入，以及当前工作区 RAG 即时读取。
+- Node 20.19.5 下的 Undici / Real API 非流式、流式、代理、取消与超时兼容。
+- 导入批次、解析、内存、deadline、最大重试和临时正文保留的集中边界。
+- ImportItem claim 续租、过期 lease 恢复、旧 token 拒绝和终态幂等。
+- PostgreSQL 规范化重复检测字段、真实查询索引与 V2.2.1 升级 migration。
+- 数据库 degraded 恢复、安全健康接口和生产启动检查。
+- 独立的 Node 20、压力、故障、migration 与查询计划门禁。
 
-明确不包含：对象存储、OCR、扫描版 PDF 文字识别、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22、无关 UI 重构或腾讯云部署。原始上传文件不会长期保存。
+明确不包含：对象存储、OCR、扫描版 PDF 文字识别、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22、无关 UI 重构或腾讯云部署。原始上传文件仍不会长期保存。
 
 腾讯云应用仍运行 V2.0.4。本轮只发布 Git 版本，不执行生产 PostgreSQL migration、服务器 Release、Canary 或 PM2 切换。
 
@@ -34,7 +35,7 @@ git tag --list 'v2.*-stable' --sort=version:refname
 git diff --check
 ```
 
-如果工作区包含 V2.2.1 未提交实现，必须原地保留并继续；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时上传文件、真实凭据或无关改动，停止并报告。
+如果工作区包含 V2.2.2 未提交实现，必须原地保留并继续；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时上传文件、真实凭据或无关改动，停止并报告。
 
 ## 3. 数据与工作区模型
 
@@ -46,7 +47,7 @@ git diff --check
 - ImportJob 保存状态、总数、成功/失败/跳过/冲突计数、revision 和完成信息。
 - ImportItem 保存受限提取文本、预览、冲突、安全错误、retry、claim token 和 lease；不保存原始文件。
 
-正式新增 migration：`prisma/migrations/20260717000000_v221_knowledge_pack_import/migration.sql`。它从 V2.2.0 追加表、字段、枚举、复合外键和索引，不删除旧数据。
+V2.2.2 正式新增 migration：`prisma/migrations/20260718000000_v222_production_hardening/migration.sql`。它从 V2.2.1 增加规范化查询字段和必要索引，不删除旧数据。
 
 ## 4. 导入链路
 
@@ -66,9 +67,9 @@ git diff --check
 → 汇总、恢复、失败重试或取消
 ```
 
-并发安全：任务确认、处理、重试与取消使用 revision；处理器使用 claim/lease 防重复消费；单项写入事务失败不会留下半文档；已成功项不会因重试重复导入；replace 复核同工作区目标及其 revision。
+并发安全：任务确认、处理、重试与取消使用 revision；处理器使用随机 claim token、30 秒 lease 与 10 秒续租防重复消费；lease 到期后新处理器可恢复，旧 token 不能完成；最多重试 3 次。单项写入事务失败不会留下半文档，已成功项不会因重试重复导入，replace 复核同工作区目标及其 revision。
 
-支持限制集中在 `src/lib/knowledge/import-limits.ts`：单批 10 个、单文件 5 MiB、单批 25 MiB、提取后 120,000 字符、最多 500 chunks、PDF 最多 200 页、DOCX 总解压 50 MiB。扫描型 PDF 无可提取文本时明确失败，不执行 OCR。
+支持限制集中在 `src/lib/knowledge/import-limits.ts`：单批 10 个、单文件 5 MiB、单批 25 MiB、提取后 120,000 字符、最多 500 chunks、PDF 最多 200 页、DOCX 总解压 50 MiB；解析 10 秒、预览整体 60 秒、单项处理 20 秒、处理会话 90 秒。扫描型 PDF 无可提取文本时明确失败，不执行 OCR。
 
 ## 5. Repository 与存储模式
 
@@ -96,7 +97,9 @@ git diff --check
 - 安全 Ops 聚合：`src/lib/server-storage/status.ts`
 - 架构和限制：`docs/knowledge-import-architecture.md`、`docs/knowledge-import-limits.md`
 - Migration：`docs/v2.2.1-database-migration.md`
-- Release Notes：`docs/v2.2.1-release-notes.md`
+- 生产加固：`docs/v2.2.2-production-hardening.md`
+- 数据库运维：`docs/v2.2.2-database-operations.md`
+- Release Notes：`docs/v2.2.2-release-notes.md`
 
 ## 7. API 与安全
 
@@ -118,6 +121,11 @@ npm.cmd run test:knowledge-import
 npm.cmd run test:storage
 npm.cmd run test:storage:postgres
 npm.cmd run test:migration:v221
+npm.cmd run test:migration:v222
+npm.cmd run test:real-api:node20
+npm.cmd run test:import:hardening
+npm.cmd run test:import:stress
+npm.cmd run production:check
 npm.cmd run test:run
 npm.cmd run typecheck
 npm.cmd run build
@@ -126,7 +134,7 @@ npm.cmd run e2e
 git diff --check
 ```
 
-真实 PostgreSQL 门禁只能使用独立 PostgreSQL 16 测试库，设置测试专用 `RUN_POSTGRES_INTEGRATION=1` 与 `TEST_DATABASE_URL`；不得连接腾讯云生产数据库、输出连接串或执行 `prisma migrate reset`。`test:migration:v221` 验证带旧数据的 V2.2.0 升级路径；CI 还会在临时 PostgreSQL 中运行真实 server-mode 知识导入与第二浏览器 Workspace 隔离 E2E。
+真实 PostgreSQL 门禁只能使用独立 PostgreSQL 16 测试库，设置测试专用 `RUN_POSTGRES_INTEGRATION=1` 与 `TEST_DATABASE_URL`；不得连接腾讯云生产数据库、输出连接串或执行 `prisma migrate reset`。`test:migration:v221` 验证 V2.2.0 → V2.2.1，`test:migration:v222` 验证带旧数据的 V2.2.1 → V2.2.2 和重复 deploy；CI 还会运行 claim/lease 恢复、查询计划和真实 server-mode Workspace 隔离 E2E。
 
 最后一次代码变化后必须完整重跑。任一关键门禁失败，不提交稳定 master、不创建 Tag、不部署。
 
@@ -134,18 +142,18 @@ git diff --check
 
 全部 feature 门禁通过后：
 
-1. 按逻辑提交 V2.2.1 实现、测试和文档。
-2. 普通 push `feature/v2.2.1-knowledge-pack-import`，等待 GitHub feature CI。
+1. 按逻辑提交 V2.2.2 实现、测试和文档。
+2. 普通 push `feature/v2.2.2-production-hardening`，等待 GitHub feature CI。
 3. fetch 并确认 `origin/master` 仍是预期基线；未知前进立即停止。
 4. `--no-ff` 合并到 master，不 squash、rebase 或改写历史。
 5. 从 merge commit 重新执行全部门禁。
 6. push master，并确认 GitHub master CI。
-7. 在最终 master merge commit 创建附注 `v2.2.1-stable` 并 push。
+7. 在最终 master merge commit 创建附注 `v2.2.2-stable` 并 push。
 
-禁止 force push、tag -f、移动 `v2.2.0-stable`、删除 feature 分支或自动部署腾讯云。
+禁止 force push、tag -f、移动 `v2.2.1-stable`、删除 feature 分支或自动部署腾讯云。
 
 ## 10. 当前发布状态
 
-V2.2.1 的最终 commit、feature/master CI、合并 commit、门禁数字和 Stable Tag 只能在操作实际成功后写入最终报告，不在交接文档中预填。
+V2.2.2 的最终 commit、feature/master CI、合并 commit、门禁数字和 Stable Tag 只能在操作实际成功后写入最终报告，不在交接文档中预填。
 
-截至本文更新时，腾讯云仍为 V2.0.4，V2.2.1 尚未部署云端。
+截至本文更新时，腾讯云仍为 V2.0.4，V2.2.2 尚未部署云端。

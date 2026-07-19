@@ -3,7 +3,7 @@
 ## 1. 前置条件
 
 - Node.js 20。
-- V2.2.1 发布基线为 Node.js 20.19.5。
+- V2.2.2 发布基线为 Node.js 20.19.5。
 - npm 与当前锁文件一致。
 - 一个与生产隔离的 PostgreSQL 测试数据库。
 - 不需要 Node 22，不要运行依赖自动升级或 `npm audit fix`。
@@ -112,7 +112,12 @@ npm run dev
 npm run test:storage
 npm run test:storage:postgres
 npm run test:migration:v221
+npm run test:migration:v222
 npm run test:knowledge-import
+npm run test:real-api:node20
+npm run test:import:hardening
+npm run test:import:stress
+npm run production:check
 npm run test:run
 npm run typecheck
 npm run build
@@ -121,7 +126,7 @@ npm run e2e
 git diff --check
 ```
 
-`test:storage:postgres` 与 `test:migration:v221` 仅在同时设置 `RUN_POSTGRES_INTEGRATION=1` 和独立的 `TEST_DATABASE_URL` 时执行真实 PostgreSQL 用例；否则明确跳过。CI 使用一次性 PostgreSQL 16 service，分别验证全新 deploy、带 V2.2.0 数据升级、工作区隔离、事务/CAS、知识级联、任务处理和真实 server-mode E2E。不要输出连接信息。
+`test:storage:postgres`、`test:migration:v221` 与 `test:migration:v222` 仅在同时设置 `RUN_POSTGRES_INTEGRATION=1` 和独立的 `TEST_DATABASE_URL` 时执行真实 PostgreSQL 用例；否则明确跳过。CI 使用一次性 PostgreSQL 16 service，分别验证全新 deploy、V2.2.0 → V2.2.1、V2.2.1 → V2.2.2、重复 deploy、工作区隔离、事务/CAS、claim/lease 恢复、查询索引和真实 server-mode E2E。不要输出连接信息。
 
 ## 7. 手工冒烟
 

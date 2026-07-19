@@ -7,7 +7,7 @@ on:
 jobs:
   quality-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
@@ -32,6 +32,12 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Verify Node and dependency compatibility
+        run: |
+          node -e "if (process.versions.node !== '20.19.5') { throw new Error('Node 20.19.5 is required') }"
+          npm ls undici
+      - name: Verify Node 20 Real API compatibility
+        run: npm run test:real-api:node20
       - name: Validate PostgreSQL schema
         env:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
@@ -55,6 +61,21 @@ jobs:
           TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
           RUN_POSTGRES_INTEGRATION: "1"
         run: npm run test:migration:v221
+      - name: Verify V2.2.1 to V2.2.2 migration with retained data
+        env:
+          TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
+          RUN_POSTGRES_INTEGRATION: "1"
+        run: npm run test:migration:v222
+      - name: Run import hardening tests
+        run: npm run test:import:hardening
+      - name: Run import pressure tests
+        run: npm run test:import:stress
+      - name: Run production readiness check
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/enterprise_agent_hub_ci
+          SERVER_STORAGE_ENABLED: "true"
+          STORAGE_SESSION_SECRET: ci-only-enterprise-agent-hub-storage-session-secret
+        run: npm run production:check
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Run security regression tests

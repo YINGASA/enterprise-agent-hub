@@ -2,17 +2,18 @@
 
 ## 当前状态
 
-V2.2.1 的 Git 发布不包含腾讯云应用部署、服务器 Release、Canary、PM2 切换或生产数据库 migration。腾讯云线上应用仍保持 V2.0.4。
+V2.2.2 的 Git 发布不包含腾讯云应用部署、服务器 Release、Canary、PM2 切换或生产数据库 migration。腾讯云线上应用仍保持 V2.0.4。
 
 以下内容是未来获得单独部署授权后必须完成的前置条件，不表示已经执行。
 
 ## 1. 基础设施隔离
 
 - 准备 PostgreSQL 数据库和最小权限应用账号。
+- PostgreSQL 版本使用 16，数据库编码必须为 UTF-8，以支持 migration 中的 NFKC 规范化回填。
 - 开发、测试、Canary 与生产数据库必须隔离。
 - 若使用腾讯云数据库测试基础设施，不得连接或覆盖线上 V2.0.4 应用数据。
 - 确认数据库备份、保留策略、恢复演练和可观测性。
-- V2.2.1 原始上传文件不持久保存，也不接入 COS、对象存储、OCR 或 pgvector。
+- V2.2.2 原始上传文件不持久保存，也不接入 COS、对象存储、OCR 或 pgvector。
 
 ## 2. Secret 与网络
 
@@ -28,7 +29,7 @@ V2.2.1 的 Git 发布不包含腾讯云应用部署、服务器 Release、Canary
 - DATABASE_URL 使用 TLS 与最小权限账户（按数据库供应商能力配置）。
 - Secret 仅保存在服务器安全配置中，不写入 Git、Release 包、日志或截图。
 - 数据库网络只允许必要来源访问。
-- 为 `/api/storage/knowledge/import/preview` 在 Nginx 或 API 网关配置跨 PM2 worker 的速率限制与总并发上限；应用内的总并发 4、单 Workspace 并发 1 仅在单个 Node 进程内生效。
+- 为 `/api/storage/knowledge/import/preview` 在 Nginx 或 API 网关配置跨 PM2 worker 的速率限制与总并发上限；应用内的总并发 2、单 Workspace 并发 1 仅在单个 Node 进程内生效。
 
 ## 3. 发布前备份
 
@@ -47,23 +48,30 @@ npm run db:generate
 npm run db:validate
 npm run db:migrate:deploy
 npm run db:status
+npm run test:migration:v221
+npm run test:migration:v222
 npm run test:storage
 npm run test:storage:postgres
 npm run test:knowledge-import
+npm run test:real-api:node20
+npm run test:import:hardening
+npm run test:import:stress
+npm run production:check
 npm run test:run
 npm run typecheck
 npm run build
 npm run evaluation:mock
 ```
 
-真实 PostgreSQL 门禁必须使用隔离测试数据库；设置 `RUN_POSTGRES_INTEGRATION=1` 与 `TEST_DATABASE_URL` 后执行 `test:storage:postgres` 和 `test:migration:v221`。后者会创建并在结束时删除独立临时库。生产部署仅执行 `db:migrate:deploy`，禁止 `migrate reset`。对 migration SQL 做人工审查，确认：
+真实 PostgreSQL 门禁必须使用隔离测试数据库；设置 `RUN_POSTGRES_INTEGRATION=1` 与 `TEST_DATABASE_URL` 后执行 `test:storage:postgres`、`test:migration:v221` 和 `test:migration:v222`。升级脚本会创建并在结束时删除独立临时库。生产部署仅执行 `db:migrate:deploy`，禁止 `migrate reset`。对 migration SQL 做人工审查，确认：
 
 - 外键和复合工作区约束正确。
 - revision 默认值和唯一索引正确。
 - 删除级联仅影响同工作区关联记录。
 - 不包含删除或重写未知生产表的语句。
-- V2.2.1 migration 可从 V2.2.0 Schema 升级，旧知识文档和 chunks 保持可读。
+- V2.2.1 migration 可从 V2.2.0 Schema 升级；V2.2.2 migration 可从 V2.2.1 Schema 升级，旧会话、知识文档、chunks 和任务保持可读。
 - 在全新 PostgreSQL 16 数据库也可完成全部 migration deploy。
+- `production:check` 在 Node 版本、依赖、数据库、Secret、migration、关键列或临时目录不就绪时非零退出，且不输出配置值。
 
 ## 5. Canary 顺序
 

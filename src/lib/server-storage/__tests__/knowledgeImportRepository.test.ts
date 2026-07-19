@@ -18,6 +18,7 @@ import {
 } from "@/lib/server-storage/knowledgeImportRepository";
 import { createKnowledgeContentChecksum } from "@/lib/server-storage/knowledgeRepository";
 import { knowledgeImportLimits } from "@/lib/knowledge/import-limits";
+import { agentRequestLimits } from "@/lib/ops/securityLimits";
 
 const now = new Date("2026-07-17T00:00:00.000Z");
 
@@ -147,8 +148,15 @@ function applyScalarOrIncrement(target: Record<string, unknown>, data: Record<st
   }
 }
 
+let cleanupExpiredTemporaryContentSpy: { mockRestore: () => void };
+
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  cleanupExpiredTemporaryContentSpy = vi.spyOn(
+    PrismaKnowledgeImportRepository.prototype,
+    "cleanupExpiredTemporaryContent",
+  ).mockResolvedValue({ deletedPreviewJobs: 0, expiredItems: 0, clearedTerminalItems: 0 });
 });
 
 describe("knowledge import request sanitizers", () => {
@@ -194,6 +202,85 @@ describe("knowledge import request sanitizers", () => {
     expect(sanitizeExpectedRevision({ expectedRevision: Number.POSITIVE_INFINITY })).toBeNull();
     expect(sanitizeExpectedRevision({ expectedRevision: -1 })).toBeNull();
     expect(sanitizeExpectedRevision({ expectedRevision: 1, workspaceId: "other" })).toBeNull();
+  });
+});
+
+describe("PrismaKnowledgeImportRepository temporary content retention", () => {
+  it("expires actionable text, clears terminal text and recomputes job totals without touching formal knowledge", async () => {
+    cleanupExpiredTemporaryContentSpy.mockRestore();
+    const cleanupNow = new Date("2026-07-19T00:00:00.000Z");
+    const staleUpdatedAt = new Date(cleanupNow.getTime() - knowledgeImportJobLimits.temporaryExtractedTextRetentionMilliseconds - 1);
+    const items = [
+      itemRecord({ id: "item-ready", status: ImportItemStatus.READY, updatedAt: staleUpdatedAt }),
+      itemRecord({
+        id: "item-processing",
+        itemIndex: 1,
+        status: ImportItemStatus.PROCESSING,
+        claimToken: "expired-claim",
+        claimedAt: staleUpdatedAt,
+        leaseExpiresAt: new Date(cleanupNow.getTime() - 1_000),
+        updatedAt: staleUpdatedAt,
+      }),
+      itemRecord({ id: "item-failed", itemIndex: 2, status: ImportItemStatus.FAILED, errorCode: "knowledge_import_item_failed", updatedAt: staleUpdatedAt }),
+      itemRecord({ id: "item-completed", itemIndex: 3, status: ImportItemStatus.COMPLETED, documentId: "doc-existing", updatedAt: staleUpdatedAt }),
+    ];
+    const job = jobRecord({
+      status: ImportJobStatus.PROCESSING,
+      totalItems: items.length,
+      revision: 4,
+      items,
+    });
+    const formalDocument = { id: "doc-existing", content: "正式知识正文" };
+    const formalChunk = { id: "chunk-existing", documentId: formalDocument.id, content: "正式知识分块" };
+    const updateItems = vi.fn(async ({ where, data }: { where: Record<string, any>; data: Record<string, unknown> }) => {
+      const ids = new Set<string>(where.id?.in ?? []);
+      let count = 0;
+      for (const item of items) {
+        if (!ids.has(item.id) || item.extractedText === null || item.updatedAt >= where.updatedAt.lt) continue;
+        if (where.status?.in && !where.status.in.includes(item.status)) continue;
+        applyScalarOrIncrement(item, data);
+        count += 1;
+      }
+      return { count };
+    });
+    const tx = {
+      importJob: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findUnique: vi.fn().mockResolvedValue(job),
+        update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          applyScalarOrIncrement(job, data);
+          job.items = items;
+          return job;
+        }),
+      },
+      importItem: {
+        findMany: vi.fn(async ({ select }: { select: Record<string, boolean> }) => (
+          select.id
+            ? items.map(({ id, importJobId, status }) => ({ id, importJobId, status }))
+            : items.map(({ status, conflictType }) => ({ status, conflictType }))
+        )),
+        updateMany: updateItems,
+      },
+      knowledgeDocument: { deleteMany: vi.fn(), updateMany: vi.fn() },
+      knowledgeChunk: { deleteMany: vi.fn(), updateMany: vi.fn() },
+    };
+    const prisma = { $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)) };
+
+    const result = await new PrismaKnowledgeImportRepository("ws-1", prisma as never)
+      .cleanupExpiredTemporaryContent(cleanupNow);
+
+    expect(result).toEqual({ deletedPreviewJobs: 0, expiredItems: 3, clearedTerminalItems: 1 });
+    expect(items.slice(0, 3)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: ImportItemStatus.FAILED, extractedText: null, errorCode: "knowledge_import_temporary_content_expired" }),
+    ]));
+    expect(items[1]).toMatchObject({ claimToken: null, claimedAt: null, leaseExpiresAt: null });
+    expect(items[3]).toMatchObject({ status: ImportItemStatus.COMPLETED, extractedText: null, documentId: "doc-existing", errorCode: null });
+    expect(job).toMatchObject({ status: ImportJobStatus.PARTIAL_FAILED, completedItems: 1, failedItems: 3, revision: 5 });
+    expect(formalDocument).toEqual({ id: "doc-existing", content: "正式知识正文" });
+    expect(formalChunk).toEqual({ id: "chunk-existing", documentId: "doc-existing", content: "正式知识分块" });
+    expect(tx.knowledgeDocument.deleteMany).not.toHaveBeenCalled();
+    expect(tx.knowledgeChunk.deleteMany).not.toHaveBeenCalled();
+    expect(JSON.stringify(items)).not.toContain("订单签收后七天内可以申请退款");
   });
 });
 
@@ -293,12 +380,34 @@ describe("PrismaKnowledgeImportRepository preview and confirmation", () => {
       files: [{ ...uploaded("refund.txt", exactText), mimeType: "application/octet-stream" }, uploaded("shipping.txt", otherText)],
       idempotencyKey: "batch-preview",
     });
-
     expect(result.status).toBe("preview_ready");
     expect(result.items.map((item) => item.duplicateType)).toEqual(["exact_content", "same_title"]);
     expect(result.items.map((item) => item.conflictDocumentId)).toEqual(["doc-exact", "doc-title"]);
     expect(result.items[0]?.mimeType).toBe("text/plain");
     expect(prisma.knowledgeDocument.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { workspaceId: "ws-1" } }));
+    expect(prisma.knowledgeDocument.findMany).toHaveBeenCalledTimes(3);
+    expect(prisma.knowledgeDocument.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({
+        workspaceId: "ws-1",
+        OR: expect.arrayContaining([
+          { contentChecksum: { in: expect.any(Array) } },
+          { normalizedTitle: { in: expect.any(Array) } },
+          { normalizedFileName: { in: expect.any(Array) } },
+        ]),
+      }),
+      take: agentRequestLimits.userDocuments,
+      select: expect.not.objectContaining({ content: true }),
+    }));
+    expect(prisma.knowledgeDocument.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { workspaceId: "ws-1", contentChecksum: null },
+      take: agentRequestLimits.userDocuments,
+      select: expect.objectContaining({ content: true }),
+    }));
+    expect(prisma.knowledgeDocument.findMany).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      where: { workspaceId: "ws-1" },
+      take: agentRequestLimits.userDocuments,
+      select: expect.not.objectContaining({ content: true }),
+    }));
     expect(createFormalDocument).not.toHaveBeenCalled();
     expect(createChunks).not.toHaveBeenCalled();
     expect(createPreviewJob).toHaveBeenCalledTimes(1);
@@ -350,6 +459,7 @@ describe("PrismaKnowledgeImportRepository preview and confirmation", () => {
   });
 
   it("removes expired previews before enforcing the workspace quota", async () => {
+    cleanupExpiredTemporaryContentSpy.mockRestore();
     const text = "到期预览清理后允许继续导入。";
     mocks.parseKnowledgeFile.mockResolvedValue(successfulParse(text, "到期清理制度"));
     let activeJobs: number = knowledgeImportJobLimits.maximumActiveJobsPerWorkspace;
@@ -365,11 +475,14 @@ describe("PrismaKnowledgeImportRepository preview and confirmation", () => {
     }));
     const tx = {
       importJob: {
-        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        deleteMany: deleteExpiredPreviews,
         count: vi.fn().mockResolvedValue(0),
         create: createPreviewJob,
       },
-      importItem: { count: vi.fn().mockResolvedValue(0) },
+      importItem: {
+        count: vi.fn().mockResolvedValue(0),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
     };
     const prisma = {
       knowledgeDocument: { findMany: vi.fn().mockResolvedValue([]) },
@@ -474,6 +587,53 @@ describe("PrismaKnowledgeImportRepository preview and confirmation", () => {
     expect(prisma.importJob.create).not.toHaveBeenCalled();
   });
 
+  it("keeps a maximum-size batch inside the configured parser concurrency", async () => {
+    let activeParsers = 0;
+    let peakParsers = 0;
+    mocks.parseKnowledgeFile.mockImplementation(async (input: { fileName: string }) => {
+      activeParsers += 1;
+      peakParsers = Math.max(peakParsers, activeParsers);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      activeParsers -= 1;
+      return successfulParse(`受控批量导入正文 ${input.fileName}`, input.fileName.replace(/\.txt$/u, ""));
+    });
+    const createPreviewJob = vi.fn(async ({ data }: { data: Record<string, any> }) => jobRecord({
+      ...data,
+      totalItems: data.items.create.length,
+      items: data.items.create.map((item: Record<string, unknown>) => itemRecord({ ...item, importJobId: data.id })),
+    }));
+    const tx = {
+      importJob: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        count: vi.fn().mockResolvedValue(0),
+        create: createPreviewJob,
+      },
+      importItem: { count: vi.fn().mockResolvedValue(0) },
+    };
+    const prisma = {
+      knowledgeDocument: { findMany: vi.fn().mockResolvedValue([]) },
+      importJob: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      importItem: { count: vi.fn().mockResolvedValue(0) },
+      $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)),
+    };
+    const files = Array.from({ length: knowledgeImportLimits.maximumBatchFiles }, (_, index) => (
+      uploaded(`batch-${index}.txt`, `批量导入正文 ${index}`)
+    ));
+
+    const result = await new PrismaKnowledgeImportRepository("ws-1", prisma as never).preview({
+      files,
+      idempotencyKey: "bounded-parser-pressure",
+    });
+
+    expect(result.totalItems).toBe(knowledgeImportLimits.maximumBatchFiles);
+    expect(peakParsers).toBe(knowledgeImportLimits.maximumConcurrentParsers);
+    expect(mocks.parseKnowledgeFile).toHaveBeenCalledTimes(knowledgeImportLimits.maximumBatchFiles);
+  });
+
   it("confirms all eligible items atomically and enforces job/item CAS", async () => {
     const storedItem = itemRecord({ conflictType: "exact_content", conflictDocumentId: "doc-1", conflictDocumentRevision: 4 });
     const storedJob = jobRecord({ items: [storedItem] });
@@ -574,7 +734,11 @@ function processingPrisma(options: { failCapacity?: boolean; claimConflict?: boo
       return state.job;
     }),
   };
-  const prisma = { $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)) };
+  const prisma = {
+    importItem: tx.importItem,
+    importJob: tx.importJob,
+    $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)),
+  };
   return { prisma, tx, state, formalDocuments, chunks };
 }
 
@@ -605,6 +769,14 @@ describe("PrismaKnowledgeImportRepository processing safety", () => {
       leaseExpiresAt: expect.any(Date),
     });
     expect(claimCall.data.leaseExpiresAt.getTime()).toBeGreaterThan(claimCall.data.claimedAt.getTime());
+    expect(fixture.tx.importItem.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: ImportItemStatus.PROCESSING,
+        claimToken: expect.any(String),
+        leaseExpiresAt: { gt: expect.any(Date) },
+      }),
+      data: { leaseExpiresAt: expect.any(Date) },
+    }));
     expect(fixture.tx.importJob.update).toHaveBeenLastCalledWith(expect.objectContaining({
       data: expect.objectContaining({ durationMs: expect.any(Number) }),
     }));
@@ -648,6 +820,50 @@ describe("PrismaKnowledgeImportRepository processing safety", () => {
     expect(fixture.tx.knowledgeDocument.create).not.toHaveBeenCalled();
   });
 
+  it("reclaims an expired lease with a new owner and still writes only one final document", async () => {
+    const fixture = processingPrisma();
+    const expiredToken = "expired-worker-token";
+    Object.assign(fixture.state.job, { status: ImportJobStatus.PROCESSING });
+    Object.assign(fixture.state.item, {
+      status: ImportItemStatus.PROCESSING,
+      claimToken: expiredToken,
+      claimedAt: new Date(Date.now() - knowledgeImportJobLimits.leaseMilliseconds * 2),
+      leaseExpiresAt: new Date(Date.now() - 1_000),
+    });
+
+    const result = await new PrismaKnowledgeImportRepository("ws-1", fixture.prisma as never).processNext("job-1", 1);
+
+    expect(result.status).toBe("completed");
+    expect(fixture.formalDocuments).toHaveLength(1);
+    const recoveredClaim = fixture.tx.importItem.updateMany.mock.calls[0]?.[0];
+    expect(recoveredClaim.where.OR).toContainEqual({
+      status: ImportItemStatus.PROCESSING,
+      leaseExpiresAt: { lt: expect.any(Date) },
+    });
+    expect(recoveredClaim.data.claimToken).not.toBe(expiredToken);
+  });
+
+  it("treats a repeated process request for a terminal job as an idempotent read", async () => {
+    const fixture = processingPrisma();
+    Object.assign(fixture.state.job, {
+      status: ImportJobStatus.COMPLETED,
+      revision: 3,
+      completedItems: 1,
+      completedAt: now,
+    });
+    Object.assign(fixture.state.item, {
+      status: ImportItemStatus.COMPLETED,
+      documentId: "doc-existing",
+      extractedText: null,
+    });
+
+    const result = await new PrismaKnowledgeImportRepository("ws-1", fixture.prisma as never).processNext("job-1", 1);
+
+    expect(result).toMatchObject({ status: "completed", completedItems: 1 });
+    expect(fixture.tx.importItem.updateMany).not.toHaveBeenCalled();
+    expect(fixture.formalDocuments).toHaveLength(0);
+  });
+
   it("retries only failed items with retained text and never resets completed items", async () => {
     const failed = itemRecord({
       status: ImportItemStatus.FAILED,
@@ -666,7 +882,13 @@ describe("PrismaKnowledgeImportRepository processing safety", () => {
           return { ...next, items: [{ ...failed, status: ImportItemStatus.READY, retryCount: 2 }, completed] };
         }),
       },
-      importItem: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      importItem: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findMany: vi.fn().mockResolvedValue([
+          { status: ImportItemStatus.READY, conflictType: "none" },
+          { status: ImportItemStatus.COMPLETED, conflictType: "none" },
+        ]),
+      },
     };
     const prisma = { $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)) };
     const result = await new PrismaKnowledgeImportRepository("ws-1", prisma as never).retryFailed("job-1", 5);
@@ -678,12 +900,55 @@ describe("PrismaKnowledgeImportRepository processing safety", () => {
         importJobId: "job-1",
         status: ImportItemStatus.FAILED,
         extractedText: { not: null },
-        errorCode: { in: ["knowledge_import_item_failed"] },
+        errorCode: { in: ["knowledge_import_item_failed", "knowledge_import_item_timeout"] },
+        retryCount: { lt: knowledgeImportJobLimits.maximumRetryCount },
       },
       data: expect.objectContaining({ retryCount: { increment: 1 } }),
     }));
     await expect(new PrismaKnowledgeImportRepository("ws-1", prisma as never).retryFailed("job-1", 4))
       .rejects.toMatchObject({ status: 409, code: "knowledge_import_revision_conflict" });
+  });
+
+  it("does not offer or reset a failed item after the retry limit", async () => {
+    const failed = itemRecord({
+      status: ImportItemStatus.FAILED,
+      extractedText: "仍然保留但已达到重试上限的正文",
+      errorCode: "knowledge_import_item_timeout",
+      retryCount: knowledgeImportJobLimits.maximumRetryCount,
+    });
+    const job = jobRecord({ status: ImportJobStatus.FAILED, revision: 5, failedItems: 1, items: [failed] });
+    const tx = {
+      importJob: { findUnique: vi.fn().mockResolvedValue(job) },
+      importItem: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    };
+    const prisma = {
+      importJob: { findUnique: vi.fn().mockResolvedValue(job) },
+      $transaction: vi.fn((operation: (client: typeof tx) => unknown) => operation(tx)),
+    };
+    const repository = new PrismaKnowledgeImportRepository("ws-1", prisma as never);
+
+    await expect(repository.getJob("job-1")).resolves.toMatchObject({
+      items: [{ retryable: false, retryCount: knowledgeImportJobLimits.maximumRetryCount }],
+    });
+    await expect(repository.retryFailed("job-1", 5)).rejects.toMatchObject({
+      status: 400,
+      code: "knowledge_import_nothing_to_retry",
+    });
+    expect(tx.importItem.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ retryCount: { lt: knowledgeImportJobLimits.maximumRetryCount } }),
+    }));
+  });
+
+  it("rejects an already-aborted processor before it can claim an item", async () => {
+    const fixture = processingPrisma();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(new PrismaKnowledgeImportRepository("ws-1", fixture.prisma as never)
+      .processNext("job-1", 1, controller.signal))
+      .rejects.toMatchObject({ status: 499, code: "knowledge_import_cancelled" });
+    expect(fixture.prisma.$transaction).not.toHaveBeenCalled();
+    expect(fixture.formalDocuments).toHaveLength(0);
   });
 
   it("cancels only the workspace-scoped pending items and returns 404 across workspaces", async () => {

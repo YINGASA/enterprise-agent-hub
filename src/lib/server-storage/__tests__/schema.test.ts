@@ -10,6 +10,7 @@ describe("PostgreSQL server storage schema", () => {
   const schema = readTextFixture("prisma", "schema.prisma");
   const v220Migration = readTextFixture("prisma", "migrations", "20260716000000_v220_server_storage", "migration.sql");
   const v221Migration = readTextFixture("prisma", "migrations", "20260717000000_v221_knowledge_pack_import", "migration.sql");
+  const v222Migration = readTextFixture("prisma", "migrations", "20260718000000_v222_production_hardening", "migration.sql");
 
   it("defines the required workspace-scoped models", () => {
     for (const model of [
@@ -94,5 +95,43 @@ describe("PostgreSQL server storage schema", () => {
     expect(v221Migration).toContain("'preview_ready' BEFORE 'completed'");
     expect(v221Migration).toContain("'processing' BEFORE 'completed'");
     expect(v221Migration).toContain("'partial_failed' BEFORE 'failed'");
+  });
+
+  it("adds nullable normalized knowledge fields and backfills them with PostgreSQL 16 NFKC normalization", () => {
+    expect(schema).toContain('normalizedTitle   String?             @map("normalized_title") @db.VarChar(240)');
+    expect(schema).toContain('normalizedFileName String?            @map("normalized_file_name") @db.VarChar(260)');
+    expect(v222Migration).toContain('ADD COLUMN "normalized_title" VARCHAR(240)');
+    expect(v222Migration).toContain('ADD COLUMN "normalized_file_name" VARCHAR(260)');
+    expect(v222Migration).toContain('REGEXP_REPLACE(NORMALIZE("title", NFKC)');
+    expect(v222Migration).toContain('REGEXP_REPLACE(NORMALIZE("original_file_name", NFKC)');
+    expect(v222Migration.indexOf('UPDATE "knowledge_documents"')).toBeLessThan(
+      v222Migration.indexOf('CREATE INDEX "knowledge_documents_normalized_title_idx"'),
+    );
+    expect(v222Migration).not.toMatch(/ALTER TABLE "knowledge_documents"[\s\S]*?normalized_(?:title|file_name)[^;]*NOT NULL/);
+  });
+
+  it("matches production query indexes without destructive schema changes", () => {
+    for (const index of [
+      "conversations_active_updated_idx",
+      "messages_run_id_lookup_idx",
+      "knowledge_documents_normalized_title_idx",
+      "knowledge_documents_normalized_file_name_idx",
+      "import_jobs_status_updated_idx",
+      "import_items_job_status_order_idx",
+      "import_items_claim_queue_idx",
+      "import_items_workspace_status_idx",
+      "import_items_workspace_error_idx",
+      "import_items_workspace_conflict_idx",
+    ]) {
+      expect(v222Migration).toContain(`CREATE INDEX "${index}"`);
+    }
+    expect(schema).toContain('@@index([workspaceId, deletedAt, updatedAt, id], map: "conversations_active_updated_idx")');
+    expect(schema).toContain('@@index([workspaceId, conversationId, role, runId], map: "messages_run_id_lookup_idx")');
+    expect(schema).toContain('@@index([workspaceId, status, updatedAt, id], map: "import_jobs_status_updated_idx")');
+    expect(schema).toContain('@@index([workspaceId, importJobId, status, itemIndex], map: "import_items_job_status_order_idx")');
+    expect(schema).toContain('@@index([workspaceId, importJobId, status, leaseExpiresAt, itemIndex], map: "import_items_claim_queue_idx")');
+    expect(v222Migration).not.toMatch(/\bDROP\s+(TABLE|COLUMN|TYPE)\b/i);
+    expect(v222Migration).not.toMatch(/\bTRUNCATE\b/i);
+    expect(v222Migration).not.toMatch(/\bDELETE\s+FROM\b/i);
   });
 });

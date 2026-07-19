@@ -23,6 +23,14 @@ export function createKnowledgeContentChecksum(content: string) {
   return createHash("sha256").update(normalized, "utf8").digest("hex");
 }
 
+export function normalizeKnowledgeDocumentTitle(value: string) {
+  return value.normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "").trim();
+}
+
+export function normalizeKnowledgeOriginalFileName(value: string) {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 export function createKnowledgeChecksum(document: ImportedKnowledgeDocument) {
   const normalized = JSON.stringify({
     title: document.title.normalize("NFKC").trim(),
@@ -84,6 +92,7 @@ export function knowledgeDocumentCreateData(workspaceId: string, document: Impor
     id: document.id,
     workspaceId,
     title: document.title,
+    normalizedTitle: normalizeKnowledgeDocumentTitle(document.title),
     content: document.content,
     sourceType: document.sourceType === "user_upload" ? KnowledgeSourceType.USER_UPLOAD : KnowledgeSourceType.USER_PASTE,
     enabled: document.enabled !== false,
@@ -101,6 +110,7 @@ export function knowledgeDocumentCreateData(workspaceId: string, document: Impor
     packId: document.packId,
     knowledgePackId: document.knowledgePackId,
     originalFileName: document.originalFileName,
+    normalizedFileName: document.originalFileName ? normalizeKnowledgeOriginalFileName(document.originalFileName) : null,
     mimeType: document.mimeType,
     sizeBytes: document.sizeBytes,
     importJobId: document.importJobId,
@@ -207,7 +217,10 @@ export class PrismaKnowledgeRepository implements KnowledgeRepository {
           revision: { increment: 1 },
           updatedAt: createData.updatedAt,
         };
-        if (Object.prototype.hasOwnProperty.call(safeUpdate, "title")) data.title = createData.title;
+        if (Object.prototype.hasOwnProperty.call(safeUpdate, "title")) {
+          data.title = createData.title;
+          data.normalizedTitle = createData.normalizedTitle;
+        }
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "content")) data.content = createData.content;
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "enabled")) data.enabled = createData.enabled;
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "tags")) data.tags = createData.tags;
@@ -215,7 +228,10 @@ export class PrismaKnowledgeRepository implements KnowledgeRepository {
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "summary")) data.summary = createData.summary ?? null;
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "packId")) data.packId = createData.packId ?? null;
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "knowledgePackId")) data.knowledgePackId = createData.knowledgePackId ?? null;
-        if (Object.prototype.hasOwnProperty.call(safeUpdate, "originalFileName")) data.originalFileName = createData.originalFileName ?? null;
+        if (Object.prototype.hasOwnProperty.call(safeUpdate, "originalFileName")) {
+          data.originalFileName = createData.originalFileName ?? null;
+          data.normalizedFileName = createData.normalizedFileName;
+        }
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "mimeType")) data.mimeType = createData.mimeType ?? null;
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "sizeBytes")) data.sizeBytes = createData.sizeBytes ?? null;
         if (Object.prototype.hasOwnProperty.call(safeUpdate, "suggestedQuestions")) data.suggestedQuestions = createData.suggestedQuestions;

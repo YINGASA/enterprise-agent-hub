@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { KnowledgeSourceType } from "@prisma/client";
-import { createKnowledgeChecksum, knowledgeChunkCreateData, PrismaKnowledgeRepository } from "@/lib/server-storage/knowledgeRepository";
+import {
+  createKnowledgeChecksum,
+  knowledgeChunkCreateData,
+  knowledgeDocumentCreateData,
+  normalizeKnowledgeDocumentTitle,
+  normalizeKnowledgeOriginalFileName,
+  PrismaKnowledgeRepository,
+} from "@/lib/server-storage/knowledgeRepository";
 import { sanitizeKnowledgeDocumentUpdate } from "@/lib/storage/knowledgeRepository";
 import type { ImportedKnowledgeDocument } from "@/types";
 
@@ -40,6 +47,20 @@ describe("PrismaKnowledgeRepository", () => {
     expect(sanitizeKnowledgeDocumentUpdate({ enabled: false })).toEqual(expect.objectContaining({ enabled: false }));
     expect(sanitizeKnowledgeDocumentUpdate({ enabled: false, workspaceId: "other" })).toBeNull();
     expect(sanitizeKnowledgeDocumentUpdate({ content: "x".repeat(120_001) })).toBeNull();
+  });
+
+  it("writes deterministic normalized lookup fields for indexed duplicate detection", () => {
+    expect(normalizeKnowledgeDocumentTitle("  Ｒｅｆｕｎｄ—Policy 2026！ ")).toBe("refundpolicy2026");
+    expect(normalizeKnowledgeOriginalFileName("  Policy\t Guide .DOCX ")).toBe("policy guide .docx");
+    const data = knowledgeDocumentCreateData("ws-1", {
+      ...document(),
+      title: "  Ｒｅｆｕｎｄ—Policy 2026！ ",
+      originalFileName: "  Policy\t Guide .DOCX ",
+    });
+    expect(data).toMatchObject({
+      normalizedTitle: "refundpolicy2026",
+      normalizedFileName: "policy guide .docx",
+    });
   });
 
   it("creates stable database chunk ids within the 128 character schema limit", () => {

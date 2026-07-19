@@ -56,6 +56,7 @@ const SAFE_PARSER_ERROR_CODES = new Set([
   "parser_cancelled",
   "parser_timeout",
   "knowledge_import_item_failed",
+  "knowledge_import_temporary_content_expired",
 ]);
 
 const SAFE_DUPLICATE_TYPES = new Set([

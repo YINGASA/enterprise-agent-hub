@@ -22,6 +22,16 @@ describe("safe storage status", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
+  it("moves from degraded back to server after a later healthy probe", async () => {
+    const probes = [false, true];
+    const configuration = { storageEnabled: true, databaseConfigured: true, sessionSecretConfigured: true };
+    const first = await getSafeStorageStatus(async () => probes.shift() ?? false, configuration);
+    const recovered = await getSafeStorageStatus(async () => probes.shift() ?? false, configuration);
+    expect(first).toMatchObject({ storageMode: "degraded", healthy: false });
+    expect(recovered).toMatchObject({ storageMode: "server", healthy: true });
+    expect(JSON.stringify([first, recovered])).not.toMatch(/url|password|secret|connection/i);
+  });
+
   it("scopes aggregate counts to one workspace", async () => {
     const prisma = {
       conversation: { count: vi.fn(async () => 2) },
