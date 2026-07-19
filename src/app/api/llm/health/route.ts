@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { callOpenAICompatibleChat, getLlmConfig } from "@/lib/llm";
 import { realApiLimits } from "@/lib/ops/securityLimits";
 import { checkRealApiRateLimit, getClientIp } from "@/lib/ops/rateLimit";
+import { toStorageErrorResponse } from "@/lib/server-storage/errors";
+import { requireSameOrigin } from "@/lib/server-storage/request";
 import type { LlmErrorType, LlmMessage } from "@/types";
 
 export const runtime = "nodejs";
@@ -36,6 +38,16 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  try {
+    requireSameOrigin(request);
+  } catch (error) {
+    const safeError = toStorageErrorResponse(error);
+    return NextResponse.json(safeError.body, {
+      status: safeError.status,
+      headers: { "cache-control": "no-store" },
+    });
+  }
+
   const config = getLlmConfig();
   if (!config.isConfigured) {
     const errorType = configErrorReason(config.missing);
@@ -64,7 +76,12 @@ export async function POST(request: Request) {
   ];
 
   try {
-    const result = await callOpenAICompatibleChat(messages, { temperature: 0, maxTokens: 64, responseFormat: "json_object" });
+    const result = await callOpenAICompatibleChat(messages, {
+      temperature: 0,
+      maxTokens: 64,
+      responseFormat: "json_object",
+      signal: request.signal,
+    });
     const healthy = !result.errorType && Boolean(result.parsedJson);
     const payload: HealthPayload = {
       configured: true,

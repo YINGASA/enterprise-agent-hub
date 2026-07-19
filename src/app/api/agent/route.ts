@@ -66,7 +66,16 @@ export async function POST(request: Request) {
     const safeError = toStorageErrorResponse(error);
     return NextResponse.json(safeError.body, { status: safeError.status, headers: { "cache-control": "no-store" } });
   }
-  const response = await runAgentApiPipeline(question, requestedMode, knowledge.documents, contextCandidates, contextMeta, undefined, conversationSummary, knowledge.chunks);
+  const response = await runAgentApiPipeline(
+    question,
+    requestedMode,
+    knowledge.documents,
+    contextCandidates,
+    contextMeta,
+    requestedMode === "real" ? { signal: request.signal } : undefined,
+    conversationSummary,
+    knowledge.chunks,
+  );
   const responseWithAction = { ...response, api: { ...response.api, requestAction } };
   const { conversationSummaryPatch: _conversationSummaryPatch, ...opsResponse } = responseWithAction;
   const runId = await recordAgentRun(opsResponse, { requestAction });

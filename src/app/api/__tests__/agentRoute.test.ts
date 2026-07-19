@@ -17,8 +17,8 @@ vi.mock("@/lib/server-storage/agentKnowledge", () => ({ resolveAgentKnowledge })
 
 import { POST } from "@/app/api/agent/route";
 
-function request(body: string) {
-  return new Request("http://test.local/api/agent", { method: "POST", headers: { "content-type": "application/json", origin: "http://test.local" }, body });
+function request(body: string, signal?: AbortSignal) {
+  return new Request("http://test.local/api/agent", { method: "POST", headers: { "content-type": "application/json", origin: "http://test.local" }, body, signal });
 }
 
 describe("POST /api/agent", () => {
@@ -109,5 +109,26 @@ describe("POST /api/agent", () => {
     expect(response.status).toBe(200);
     expect(runAgentApiPipeline).toHaveBeenLastCalledWith("测试", "mock", [], [], expect.any(Object), undefined, expect.objectContaining({ text: "old summary", throughMessageId: "a-4" }), undefined);
     expect(recordAgentRun).toHaveBeenCalledWith(expect.not.objectContaining({ conversationSummaryPatch: expect.anything() }), { requestAction: "send" });
+  });
+
+  it("propagates a caller abort to the non-streaming Real pipeline without recording success", async () => {
+    runAgentApiPipeline.mockImplementationOnce(async (...args: unknown[]) => {
+      const signal = (args[5] as { signal?: AbortSignal } | undefined)?.signal;
+      expect(signal).toBeDefined();
+      await new Promise<never>((_resolve, reject) => {
+        if (signal?.aborted) reject(signal.reason);
+        else signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    const controller = new AbortController();
+    const response = POST(request(JSON.stringify({ question: "测试", mode: "real" }), controller.signal));
+
+    await vi.waitFor(() => expect(runAgentApiPipeline).toHaveBeenCalledTimes(1));
+    const runtime = runAgentApiPipeline.mock.calls[0]?.[5] as { signal?: AbortSignal } | undefined;
+    expect(runtime?.signal?.aborted).toBe(false);
+    controller.abort(new DOMException("aborted", "AbortError"));
+
+    await expect(response).rejects.toMatchObject({ name: "AbortError" });
+    expect(recordAgentRun).not.toHaveBeenCalled();
   });
 });
