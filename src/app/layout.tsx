@@ -3,8 +3,11 @@ import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Enterprise Agent Hub",
-  description: "企业知识库与业务流程自动化 Agent 平台",
+  title: {
+    default: "Enterprise Agent Hub",
+    template: "%s · Enterprise Agent Hub",
+  },
+  description: "面向企业知识问答、业务流程自动化、评测与运行监控的 Agent 工作台",
 };
 
 export default function RootLayout({
