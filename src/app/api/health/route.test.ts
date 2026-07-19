@@ -17,14 +17,14 @@ describe("GET /api/health", () => {
       realApiHealthy: null,
       parserReady: true,
       nodeCompatible: true,
-      version: "2.2.2",
+      version: "2.2.3",
     });
     const { GET } = await import("./route");
     const response = await GET();
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.json();
-    expect(body).toMatchObject({ storageMode: "server", version: "2.2.2", migrationReady: true });
+    expect(body).toMatchObject({ storageMode: "server", version: "2.2.3", migrationReady: true });
     expect(JSON.stringify(body)).not.toMatch(/database_url|api_key|secret|cookie|prompt|summary/i);
   });
 
@@ -39,7 +39,7 @@ describe("GET /api/health", () => {
       realApiHealthy: null,
       parserReady: true,
       nodeCompatible: true,
-      version: "2.2.2",
+      version: "2.2.3",
     });
     const { GET } = await import("./route");
     expect((await GET()).status).toBe(503);

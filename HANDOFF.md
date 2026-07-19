@@ -1,23 +1,23 @@
 # Enterprise Agent Hub 项目交接文档
 
-最后更新：2026-07-18（Asia/Shanghai）
+最后更新：2026-07-19（Asia/Shanghai）
 
 这份文档面向没有当前对话上下文的接手者。任何提交、发布或部署前，先实时核对 Git、工作区和测试，不要依据本文预填尚未产生的 commit。不得读取或打印 `.env.local`、数据库连接串、Cookie、Token、API Key 或 Secret。
 
 ## 1. 当前版本与边界
 
-当前开发版本是 **V2.2.2：依赖兼容与生产导入加固**，开发分支为 `feature/v2.2.2-production-hardening`，基线 master 为 `1a392bdb4d88f0b52c49b6641b5e28e335c11721`，上一稳定标签为 `v2.2.1-stable`。
+当前开发版本是 **V2.2.3：界面体验与产品质感优化**，开发分支为 `feature/v2.2.3-ui-product-polish`，基线 master 为 `780d104bf331aa917bb4e9e27be1b746243b5c1d`，上一稳定标签为 `v2.2.2-stable`。
 
-V2.2.2 在 V2.2.1 企业知识包和 PostgreSQL 服务端存储上加固：
+V2.2.3 在 V2.2.2 生产加固基线上进行前端体验收口：
 
-- Node 20.19.5 下的 Undici / Real API 非流式、流式、代理、取消与超时兼容。
-- 导入批次、解析、内存、deadline、最大重试和临时正文保留的集中边界。
-- ImportItem claim 续租、过期 lease 恢复、旧 token 拒绝和终态幂等。
-- PostgreSQL 规范化重复检测字段、真实查询索引与 V2.2.1 升级 migration。
-- 数据库 degraded 恢复、安全健康接口和生产启动检查。
-- 独立的 Node 20、压力、故障、migration 与查询计划门禁。
+- 统一页面背景、内容表面、文字、边框、状态、焦点、圆角、间距和动效 Token。
+- 为全局导航增加当前页状态、Skip Link 和窄屏可达性。
+- 优化 Chat 文档式回答、会话侧栏、Composer、RAG 依据和安全 Trace 层级。
+- 优化知识库、企业知识包、批量导入预览、任务状态与文档 master/detail 信息层级。
+- 优化评测中心、运行监控、业务工具、首页和 About 的数据密度与中文状态。
+- 统一 Loading、Empty、Error、Degraded、Conflict 等状态，并补齐响应式、键盘和 reduced-motion 验证。
 
-明确不包含：对象存储、OCR、扫描版 PDF 文字识别、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22、无关 UI 重构或腾讯云部署。原始上传文件仍不会长期保存。
+`redesign-existing-projects` Skill 仅作为审查和设计指导；企业工作台定位优先。明确不包含：业务核心语义改动、数据库 Schema/migration、对象存储、OCR、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22、大型 UI 框架或腾讯云部署。
 
 腾讯云应用仍运行 V2.0.4。本轮只发布 Git 版本，不执行生产 PostgreSQL migration、服务器 Release、Canary 或 PM2 切换。
 
@@ -35,7 +35,7 @@ git tag --list 'v2.*-stable' --sort=version:refname
 git diff --check
 ```
 
-如果工作区包含 V2.2.2 未提交实现，必须原地保留并继续；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时上传文件、真实凭据或无关改动，停止并报告。
+如果工作区包含 V2.2.3 未提交实现，必须原地保留并继续；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时截图/录像、真实凭据或无关改动，停止并报告。
 
 ## 3. 数据与工作区模型
 
@@ -100,6 +100,8 @@ V2.2.2 正式新增 migration：`prisma/migrations/20260718000000_v222_productio
 - 生产加固：`docs/v2.2.2-production-hardening.md`
 - 数据库运维：`docs/v2.2.2-database-operations.md`
 - Release Notes：`docs/v2.2.2-release-notes.md`
+- V2.2.3 UI 规范：`docs/v2.2.3-ui-guidelines.md`
+- V2.2.3 Release Notes：`docs/v2.2.3-release-notes.md`
 
 ## 7. API 与安全
 
@@ -126,6 +128,7 @@ npm.cmd run test:real-api:node20
 npm.cmd run test:import:hardening
 npm.cmd run test:import:stress
 npm.cmd run production:check
+npm.cmd run test:ui
 npm.cmd run test:run
 npm.cmd run typecheck
 npm.cmd run build
@@ -142,18 +145,18 @@ git diff --check
 
 全部 feature 门禁通过后：
 
-1. 按逻辑提交 V2.2.2 实现、测试和文档。
-2. 普通 push `feature/v2.2.2-production-hardening`，等待 GitHub feature CI。
+1. 按逻辑提交 V2.2.3 UI、测试和文档。
+2. 普通 push `feature/v2.2.3-ui-product-polish`，等待 GitHub feature CI。
 3. fetch 并确认 `origin/master` 仍是预期基线；未知前进立即停止。
 4. `--no-ff` 合并到 master，不 squash、rebase 或改写历史。
 5. 从 merge commit 重新执行全部门禁。
 6. push master，并确认 GitHub master CI。
-7. 在最终 master merge commit 创建附注 `v2.2.2-stable` 并 push。
+7. 在最终 master merge commit 创建附注 `v2.2.3-stable` 并 push。
 
-禁止 force push、tag -f、移动 `v2.2.1-stable`、删除 feature 分支或自动部署腾讯云。
+禁止 force push、tag -f、移动 `v2.2.2-stable`、删除 feature 分支或自动部署腾讯云。
 
 ## 10. 当前发布状态
 
-V2.2.2 的最终 commit、feature/master CI、合并 commit、门禁数字和 Stable Tag 只能在操作实际成功后写入最终报告，不在交接文档中预填。
+V2.2.3 的最终 commit、feature/master CI、合并 commit、门禁数字和 Stable Tag 只能在操作实际成功后写入最终报告，不在交接文档中预填。
 
-截至本文更新时，腾讯云仍为 V2.0.4，V2.2.2 尚未部署云端。
+截至本文更新时，腾讯云仍为 V2.0.4，V2.2.3 尚未部署云端。

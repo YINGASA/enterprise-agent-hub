@@ -1,6 +1,6 @@
 {
   "name": "enterprise-agent-hub",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "private": true,
   "engines": {
     "node": ">=20.19.0 <21"
@@ -13,6 +13,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest run src/components/ui src/components/chat-workspace src/components/knowledge-workspace",
     "test:storage": "vitest run src/lib/storage src/lib/server-storage src/app/api/storage src/app/api/__tests__/conversationStorageRoutes.test.ts src/app/api/__tests__/opsStorageSummary.test.ts src/app/api/__tests__/agentRoute.test.ts src/app/api/__tests__/agentStreamRoute.test.ts",
     "test:storage:postgres": "vitest run src/lib/server-storage/__tests__/postgres.integration.test.ts --reporter=verbose",
     "test:migration:v221": "node scripts/test-v221-migration-upgrade.mjs",
