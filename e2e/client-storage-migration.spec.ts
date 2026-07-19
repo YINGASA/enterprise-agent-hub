@@ -49,7 +49,7 @@ test("corrupted JSON never crashes the consuming pages", async ({ page }) => {
   await page.goto("/chat");
   await expect(page.getByTestId("chat-workspace")).toBeVisible();
   await page.goto("/evaluation");
-  await expect(page.getByRole("heading", { name: "Agent 评测面板", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agent 评测中心", exact: true })).toBeVisible();
   await page.goto("/knowledge");
   await expect(page.getByRole("heading", { name: "知识库管理", exact: true })).toBeVisible();
 });
