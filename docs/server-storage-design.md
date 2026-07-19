@@ -10,7 +10,7 @@
 
 - 数据库：PostgreSQL。
 - ORM：Prisma 6.19.3。
-- Node 运行基线：Node 20；不要求 Node 22。
+- Node 运行基线：Node 20.19.5；不要求 Node 22。
 - 正式 Schema：`prisma/schema.prisma`。
 - 迁移：`prisma/migrations/` 中的不可变 SQL migration。
 
@@ -77,6 +77,7 @@ pending、partial、aborted 或失败回答不写入该表。
 ### KnowledgeDocument / KnowledgeChunk
 
 - 文档保存受限大小文本正文、sourceType、enabled、tags、metadata、checksum 和现有质量诊断字段。
+- V2.2.2 增加可空的 `normalizedTitle` 与 `normalizedFileName`，旧数据在 PostgreSQL 16 migration 中以 NFKC 规则回填，用于当前 Workspace 内的重复候选查询；Repository 在创建和相关更新时同步维护。
 - Chunk 保存稳定 `chunkIndex`、content 与 keywords。
 - 文档删除通过数据库外键级联删除 chunks。
 - 文档更新在事务中同步 checksum 和重建 chunks。
@@ -94,6 +95,17 @@ V2.2.0 保存单文档导入的基础状态、可选 documentId 和安全 errorC
 - 原始上传文件不进入数据库；成功文档和 chunks 在同一事务创建或替换。
 
 完整设计见 `docs/knowledge-import-architecture.md`。
+
+### V2.2.2 查询索引
+
+- `conversations_active_updated_idx`：当前工作区未删除会话按更新时间分页。
+- `messages_run_id_lookup_idx`：当前会话 assistant runId 幂等查找。
+- `knowledge_documents_normalized_title_idx` / `knowledge_documents_normalized_file_name_idx`：重复候选查询。
+- `import_jobs_status_updated_idx`：可恢复任务与状态列表。
+- `import_items_job_status_order_idx` / `import_items_claim_queue_idx`：任务内待处理项和过期 lease 领取。
+- `import_items_workspace_status_idx`、`import_items_workspace_error_idx`、`import_items_workspace_conflict_idx`：安全聚合统计。
+
+这些索引均以 `workspaceId` 作为首列，不扩大跨工作区可见范围；V2.2.2 migration 不删除业务表、列或数据。
 
 ### StorageMigration
 
