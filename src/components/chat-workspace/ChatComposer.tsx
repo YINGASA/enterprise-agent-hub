@@ -33,6 +33,13 @@ export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isComposing, setIsComposing] = useState(false);
   const sendDisabled = props.realApiUnavailable || !props.storageWritable || !props.value.trim();
+  const composerStatus = !props.storageWritable
+    ? "服务端存储暂不可用，当前为只读状态；恢复连接后可以继续发送。"
+    : props.realApiUnavailable
+      ? "真实模型未配置，请在高级选项中切换到开发模拟模式。"
+      : props.isLoading
+        ? "正在生成回答。可以随时停止，未完成内容不会写入会话。"
+        : "Enter 发送，Shift + Enter 换行。回答可能使用当前会话的安全上下文。";
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -50,13 +57,13 @@ export function ChatComposer(props: ChatComposerProps) {
   }
 
   return (
-    <div data-testid="chat-composer" className="shrink-0 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
-      <div className="mx-auto max-w-4xl rounded-xl border border-slate-300 bg-white shadow-sm transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
+    <div data-testid="chat-composer" aria-busy={props.isLoading} className="shrink-0 border-t border-slate-200 bg-white px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
+      <div className="mx-auto max-w-5xl rounded-xl border border-slate-300 bg-white shadow-sm transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100">
         <label className="sr-only" htmlFor="agent-question">输入消息</label>
-        <textarea id="agent-question" ref={textareaRef} data-testid="agent-question" value={props.value} onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKeyDown} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={() => setIsComposing(false)} disabled={props.isLoading || !props.storageWritable} rows={1} placeholder="输入问题，Enter 发送，Shift + Enter 换行" className="block max-h-40 min-h-12 w-full resize-none rounded-t-xl border-0 bg-transparent px-4 py-3 text-sm leading-6 text-ink-900 placeholder:text-ink-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50" />
+        <textarea id="agent-question" ref={textareaRef} data-testid="agent-question" aria-describedby="chat-composer-status" value={props.value} onChange={(event) => props.onChange(event.target.value)} onKeyDown={onKeyDown} onCompositionStart={() => setIsComposing(true)} onCompositionEnd={() => setIsComposing(false)} disabled={props.isLoading || !props.storageWritable} rows={1} placeholder="输入需要处理的问题" className="block max-h-40 min-h-12 w-full resize-none rounded-t-xl border-0 bg-transparent px-4 py-3 text-sm leading-6 text-ink-900 placeholder:text-ink-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50" />
         <div className="flex items-end justify-between gap-3 border-t border-slate-100 px-3 py-2">
           <details data-testid="agent-mode-options" className="relative min-w-0 text-xs text-ink-500">
-            <summary className="cursor-pointer rounded px-1 py-1 font-medium hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">高级选项 · {props.mode === "real" ? "真实模型" : "模拟模式"}</summary>
+            <summary aria-label={`回答模式：${props.mode === "real" ? "真实模型" : "模拟模式"}，展开高级选项`} className="inline-flex min-h-10 cursor-pointer list-none items-center rounded-md px-2 font-medium hover:bg-slate-50 hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">高级选项 · {props.mode === "real" ? "真实模型" : "模拟模式"}</summary>
             <div className="absolute bottom-full left-0 z-10 mb-3 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
               <div role="group" aria-label="回答运行模式" className="grid grid-cols-2 gap-2">
                 {(["real", "mock"] as LlmMode[]).map((mode) => <button key={mode} type="button" data-testid={`agent-mode-${mode}`} aria-pressed={props.mode === mode} disabled={mode === "real" && props.llmStatus?.configured === false} onClick={() => props.onModeChange(mode)} className={"cursor-pointer rounded-md border px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 " + (props.mode === mode ? "border-brand-300 bg-brand-50 text-brand-700" : "border-slate-200 bg-white text-ink-600 hover:bg-slate-50")}>{mode === "real" ? "真实模型" : "开发模拟"}</button>)}
@@ -71,11 +78,11 @@ export function ChatComposer(props: ChatComposerProps) {
             aria-label={props.isLoading ? "停止生成" : "发送消息"}
             onClick={props.isLoading ? props.onStop : props.onSend}
             disabled={!props.isLoading && sendDisabled}
-            className={"min-h-10 shrink-0 cursor-pointer rounded-lg px-5 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 " + (props.isLoading ? "bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-500" : "bg-brand-600 hover:bg-brand-700 focus-visible:ring-brand-500")}
+            className={"min-h-11 shrink-0 cursor-pointer rounded-lg px-5 py-2 text-sm font-semibold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-slate-300 sm:min-h-10 " + (props.isLoading ? "bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-500" : "bg-brand-600 hover:bg-brand-700 focus-visible:ring-brand-500")}
           >{props.isLoading ? "停止生成" : "发送"}</button>
         </div>
       </div>
-      <p aria-live="polite" className="mx-auto mt-2 max-w-4xl px-1 text-xs text-ink-500">{props.realApiUnavailable ? "真实模型未配置，请在高级选项中切换到开发模拟模式。" : "回答可能使用当前会话最近内容；历史原文不会显示在上下文状态中。"}</p>
+      <p id="chat-composer-status" data-testid="chat-composer-status" aria-live="polite" className={`mx-auto mt-2 max-w-5xl px-1 text-xs leading-5 ${!props.storageWritable || props.realApiUnavailable ? "font-medium text-amber-800" : "text-ink-500"}`}>{composerStatus}</p>
     </div>
   );
 }

@@ -56,7 +56,7 @@ test("PostgreSQL 服务端知识包导入可恢复、可检索且工作区隔离
     await expect(page.getByText(`${marker}-员工设备制度`, { exact: true }).first()).toBeVisible();
 
     await page.reload();
-    await expect(page.getByTestId("knowledge-batch-import")).toContainText("completed");
+    await expect(page.getByTestId("knowledge-batch-import")).toHaveAttribute("data-status", "completed");
     await expect(page.getByText(`${marker}-员工设备制度`, { exact: true }).first()).toBeVisible();
     await page.getByText(`${marker}-员工设备制度`, { exact: true }).first().click();
     const testBench = page.getByRole("heading", { name: "RAG 检索测试台", exact: true }).locator("xpath=ancestor::section[1]");

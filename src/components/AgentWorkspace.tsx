@@ -9,6 +9,7 @@ import { ConversationSidebar } from "@/components/chat-workspace/ConversationSid
 import { MessageList } from "@/components/chat-workspace/MessageList";
 import { useAgentWorkspace } from "@/components/agent-workspace/useAgentWorkspace";
 import { StorageStatusPanel } from "@/components/StorageStatusPanel";
+import { StatePanel } from "@/components/ui/StatePanel";
 
 const recommendedQuestions = [
   "我出差回来想报销，应该准备哪些材料？",
@@ -36,6 +37,7 @@ export function AgentWorkspace() {
   const activeConversation = workspace.activeConversation;
   const activeConversationId = workspace.conversationId;
   const hasMessages = workspace.conversationMessages.length > 0;
+  const storageWritable = workspace.storageStatus !== null && workspace.storageStatus.storageMode !== "degraded";
   const activeResponseMode = workspace.conversationMessages.slice().reverse().find((message) => message.role === "assistant")?.responseMode;
   const title = activeConversation?.title ?? "新对话";
 
@@ -64,11 +66,11 @@ export function AgentWorkspace() {
   const confirmationCopy = useMemo(() => {
     if (!confirmation) return { title: "", description: "", confirmLabel: "" };
     if (confirmation.kind === "clear") return { title: "清空当前会话？", description: `“${confirmation.title}”的全部消息将被删除，会话本身会保留并重置为新对话。其他会话不受影响。`, confirmLabel: "确认清空" };
-    return { title: "删除这个会话？", description: `“${confirmation.title}”及其本地消息将被删除，其他会话和反馈记录不受影响。`, confirmLabel: "确认删除" };
+    return { title: "删除这个会话？", description: `“${confirmation.title}”及其消息与摘要数据将被删除，其他会话和反馈记录不受影响。`, confirmLabel: "确认删除" };
   }, [confirmation]);
 
   return (
-    <div data-testid="chat-workspace" className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft">
+    <div data-testid="chat-workspace" className="app-panel flex min-h-0 flex-1 overflow-hidden max-sm:-mx-4 max-sm:rounded-none max-sm:border-x-0">
       <ConversationSidebar
         conversations={workspace.conversations}
         activeConversationId={activeConversationId}
@@ -83,12 +85,13 @@ export function AgentWorkspace() {
         activeHasMessages={hasMessages}
         storageStatus={workspace.storageStatus}
       />
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label="聊天工作区">
         <ChatHeader
           title={title}
           mode={workspace.mode}
           responseMode={activeResponseMode}
           hasMessages={hasMessages}
+          storageWritable={storageWritable}
           mobileSidebarOpen={mobileSidebarOpen}
           onOpenSidebar={openMobileSidebar}
           onOpenHistory={openHistory}
@@ -96,6 +99,7 @@ export function AgentWorkspace() {
           onRequestDelete={() => requestDelete(activeConversationId)}
         />
         <StorageStatusPanel status={workspace.storageStatus} onRetry={workspace.refreshStorage} onMigrationComplete={workspace.refreshStorage} />
+        {workspace.clientError ? <div data-testid="chat-client-error" className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 sm:px-5"><StatePanel compact live="assertive" tone={workspace.storageStatus?.storageMode === "degraded" ? "warning" : "danger"} title={workspace.storageStatus?.storageMode === "degraded" ? "服务端暂不可用" : "当前操作未完成"} description={workspace.clientError} /></div> : null}
         <MessageList
           conversationId={activeConversationId}
           messages={workspace.conversationMessages}
@@ -117,7 +121,7 @@ export function AgentWorkspace() {
           isLoading={workspace.isLoading}
           isCheckingHealth={workspace.isCheckingHealth}
           realApiUnavailable={workspace.realApiUnavailable}
-          storageWritable={workspace.storageStatus !== null && workspace.storageStatus.storageMode !== "degraded"}
+          storageWritable={storageWritable}
           llmStatus={workspace.llmStatus}
           llmStatusError={workspace.llmStatusError}
           healthResult={workspace.healthResult}

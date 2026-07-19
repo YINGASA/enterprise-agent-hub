@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/chat-workspace/ConfirmDialog";
 import {
   collectLocalStorageMigration,
   executeLocalStorageMigration,
@@ -19,6 +20,10 @@ type StorageStatusPanelProps = {
   onRetry?: () => void | Promise<void>;
   onMigrationComplete?: (result: StorageMigrationResult) => void | Promise<void>;
 };
+
+type MigrationConfirmation =
+  | { step: "upload" }
+  | { step: "execute"; preview: StorageMigrationResult };
 
 const modeCopy = {
   local: {
@@ -50,6 +55,7 @@ export function StorageStatusPanel({ status: providedStatus, className = "", onR
   const [payload, setPayload] = useState<StorageMigrationPayload | null>(null);
   const [result, setResult] = useState<StorageMigrationResult | null>(null);
   const [completedBefore, setCompletedBefore] = useState(false);
+  const [migrationConfirmation, setMigrationConfirmation] = useState<MigrationConfirmation | null>(null);
   const [busy, setBusy] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState("");
@@ -73,22 +79,41 @@ export function StorageStatusPanel({ status: providedStatus, className = "", onR
     setCompletedBefore(marker?.migrationId === collected.migrationId);
   }, []);
 
+  useEffect(() => {
+    if (status?.storageMode !== "server") setMigrationConfirmation(null);
+  }, [status?.storageMode]);
+
   const migrationAvailable = useMemo(() => Boolean(payload && hasLocalStorageMigrationData(payload)), [payload]);
 
-  const migrate = useCallback(async () => {
+  const closeMigrationConfirmation = useCallback(() => setMigrationConfirmation(null), []);
+
+  const requestMigrationPreview = useCallback(() => {
     if (!payload || !status || status.storageMode !== "server" || busy) return;
-    const uploadConfirmed = window.confirm(
-      `迁移预检需要把此浏览器中的 ${payload.conversations.length} 个会话和 ${payload.knowledgeDocuments.length} 篇知识文档（可能包含消息与正文）发送到当前服务端工作区。原 localStorage 数据会保留。是否允许上传并开始预检？`,
-    );
-    if (!uploadConfirmed) return;
+    setError("");
+    setMigrationConfirmation({ step: "upload" });
+  }, [busy, payload, status]);
+
+  const previewMigration = useCallback(async () => {
+    if (!payload || !status || status.storageMode !== "server" || busy || migrationConfirmation?.step !== "upload") return;
+    setMigrationConfirmation(null);
     setBusy(true);
     setError("");
     try {
       const preview = await previewLocalStorageMigration(payload);
-      const confirmed = window.confirm(
-        `预检完成：${resultCopy(preview)}。\n\n服务端已有记录优先，原 localStorage 数据会完整保留。是否执行迁移？`,
-      );
-      if (!confirmed) return;
+      setMigrationConfirmation({ step: "execute", preview });
+    } catch (migrationError) {
+      setError(migrationError instanceof Error ? migrationError.message : "数据迁移失败，请稍后重试。");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, migrationConfirmation, payload, status]);
+
+  const executeMigration = useCallback(async () => {
+    if (!payload || !status || status.storageMode !== "server" || busy || migrationConfirmation?.step !== "execute") return;
+    setMigrationConfirmation(null);
+    setBusy(true);
+    setError("");
+    try {
       const completed = await executeLocalStorageMigration(payload, true);
       setResult(completed);
       setCompletedBefore(isStorageMigrationComplete(completed));
@@ -104,7 +129,7 @@ export function StorageStatusPanel({ status: providedStatus, className = "", onR
     } finally {
       setBusy(false);
     }
-  }, [busy, onMigrationComplete, payload, status]);
+  }, [busy, migrationConfirmation, onMigrationComplete, payload, status]);
 
   const retry = useCallback(async () => {
     if (retrying || busy) return;
@@ -129,7 +154,22 @@ export function StorageStatusPanel({ status: providedStatus, className = "", onR
   }
 
   const copy = modeCopy[status.storageMode];
+  const migrationDialog = migrationConfirmation?.step === "upload"
+    ? {
+        title: "确认上传本地数据？",
+        description: `迁移预检需要把此浏览器中的 ${payload?.conversations.length ?? 0} 个会话和 ${payload?.knowledgeDocuments.length ?? 0} 篇知识文档（可能包含消息与正文）发送到当前服务端工作区。原 localStorage 数据会保留。`,
+        confirmLabel: "允许上传并预检",
+      }
+    : migrationConfirmation?.step === "execute"
+      ? {
+          title: "确认执行数据迁移？",
+          description: `预检完成：${resultCopy(migrationConfirmation.preview)}。服务端已有记录优先，原 localStorage 数据会完整保留。`,
+          confirmLabel: "执行迁移",
+        }
+      : null;
+
   return (
+    <>
     <aside data-testid="storage-status" className={`border-b px-4 py-2.5 text-xs ${copy.tone} ${className}`} aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
@@ -158,15 +198,27 @@ export function StorageStatusPanel({ status: providedStatus, className = "", onR
           {status.storageMode === "server" && migrationAvailable && !completedBefore ? (
             <button
               type="button"
-              onClick={() => void migrate()}
+              onClick={requestMigrationPreview}
               disabled={busy || retrying}
               className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 font-semibold text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
             >
-              {busy ? "正在检查…" : "迁移本地数据"}
+              {busy ? "正在处理…" : "迁移本地数据"}
             </button>
           ) : null}
         </div>
       </div>
     </aside>
+      <ConfirmDialog
+        open={Boolean(migrationDialog)}
+        title={migrationDialog?.title ?? "确认数据迁移"}
+        description={migrationDialog?.description ?? ""}
+        confirmLabel={migrationDialog?.confirmLabel ?? "确认"}
+        onCancel={closeMigrationConfirmation}
+        onConfirm={() => {
+          if (migrationConfirmation?.step === "upload") void previewMigration();
+          else if (migrationConfirmation?.step === "execute") void executeMigration();
+        }}
+      />
+    </>
   );
 }

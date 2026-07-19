@@ -39,7 +39,7 @@ export function EvaluationTrendChart({ history }: EvaluationTrendChartProps) {
 
   if (chronological.length < 2) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="app-panel p-5">
         <h2 className="font-semibold text-ink-900">趋势图表</h2>
         <p className="mt-3 rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-ink-500">
           保存至少 2 次评测后，可查看趋势变化。
@@ -59,7 +59,7 @@ export function EvaluationTrendChart({ history }: EvaluationTrendChartProps) {
   const height = 220;
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="app-panel p-4 sm:p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-semibold text-ink-900">趋势图表</h2>
@@ -103,6 +103,11 @@ export function EvaluationTrendChart({ history }: EvaluationTrendChartProps) {
             );
           })}
         </svg>
+      </div>
+      <div className="sr-only">
+        {series.map((item) => (
+          <p key={item.key}>{item.label}：从 {formatValue(item.values[0] ?? 0, item.suffix)} 变化到 {formatValue(item.values[item.values.length - 1] ?? 0, item.suffix)}。</p>
+        ))}
       </div>
     </section>
   );

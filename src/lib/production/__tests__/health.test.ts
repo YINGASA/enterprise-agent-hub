@@ -50,7 +50,7 @@ describe("production health", () => {
       realApiHealthy: null,
       parserReady: true,
       nodeCompatible: true,
-      version: "2.2.2",
+      version: "2.2.3",
     });
 
     const degraded = await getSafeApplicationHealth({

@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { EvaluationReportPreview } from "@/components/EvaluationReportPreview";
 import { EvaluationTrendChart } from "@/components/EvaluationTrendChart";
 import { ChatFeedbackStatsPanel } from "@/components/ChatFeedbackStatsPanel";
+import { ConfirmDialog } from "@/components/chat-workspace/ConfirmDialog";
+import { ResponsiveToolbar } from "@/components/ui/ResponsiveToolbar";
+import { StatePanel } from "@/components/ui/StatePanel";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { knowledgePacks } from "@/data/knowledgePacks";
 import {
   clearEvaluationHistory,
@@ -68,10 +72,6 @@ const failureBucketLabels: Record<EvaluationFailureReason, { label: string; advi
 
 function formatMetric(value: number, suffix = "") {
   return String(value) + suffix;
-}
-
-function statusClass(passed: boolean) {
-  return passed ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
 }
 
 function buttonClass(active: boolean) {
@@ -146,6 +146,7 @@ export function EvaluationDashboard() {
   const [preview, setPreview] = useState<ReportPreviewState>(null);
   const [llmHealth, setLlmHealth] = useState<LlmHealthSnapshot | null>(null);
   const [llmHealthMessage, setLlmHealthMessage] = useState("");
+  const [clearHistoryOpen, setClearHistoryOpen] = useState(false);
 
   useEffect(() => {
     const loaded = loadEvaluationHistory();
@@ -226,11 +227,11 @@ export function EvaluationDashboard() {
   }
 
   function handleClear() {
-    if (!window.confirm("确认清空所有本地评测历史吗？")) return;
     const next = clearEvaluationHistory();
     setHistory(next.data);
     setExpandedHistoryId("");
     setHistoryMessage(next.ok ? "已清空本地评测历史。" : next.error);
+    setClearHistoryOpen(false);
   }
 
   function openMarkdownPreview(run: EvaluationRunHistoryItem) {
@@ -242,26 +243,26 @@ export function EvaluationDashboard() {
   }
 
   return <div className="space-y-6 overflow-x-hidden">
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="app-panel p-4 sm:p-5">
+      <ResponsiveToolbar label="评测配置操作" className="gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-ink-900">V1.4 Agent 评测面板</h2>
-          <p className="mt-1 text-sm leading-6 text-ink-500">用于持续验证 Agent Router、Hybrid RAG、Tool Calling、fallback 与结构化输出质量。评测结果可保存到浏览器本地，查看趋势图表，并预览或导出 Markdown / JSON 报告。</p>
+          <h2 className="text-lg font-semibold text-ink-950">评测配置</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-ink-500">选择评测模式、测试集和知识范围。结果保存在当前浏览器，可用于趋势复盘和安全报告导出。</p>
         </div>
-        <button type="button" onClick={runEvaluation} disabled={isRunning} className="min-h-10 rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-400">{isRunning ? "评测中..." : "运行评测"}</button>
-      </div>
+        <button type="button" onClick={runEvaluation} disabled={isRunning} aria-busy={isRunning} className="app-button-primary">{isRunning ? "评测中…" : "运行评测"}</button>
+      </ResponsiveToolbar>
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
-        <div><p className="mb-2 text-xs font-semibold text-ink-500">评测模式</p><div className="flex flex-wrap gap-2">{(["mock", "real"] as LlmMode[]).map((item) => <button key={item} type="button" onClick={() => setMode(item)} className={buttonClass(mode === item)}>{item === "mock" ? "Mock 模式" : "Real API"}</button>)}</div>{mode === "real" ? <p className="mt-2 text-xs text-amber-700">Real API 模式可能消耗 API 额度。</p> : null}</div>
-        <div><p className="mb-2 text-xs font-semibold text-ink-500">测试集规模</p><div className="flex flex-wrap gap-2">{suiteOptions.map((item) => <button key={item.value} type="button" title={item.description} onClick={() => setSuite(item.value)} className={buttonClass(suite === item.value)}>{item.label}</button>)}</div></div>
-        <div><p className="mb-2 text-xs font-semibold text-ink-500">知识库范围</p><select value={packId} onChange={(event) => setPackId(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">{packOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+        <fieldset><legend className="mb-2 text-xs font-semibold text-ink-500">评测模式</legend><div className="flex flex-wrap gap-2">{(["mock", "real"] as LlmMode[]).map((item) => <button key={item} type="button" aria-pressed={mode === item} onClick={() => setMode(item)} className={buttonClass(mode === item)}>{item === "mock" ? "Mock 模式" : "Real API"}</button>)}</div>{mode === "real" ? <p className="mt-2 text-xs text-amber-700">Real API 模式可能消耗 API 额度。</p> : null}</fieldset>
+        <fieldset><legend className="mb-2 text-xs font-semibold text-ink-500">测试集规模</legend><div className="flex flex-wrap gap-2">{suiteOptions.map((item) => <button key={item.value} type="button" aria-pressed={suite === item.value} title={item.description} onClick={() => setSuite(item.value)} className={buttonClass(suite === item.value)}>{item.label}</button>)}</div></fieldset>
+        <label className="text-xs font-semibold text-ink-500">知识库范围<select aria-label="知识库范围" value={packId} onChange={(event) => setPackId(event.target.value)} className="app-input mt-2 w-full font-normal">{packOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       </div>
-      {error ? <p className="mt-4 rounded-md bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : null}
-      {historyMessage ? <p className="mt-4 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{historyMessage}</p> : null}
+      {error ? <StatePanel title="评测未完成" description={error} tone="danger" compact className="mt-4" /> : null}
+      {historyMessage ? <p role="status" aria-live="polite" className="mt-4 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{historyMessage}</p> : null}
     </section>
 
     <section className="grid gap-4 lg:grid-cols-2">
       <article className={"rounded-lg border p-5 shadow-sm " + realApiHealthClass}>
-        <p className="text-xs font-semibold uppercase tracking-wide">Real API 健康状态</p>
+        <div className="flex items-center justify-between gap-2"><p className="app-kicker">Real API 健康状态</p><StatusBadge tone={llmHealth?.healthy ? "success" : llmHealth?.configured ? "warning" : "neutral"}>{llmHealth?.healthy ? "正常" : llmHealth?.configured ? "异常" : "未配置"}</StatusBadge></div>
         <h3 className="mt-2 text-lg font-semibold">{realApiHealthLabel}</h3>
         <p className="mt-2 text-sm leading-6">
           {llmHealth?.healthy
@@ -283,7 +284,7 @@ export function EvaluationDashboard() {
     </section>
 
     {result ? <>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metricLabels.map((metric) => <article key={metric.key} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-ink-500">{metric.label}</p><p className="mt-2 text-2xl font-semibold text-ink-900">{formatMetric(Number(result.summary[metric.key]), metric.suffix)}</p></article>)}</section>
+      <section aria-label="本次评测指标" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metricLabels.map((metric, index) => <article key={metric.key} className={`rounded-lg border border-slate-200 p-4 ${index < 4 ? "bg-white shadow-panel" : "bg-slate-50"}`}><p className="text-xs font-medium text-ink-500">{metric.label}</p><p className={`app-tabular mt-2 font-semibold tracking-tight text-ink-950 ${index < 4 ? "text-2xl" : "text-xl"}`}>{formatMetric(Number(result.summary[metric.key]), metric.suffix)}</p></article>)}</section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div><h2 className="font-semibold text-ink-900">当前评测结果</h2><p className="mt-1 text-sm text-ink-500">开始：{formatDate(result.startedAt)}{" · "}完成：{formatDate(result.finishedAt)}{" · "}耗时：{result.durationMs}ms</p></div>
@@ -299,11 +300,11 @@ export function EvaluationDashboard() {
       {preview ? <EvaluationReportPreview kind={preview.kind} title={preview.title} content={preview.content} onClose={() => setPreview(null)} onDownload={() => preview.kind === "markdown" ? triggerMarkdownDownload(preview.run) : triggerJsonDownload(preview.run)} /> : null}
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="mb-3 font-semibold text-ink-900">知识库覆盖</h2><div className="flex flex-wrap gap-2">{Object.entries(result.summary.packCoverage).map(([key, value]) => <span key={key} className="rounded-md bg-slate-50 px-3 py-1.5 text-xs text-ink-600 ring-1 ring-slate-200">{evaluationIdentifierLabel(key)}: {value}</span>)}</div></section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h2 className="mb-3 font-semibold text-ink-900">失败分析</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Object.entries(result.summary.failureBuckets).map(([reason, count]) => <article key={reason} className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{failureBucketLabels[reason as EvaluationFailureReason].label}</p><p className="mt-1 text-lg font-semibold text-ink-900">{count}</p></article>)}</div>{failedResults.length === 0 ? <p className="mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">当前评测集全部通过。</p> : null}</section>
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 p-5"><h2 className="font-semibold text-ink-900">评测结果</h2><p className="mt-1 text-sm text-ink-500">当前返回 {filteredResults.length} 条用例结果，可展开问题查看回答和失败原因。</p></div><div className="overflow-x-auto"><table className="min-w-[1100px] divide-y divide-slate-200 text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-ink-500"><tr><th className="px-4 py-3">问题</th><th className="px-4 py-3">实际场景 / 意图</th><th className="px-4 py-3">工具</th><th className="px-4 py-3">是否通过</th><th className="px-4 py-3">responseMode</th><th className="px-4 py-3">RAG 分</th><th className="px-4 py-3">耗时</th><th className="px-4 py-3">错误</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredResults.map((item) => <tr key={item.caseId} className="align-top"><td className="max-w-[320px] px-4 py-3"><button type="button" onClick={() => setExpandedCaseId(expandedCaseId === item.caseId ? "" : item.caseId)} className="break-words text-left font-medium text-ink-900 hover:text-brand-700">{item.question}</button>{expandedCaseId === item.caseId ? <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs leading-5 text-ink-600"><p>失败原因：{item.failureReasons.length ? item.failureReasons.join(", ") : "无"}</p><p>失败摘要：{item.failureSummary ?? "无"}</p><p>修复建议：{reasonAdvice(item.failureReasons)}</p><p className="mt-2 break-words">来源：{item.sources.join(" / ") || "无"}</p><p className="mt-2 whitespace-pre-wrap break-words">{item.finalAnswer}</p></div> : null}</td><td className="px-4 py-3 text-ink-600">{evaluationIdentifierLabel(item.route.scenario)}<br />{evaluationIdentifierLabel(item.route.intent)}</td><td className="px-4 py-3 text-ink-600">{item.toolsUsed.map(evaluationIdentifierLabel).join(" + ") || "无"}</td><td className="px-4 py-3"><span className={"rounded-md px-2 py-1 text-xs font-semibold " + statusClass(item.passed)}>{item.passed ? "通过" : "失败"}</span></td><td className="px-4 py-3 text-ink-600">{item.responseMode}</td><td className="px-4 py-3 text-ink-600">{item.ragScore}</td><td className="px-4 py-3 text-ink-600">{item.durationMs}ms</td><td className="max-w-[220px] break-words px-4 py-3 text-rose-600">{item.error ?? ""}</td></tr>)}</tbody></table></div></section>
-    </> : <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-ink-500">请选择测试集规模并运行评测。评测结果、历史记录和报告导出操作会显示在这里。</p>}
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-panel"><div className="border-b border-slate-200 p-5"><h2 className="font-semibold text-ink-900">评测结果</h2><p className="mt-1 text-sm text-ink-500">当前返回 {filteredResults.length} 条用例结果，可展开问题查看回答和失败原因。</p></div><div role="region" className="overflow-x-auto" tabIndex={0} aria-label="评测结果，可横向滚动"><table className="min-w-[1100px] divide-y divide-slate-200 text-left text-sm"><caption className="sr-only">本次 Agent 评测用例结果</caption><thead className="bg-slate-50 text-xs text-ink-500"><tr><th scope="col" className="px-4 py-3">问题</th><th scope="col" className="px-4 py-3">实际场景 / 意图</th><th scope="col" className="px-4 py-3">工具</th><th scope="col" className="px-4 py-3">是否通过</th><th scope="col" className="px-4 py-3">响应模式</th><th scope="col" className="px-4 py-3">RAG 分</th><th scope="col" className="px-4 py-3">耗时</th><th scope="col" className="px-4 py-3">错误</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredResults.map((item) => <tr key={item.caseId} className="align-top"><td className="max-w-[320px] px-4 py-3"><button type="button" aria-expanded={expandedCaseId === item.caseId} onClick={() => setExpandedCaseId(expandedCaseId === item.caseId ? "" : item.caseId)} className="break-words rounded text-left font-medium text-ink-900 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500">{item.question}</button>{expandedCaseId === item.caseId ? <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs leading-5 text-ink-600"><p>失败原因：{item.failureReasons.length ? item.failureReasons.join(", ") : "无"}</p><p>失败摘要：{item.failureSummary ?? "无"}</p><p>修复建议：{reasonAdvice(item.failureReasons)}</p><p className="mt-2 break-words">来源：{item.sources.join(" / ") || "无"}</p><p className="mt-2 whitespace-pre-wrap break-words">{item.finalAnswer}</p></div> : null}</td><td className="px-4 py-3 text-ink-600">{evaluationIdentifierLabel(item.route.scenario)}<br />{evaluationIdentifierLabel(item.route.intent)}</td><td className="px-4 py-3 text-ink-600">{item.toolsUsed.map(evaluationIdentifierLabel).join(" + ") || "无"}</td><td className="px-4 py-3"><StatusBadge tone={item.passed ? "success" : "danger"}>{item.passed ? "通过" : "失败"}</StatusBadge></td><td className="px-4 py-3 text-ink-600">{item.responseMode}</td><td className="px-4 py-3 text-ink-600">{item.ragScore}</td><td className="px-4 py-3 text-ink-600">{item.durationMs}ms</td><td className="max-w-[220px] break-words px-4 py-3 text-rose-600">{item.error ?? ""}</td></tr>)}</tbody></table></div></section>
+    </> : <StatePanel title="尚未运行评测" description="选择测试集规模并运行评测后，这里会显示核心指标、失败分析、用例结果和报告操作。" tone="neutral" />}
 
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold text-ink-900">趋势摘要</h2><p className="mt-1 text-sm text-ink-500">评测历史保存在当前浏览器本地，最多保留最近 20 次记录。</p></div>{history.length ? <button type="button" onClick={handleClear} className={secondaryButtonClass()}>清空历史</button> : null}</div>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold text-ink-900">趋势摘要</h2><p className="mt-1 text-sm text-ink-500">评测历史保存在当前浏览器本地，最多保留最近 20 次记录。</p></div>{history.length ? <button type="button" onClick={() => setClearHistoryOpen(true)} className={secondaryButtonClass()}>清空历史</button> : null}</div>
       <div className="mt-4 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
         <article className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">最近通过率</p><p className="mt-1 text-xl font-semibold text-ink-900">{latest ? latest.passRate + "%" : "暂无数据"}</p></article>
         <article className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">较上次变化</p><p className="mt-1 text-xl font-semibold text-ink-900">{passRateDelta === null ? "暂无数据" : (passRateDelta > 0 ? "+" : "") + passRateDelta + "%"}</p></article>
@@ -322,7 +323,8 @@ export function EvaluationDashboard() {
 
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="font-semibold text-ink-900">评测历史记录</h2>
-      {history.length === 0 ? <p className="mt-3 text-sm text-ink-500">暂无历史记录。</p> : <div className="mt-4 space-y-3">{history.map((item) => <article key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0"><p className="break-words text-sm font-semibold text-ink-900">{formatDate(item.createdAt)}{" · "}{historyModeLabel(item.mode)}{" · "}{suiteLabel(item.suite)}</p><p className="mt-1 text-xs text-ink-500">{item.caseCount} 条用例{" · "}{item.passed} 条通过{" · "}通过率 {item.passRate}%{" · "}场景 {item.scenarioAccuracy}%{" · "}意图 {item.intentAccuracy}%{" · "}工具 {item.toolHitRate}%{" · "}RAG {item.ragUsageAccuracy}%{" · "}兜底 {item.fallbackRate ?? 0}%</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setExpandedHistoryId(expandedHistoryId === item.id ? "" : item.id)} className={secondaryButtonClass()}>{expandedHistoryId === item.id ? "收起详情" : "查看详情"}</button><button type="button" onClick={() => openMarkdownPreview(item)} className={secondaryButtonClass()}>预览 Markdown</button><button type="button" onClick={() => openJsonPreview(item)} className={secondaryButtonClass()}>预览 JSON</button><button type="button" onClick={() => triggerMarkdownDownload(item)} className={secondaryButtonClass()}>导出 Markdown</button><button type="button" onClick={() => triggerJsonDownload(item)} className={secondaryButtonClass()}>导出 JSON</button><button type="button" onClick={() => handleDelete(item.id)} className={secondaryButtonClass()}>删除</button></div></div>{expandedHistoryId === item.id ? <div className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3"><p>创建时间：{formatDate(item.createdAt)}</p><p>模式：{historyModeLabel(item.mode)}</p><p>测试集：{suiteLabel(item.suite)}</p><p>用例数量：{item.caseCount}</p><p>通过数量：{item.passed}</p><p>通过率：{item.passRate}%</p><p>场景识别准确率：{item.scenarioAccuracy}%</p><p>意图识别准确率：{item.intentAccuracy}%</p><p>工具命中率：{item.toolHitRate}%</p><p>RAG 使用准确率：{item.ragUsageAccuracy}%</p><p>来源引用率：{item.citationRate}%</p><p>关键词命中率：{item.keywordHitRate}%</p><p>兜底率：{displayValue(item.fallbackRate, "%")}</p><p>平均 RAG 分：{displayValue(item.averageRagScore)}</p><p className="md:col-span-2 xl:col-span-3">失败摘要：{item.failureSummary ?? "暂无失败摘要"}</p><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white p-3 text-xs text-ink-600 md:col-span-2 xl:col-span-3">{failureBucketText(item)}</pre></div> : null}</article>)}</div>}
+      {history.length === 0 ? <p className="mt-3 text-sm text-ink-500">暂无历史记录。</p> : <div className="mt-4 space-y-3">{history.map((item) => <article key={item.id} className="rounded-md border border-slate-200 bg-slate-50 p-4"><div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0"><p className="break-words text-sm font-semibold text-ink-900">{formatDate(item.createdAt)}{" · "}{historyModeLabel(item.mode)}{" · "}{suiteLabel(item.suite)}</p><p className="mt-1 text-xs text-ink-500">{item.caseCount} 条用例{" · "}{item.passed} 条通过{" · "}通过率 {item.passRate}%{" · "}场景 {item.scenarioAccuracy}%{" · "}意图 {item.intentAccuracy}%{" · "}工具 {item.toolHitRate}%{" · "}RAG {item.ragUsageAccuracy}%{" · "}兜底 {item.fallbackRate ?? 0}%</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setExpandedHistoryId(expandedHistoryId === item.id ? "" : item.id)} className={secondaryButtonClass()}>{expandedHistoryId === item.id ? "收起详情" : "查看详情"}</button><button type="button" onClick={() => openMarkdownPreview(item)} className={secondaryButtonClass()}>预览 Markdown</button><button type="button" onClick={() => openJsonPreview(item)} className={secondaryButtonClass()}>预览 JSON</button><button type="button" onClick={() => triggerMarkdownDownload(item)} className={secondaryButtonClass()}>导出 Markdown</button><button type="button" onClick={() => triggerJsonDownload(item)} className={secondaryButtonClass()}>导出 JSON</button><button type="button" onClick={() => handleDelete(item.id)} className={secondaryButtonClass()}>删除</button></div></div>{expandedHistoryId === item.id ? <div className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3"><p>创建时间：{formatDate(item.createdAt)}</p><p>模式：{historyModeLabel(item.mode)}</p><p>测试集：{suiteLabel(item.suite)}</p><p>用例数量：{item.caseCount}</p><p>通过数量：{item.passed}</p><p>通过率：{item.passRate}%</p><p>场景识别准确率：{item.scenarioAccuracy}%</p><p>意图识别准确率：{item.intentAccuracy}%</p><p>工具命中率：{item.toolHitRate}%</p><p>RAG 使用准确率：{item.ragUsageAccuracy}%</p><p>来源引用率：{item.citationRate}%</p><p>关键词命中率：{item.keywordHitRate}%</p><p>兜底率：{displayValue(item.fallbackRate, "%")}</p><p>平均 RAG 分：{displayValue(item.averageRagScore)}</p><p className="md:col-span-2 xl:col-span-3">失败摘要：{item.failureSummary ?? "暂无失败摘要"}</p><pre role="region" aria-label="评测失败原因分桶，可滚动查看" tabIndex={0} className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-white p-3 text-xs text-ink-600 md:col-span-2 xl:col-span-3">{failureBucketText(item)}</pre></div> : null}</article>)}</div>}
     </section>
+    <ConfirmDialog open={clearHistoryOpen} title="清空全部评测历史？" description="当前浏览器保存的评测历史将被删除，现有业务数据和服务端运行记录不受影响。" confirmLabel="确认清空" danger onCancel={() => setClearHistoryOpen(false)} onConfirm={handleClear} />
   </div>;
 }

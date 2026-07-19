@@ -32,7 +32,7 @@ describe("production check script", () => {
     const body = JSON.parse(result.output) as Record<string, unknown>;
     expect(body).toMatchObject({
       healthy: true,
-      applicationVersion: "2.2.2",
+      applicationVersion: "2.2.3",
       nodeCompatible: true,
       nodeVersion: "20.19.5",
       storageMode: "local",

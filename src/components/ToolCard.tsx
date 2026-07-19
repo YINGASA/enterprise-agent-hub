@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { MockJsonPanel } from "@/components/MockJsonPanel";
+import { StatePanel } from "@/components/ui/StatePanel";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { runToolDemo } from "@/lib/tools";
 import type { ToolDefinition, ToolRunResult } from "@/types";
 
@@ -45,69 +48,74 @@ export function ToolCard({ tool, businessName, businessGoal, exampleQuestions = 
   }
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-lg font-semibold text-ink-900">{businessName ?? tool.description}</h3>
-            <span className="rounded-md bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100">{tool.name}</span>
-            <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-ink-500">{tool.scenario}</span>
+    <article data-testid={`tool-card-${tool.name}`} className="py-5 first:pt-0 last:pb-0">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-ink-950 sm:text-lg">{businessName ?? tool.description}</h3>
+            <StatusBadge tone="info" showDot={false}>{tool.name}</StatusBadge>
           </div>
-          <p className="mt-2 text-sm leading-6 text-ink-600">{businessGoal ?? tool.description}</p>
+          <p className="mt-1 text-sm leading-6 text-ink-500">{businessGoal ?? tool.description}</p>
+          <p className="mt-2 text-xs text-ink-500">适用范围：{tool.scenario}</p>
         </div>
         <button
           type="button"
+          data-testid={`tool-run-${tool.name}`}
           onClick={handleRun}
-          className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 lg:w-auto"
+          className="app-button-primary w-full lg:w-auto"
         >
-          模拟执行业务工具
+          运行本地演示
         </button>
       </div>
 
       {exampleQuestions.length ? (
-        <div className="mb-4 rounded-lg border border-brand-100 bg-brand-50 p-4">
-          <p className="text-xs font-semibold text-brand-700">可直接用这些问题验证 Agent 编排</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-4 border-l-2 border-brand-200 pl-3">
+          <p className="text-xs font-semibold text-ink-600">带入聊天工作台验证</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {exampleQuestions.map((question) => (
-              <a key={question} href={chatQuestionHref(question)} className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-brand-700 ring-1 ring-brand-100 hover:bg-brand-100">{question}</a>
+              <Link key={question} href={chatQuestionHref(question)} className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                {question}
+              </Link>
             ))}
           </div>
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <MockJsonPanel title="输入参数示例" data={tool.inputExample} />
-        <MockJsonPanel title="输出结果示例" data={tool.outputExample} />
-      </div>
-
-      <section className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h4 className="text-sm font-semibold text-ink-900">本地工具调用结果</h4>
-          <span
-            className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-              result?.status === "success"
-                ? "bg-emerald-50 text-emerald-700"
-                : result?.status === "failed"
-                  ? "bg-rose-50 text-rose-700"
-                  : "bg-slate-200 text-ink-500"
-            }`}
-          >
-            {statusLabel(result?.status)}
-          </span>
+      <details className="mt-4 rounded-lg border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink-700 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
+          查看接口输入与输出示例
+        </summary>
+        <div className="grid gap-4 border-t border-slate-200 p-4 lg:grid-cols-2">
+          <MockJsonPanel title="输入参数示例" data={tool.inputExample} />
+          <MockJsonPanel title="输出结果示例" data={tool.outputExample} />
         </div>
-        <p className="mb-3 rounded-md bg-white p-3 text-sm leading-6 text-ink-600 ring-1 ring-slate-200">
-          {summarizeResult(result)}
-        </p>
+      </details>
+
+      <div data-testid={`tool-result-${tool.name}`} className="mt-4" aria-live="polite" aria-atomic="true">
         {result ? (
-          <pre className="max-h-[360px] overflow-auto rounded-md bg-white p-4 text-xs leading-6 text-ink-700 ring-1 ring-slate-200">
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          <section role={result.status === "failed" ? "alert" : "status"} className={`rounded-lg border p-4 ${result.status === "success" ? "border-emerald-200 bg-emerald-50/70" : "border-rose-200 bg-rose-50"}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold text-ink-950">本次执行结果</h4>
+              <StatusBadge tone={result.status === "success" ? "success" : "danger"}>{statusLabel(result.status)}</StatusBadge>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-ink-700">{summarizeResult(result)}</p>
+            <details className="mt-3 rounded-md border border-current/10 bg-white/80">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-ink-600 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500">
+                查看本次执行的原始 JSON
+              </summary>
+              <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap break-words border-t border-slate-200 p-3 text-xs leading-6 text-ink-700">
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </details>
+          </section>
         ) : (
-          <p className="rounded-md bg-white p-4 text-sm text-ink-500 ring-1 ring-slate-200">
-            这里展示的是本地业务工具的模拟返回，用于解释 Agent 在回答前做了哪些查询、判断或工单动作。
-          </p>
+          <StatePanel
+            compact
+            title="等待执行"
+            description="运行后会在这里显示业务摘要和明确状态；技术 JSON 默认收起，避免干扰业务判断。"
+          />
         )}
-      </section>
+      </div>
     </article>
   );
 }

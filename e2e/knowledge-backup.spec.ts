@@ -51,10 +51,18 @@ test("knowledge backup export, preview, merge, replace and validation", async ({
   await writeFile(replaceFile, backup([document("replacement", "替换文档", "替换恢复内容")]));
   await page.getByTestId("knowledge-backup-mode").selectOption("replace");
   await page.getByTestId("knowledge-backup-file").setInputFiles(replaceFile);
-  let confirmed = false;
-  page.once("dialog", async (dialog) => { confirmed = true; await dialog.accept(); });
-  await page.getByTestId("knowledge-backup-apply").click();
-  expect(confirmed).toBe(true);
+  const applyReplace = page.getByTestId("knowledge-backup-apply");
+  await applyReplace.click();
+  const replaceDialog = page.getByRole("alertdialog", { name: "替换当前用户知识文档？" });
+  await expect(replaceDialog).toBeVisible();
+  await expect(replaceDialog.getByRole("button", { name: "取消", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(replaceDialog).toHaveCount(0);
+  await expect(applyReplace).toBeFocused();
+
+  await applyReplace.click();
+  await expect(replaceDialog).toBeVisible();
+  await replaceDialog.getByRole("button", { name: "确认替换恢复", exact: true }).click();
   await expect(page.getByText("替换文档", { exact: true }).first()).toBeVisible();
 
   const invalidFile = testInfo.outputPath("invalid.json");

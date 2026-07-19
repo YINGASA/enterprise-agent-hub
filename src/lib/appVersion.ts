@@ -1,4 +1,4 @@
-export const appVersion = "2.2.2";
+export const appVersion = "2.2.3";
 
 export const releaseChannel = process.env.NODE_ENV === "production" ? "production" : "development";
 

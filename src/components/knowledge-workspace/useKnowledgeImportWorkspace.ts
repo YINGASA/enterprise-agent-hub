@@ -280,6 +280,14 @@ export function useKnowledgeImportWorkspace({
     return true;
   }, []);
 
+  const removeFile = useCallback((targetIndex: number) => {
+    const next = files.filter((_, index) => index !== targetIndex);
+    setFiles(next);
+    previewIdempotencyKey.current = next.length ? createKnowledgeImportIdempotencyKey() : "";
+    setError("");
+    setNotice(next.length ? `已选择 ${next.length} 个文件，尚未上传。` : "已清空待导入文件。");
+  }, [files]);
+
   const preview = useCallback(async () => {
     const validation = validateKnowledgeImportFiles(files);
     if (!validation.ok) { setError(validation.message); return; }
@@ -378,7 +386,7 @@ export function useKnowledgeImportWorkspace({
 
   return {
     storageStatus, packs, activeJob, files, knowledgePackId, busy, error, notice,
-    setKnowledgePackId, chooseFiles, preview, refresh, updateItemMetadata, updateConflictResolution,
+    setKnowledgePackId, chooseFiles, removeFile, preview, refresh, updateItemMetadata, updateConflictResolution,
     confirmAndProcess, retryFailed, cancel, createPack, updatePack, removePack,
   };
 }

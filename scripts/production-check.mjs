@@ -152,7 +152,7 @@ try {
 }
 
 const result = {
-  applicationVersion: "2.2.2",
+  applicationVersion: "2.2.3",
   gitCommit: readGitCommit(),
   nodeCompatible,
   nodeVersion: process.versions.node,

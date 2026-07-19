@@ -1,5 +1,7 @@
 import { PageHeader } from "@/components/PageHeader";
 import { ToolCard } from "@/components/ToolCard";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { tools } from "@/data/mock";
 import type { ToolName } from "@/types";
 import Link from "next/link";
@@ -78,37 +80,46 @@ function chatQuestionHref(question: string) {
 
 export default function ToolsPage() {
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Tool Center"
+        eyebrow="业务流程与工具"
         title="业务工具工作台"
-        description="按真实业务流程展示 Agent 可调用的订单查询、规则检索、工单创建和客服回复工具；可一键带问题进入 Chat 工作台验证企业知识与流程编排。"
+        description="按正式业务流程查看 Agent 可调用的订单查询、规则检索、工单创建和客服回复工具。页面优先展示业务用途与执行结果，技术 JSON 按需展开。"
+        meta={
+          <>
+            <StatusBadge tone="success">5 个正式业务工具</StatusBadge>
+            <StatusBadge tone="info">本地安全演示</StatusBadge>
+            <StatusBadge tone="neutral">正式企业业务范围</StatusBadge>
+          </>
+        }
+        actions={<Link href="/chat" className="app-button-primary">进入聊天工作台</Link>}
       />
 
-      <section className="grid gap-4 lg:grid-cols-4">
-        {workflowTemplates.map((template) => (
-          <article key={template.question} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-600">业务流程模板</p>
-            <h2 className="mt-2 font-semibold text-ink-900">{template.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-ink-600">{template.description}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {template.steps.map((step) => <span key={step} className="rounded bg-slate-50 px-2 py-1 text-xs text-ink-600 ring-1 ring-slate-200">{step}</span>)}
-            </div>
-            <Link href={chatQuestionHref(template.question)} className="mt-4 inline-flex rounded-md bg-brand-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2">
-              去 Chat 测试
-            </Link>
-          </article>
-        ))}
-      </section>
+      <SectionCard
+        title="常用业务流程"
+        description="选择一个完整任务进入 Chat，验证知识检索、工具调用和结果解释是否形成闭环。"
+      >
+        <ol className="grid divide-y divide-slate-200 lg:grid-cols-2 lg:gap-x-6 lg:divide-y-0 xl:grid-cols-4 xl:divide-x">
+          {workflowTemplates.map((template, index) => (
+            <li key={template.question} className="py-4 first:pt-0 last:pb-0 lg:border-b lg:border-slate-200 lg:py-4 xl:border-b-0 xl:px-5 xl:py-0 xl:first:pl-0 xl:last:pr-0">
+              <p className="app-tabular text-xs font-semibold text-brand-700">流程 {String(index + 1).padStart(2, "0")}</p>
+              <h3 className="mt-1 font-semibold text-ink-950">{template.title}</h3>
+              <p className="mt-1 text-sm leading-6 text-ink-500">{template.description}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {template.steps.map((step) => <StatusBadge key={step} showDot={false}>{step}</StatusBadge>)}
+              </div>
+              <Link href={chatQuestionHref(template.question)} className="app-button-tertiary mt-3 px-0 hover:bg-transparent">
+                带入聊天工作台验证
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </SectionCard>
 
-      <div className="mt-6 space-y-6">
+      <div className="space-y-6">
         {scenarioGroups.map((group) => (
-          <section key={group.title} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-4">
-              <h2 className="font-semibold text-ink-900">{group.title}</h2>
-              <p className="mt-1 text-sm text-ink-600">{group.description}</p>
-            </div>
-            <div className="grid gap-5">
+          <SectionCard key={group.title} title={group.title} description={group.description}>
+            <div className="divide-y divide-slate-200">
               {group.toolNames.map((toolName) => {
                 const tool = tools.find((item) => item.name === toolName);
                 if (!tool) return null;
@@ -125,7 +136,7 @@ export default function ToolsPage() {
                 );
               })}
             </div>
-          </section>
+          </SectionCard>
         ))}
       </div>
     </div>
