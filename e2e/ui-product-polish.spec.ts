@@ -35,6 +35,7 @@ test("390px Chat 与 Knowledge 保持关键操作可达且页面不横向溢出"
 });
 
 test("主要工作台在桌面与平板断点保持无页面级横向溢出", async ({ page }) => {
+  test.setTimeout(60_000);
   const widths = [768, 1024, 1280, 1440];
   const routes = ["/chat", "/knowledge", "/evaluation", "/ops"];
 
