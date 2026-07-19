@@ -172,8 +172,8 @@ export function useKnowledgeWorkspace() {
     }
   }
 
-  async function handleClearUserDocuments() {
-    if (!userDocuments.length || !window.confirm("确认清空所有用户导入文档吗？默认知识库不会被删除。")) return;
+  async function handleClearUserDocuments(confirmed = false) {
+    if (!userDocuments.length || (!confirmed && !window.confirm("确认清空所有用户导入文档吗？默认知识库不会被删除。"))) return;
     if (!storageStatus) {
       setNotice("正在加载存储工作区，请稍后再试。");
       return;

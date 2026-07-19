@@ -5,9 +5,9 @@ export default function KnowledgePage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Knowledge Base"
+        eyebrow="企业知识管理"
         title="知识库管理"
-        description="管理默认知识库与本地导入文档，查看启用状态、chunks、标签、建议测试问题和质量诊断；用户文档保存在当前浏览器 localStorage，并可参与 Chat 工作台 RAG 检索。"
+        description="管理系统内置资料与当前工作区文档，查看检索状态、分块、标签和质量诊断；用户文档按当前存储模式持久化，启用后可参与聊天工作台的 RAG 检索。"
       />
       <KnowledgeWorkspace />
     </div>

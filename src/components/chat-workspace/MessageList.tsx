@@ -4,6 +4,7 @@ import { AssistantMessage } from "@/components/chat-workspace/AssistantMessage";
 import { EmptyConversation } from "@/components/chat-workspace/EmptyConversation";
 import { UserMessage } from "@/components/chat-workspace/UserMessage";
 import { useChatScroll } from "@/components/chat-workspace/useChatScroll";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { MessageFeedbackDraft, MessageResultMap, TransientChatTurn } from "@/components/chat-workspace/types";
 import type { ChatAnswerFeedbackValue, ConversationMessage } from "@/types";
 
@@ -33,8 +34,8 @@ function PendingAssistant({ turn, onRetry, revision = false }: { turn: Transient
   );
   if (turn.status === "failed") {
     return (
-      <article data-testid="assistant-error" role="alert" className="flex justify-start">
-        <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-rose-200 bg-white p-4 shadow-sm">
+      <article data-testid="assistant-error" role="alert" className="w-full">
+        <div className="w-full rounded-lg border border-rose-200 bg-rose-50/60 p-4">
           <p className="font-semibold text-rose-800">{revision ? "本次修改未完成，原回答已保留" : "本次发送失败"}</p>
           {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-3 whitespace-pre-wrap break-words border-l-2 border-slate-200 pl-3 text-sm leading-6 text-ink-600">{turn.partialAnswer}</p> : null}
           <p className="mt-2 break-words text-sm leading-6 text-rose-700">{turn.error ?? "请求失败，请稍后重试。"}</p>
@@ -45,8 +46,8 @@ function PendingAssistant({ turn, onRetry, revision = false }: { turn: Transient
   }
   if (turn.status === "stopped") {
     return (
-      <article data-testid="assistant-stopped" role="status" className="flex justify-start">
-        <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-amber-200 bg-white p-4 shadow-sm">
+      <article data-testid="assistant-stopped" role="status" className="w-full">
+        <div className="w-full rounded-lg border border-amber-200 bg-amber-50/60 p-4">
           <p className="font-semibold text-amber-900">已停止生成</p>
           {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-3 whitespace-pre-wrap break-words border-l-2 border-amber-200 pl-3 text-sm leading-6 text-ink-700">{turn.partialAnswer}</p> : null}
           <p className="mt-2 text-xs leading-5 text-ink-500">未完成内容不会保存，也不会进入后续对话上下文。</p>
@@ -60,18 +61,19 @@ function PendingAssistant({ turn, onRetry, revision = false }: { turn: Transient
   const currentPhaseIndex = turn.phase ? phaseOrder.indexOf(turn.phase) : -1;
   const receivedPhases = new Set(turn.phases ?? (turn.phase ? [turn.phase] : []));
   return (
-    <article data-testid="assistant-pending" aria-live="polite" className="flex justify-start">
-      <div data-testid="assistant-streaming" className="w-full max-w-2xl rounded-2xl rounded-tl-md border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-sm font-semibold text-ink-700">{turn.action === "regenerate" ? "正在重新生成回答" : turn.action === "edit_resend" ? "正在根据修改后的问题生成回答" : turn.partialAnswer ? "正在生成回答" : "Agent 正在处理"}</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-500 sm:grid-cols-5">
+    <article data-testid="assistant-pending" className="w-full">
+      <div data-testid="assistant-streaming" className="w-full rounded-lg border border-brand-100 bg-white p-4 shadow-sm">
+        <p role="status" aria-live="polite" aria-atomic="true" className="text-sm font-semibold text-ink-700">{turn.action === "regenerate" ? "正在重新生成回答" : turn.action === "edit_resend" ? "正在根据修改后的问题生成回答" : turn.partialAnswer ? "正在生成回答" : "Agent 正在处理"}</p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-ink-500 sm:grid-cols-5" aria-label="回答处理进度">
           {phaseOrder.map((phase, index) => {
             const active = phase === turn.phase;
             const completed = !active && receivedPhases.has(phase) && index < currentPhaseIndex;
             const skipped = !active && !receivedPhases.has(phase) && index < currentPhaseIndex;
-            return <span key={phase} data-testid={`stream-phase-${phase}`} data-phase-status={active ? "active" : completed ? "completed" : skipped ? "skipped" : "pending"} className={"rounded-md px-2 py-2 text-center " + (active ? "bg-brand-50 font-semibold text-brand-700" : completed ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-ink-500")}>{phaseLabels[phase]}{skipped ? " · 已跳过" : ""}</span>;
+            const status = active ? "进行中" : completed ? "已完成" : skipped ? "已跳过" : "待处理";
+            return <span key={phase} data-testid={`stream-phase-${phase}`} data-phase-status={active ? "active" : completed ? "completed" : skipped ? "skipped" : "pending"} aria-label={`${phaseLabels[phase]}：${status}`} className={"flex min-h-10 items-center justify-center rounded-md border px-2 py-2 text-center " + (active ? "border-brand-200 bg-brand-50 font-semibold text-brand-700" : completed ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-ink-500")}>{phaseLabels[phase]}<span className="sr-only">：{status}</span></span>;
           })}
         </div>
-        {turn.partialAnswer ? <p data-testid="stream-answer" className="mt-4 whitespace-pre-wrap break-words text-[15px] leading-7 text-ink-800">{turn.partialAnswer}</p> : null}
+        {turn.partialAnswer ? <div aria-live="off" className="mt-4 border-t border-slate-100 pt-4"><StatusBadge tone="info">回答生成中</StatusBadge><p data-testid="stream-answer" className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-7 text-ink-800">{turn.partialAnswer}</p></div> : null}
       </div>
     </article>
   );
@@ -93,8 +95,8 @@ export function MessageList(props: MessageListProps) {
   });
   return (
     <div className="relative min-h-0 flex-1 bg-slate-50/70">
-      <div ref={scroll.containerRef} onScroll={scroll.onScroll} data-testid="message-list" className="h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-5 sm:px-6">
-        <div data-testid="conversation-messages" className="mx-auto flex min-h-full w-full max-w-4xl flex-col gap-5">
+      <div ref={scroll.containerRef} onScroll={scroll.onScroll} data-testid="message-list" role="log" aria-label="会话消息" aria-busy={generationActive} aria-live="polite" aria-relevant="additions" className="h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-5 sm:px-6">
+        <div data-testid="conversation-messages" className="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-5">
           {!props.messages.length && !transientForConversation ? <EmptyConversation examples={props.examples} onSelectExample={props.onSelectExample} /> : null}
           {props.messages.map((message) => {
             if (message.role === "user") {

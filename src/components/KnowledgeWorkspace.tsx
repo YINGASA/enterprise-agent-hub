@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/chat-workspace/ConfirmDialog";
 import { ChunkList } from "@/components/ChunkList";
 import { DocumentForm } from "@/components/DocumentForm";
 import { KnowledgeBackupPanel } from "@/components/KnowledgeBackupPanel";
@@ -41,13 +42,11 @@ const ui = {
   allPacks: "\u5168\u90e8\u77e5\u8bc6\u5e93\u5305",
   allCategories: "\u5168\u90e8\u5206\u7c7b",
   allSources: "\u5168\u90e8\u6765\u6e90",
-  searchPlaceholder: "\u641c\u7d22\u6807\u9898\u3001\u6458\u8981\u3001\u6807\u7b7e\u6216\u6b63\u6587\uff0c\u4f8b\u5982\uff1a\u7535\u8111\u7533\u8bf7\u3001VPN\u3001\u9000\u6b3e\u3001JSON\u3001\u5019\u9009\u4eba\u8bc4\u5206",
+  searchPlaceholder: "搜索标题、摘要、标签或正文，例如：电脑申请、VPN、退款、JSON、审批时效",
   builtinSection: "\u9ed8\u8ba4\u77e5\u8bc6\u5e93\u5206\u7c7b",
   builtinDesc: "\u7cfb\u7edf\u5185\u7f6e / \u53ea\u8bfb\uff0c\u4e0d\u9700\u8981\u5bfc\u5165\uff0c\u542f\u52a8\u540e\u5929\u7136\u53c2\u4e0e RAG \u68c0\u7d22\u3002",
   readonly: "\u7cfb\u7edf\u5185\u7f6e / \u53ea\u8bfb",
   readonlyShort: "\u53ea\u8bfb",
-  userImportTitle: "\u7528\u6237\u6587\u6863\u5bfc\u5165",
-  userImportDesc: "支持粘贴文本和本地 .txt / .md / .json / .csv 文件导入；文档按当前存储模式持久化，Real 模式下仅相关命中片段可能发送至配置的模型服务。",
   docList: "\u6587\u6863\u5217\u8868",
   currentFilterPrefix: "\u5f53\u524d\u7b5b\u9009 ",
   currentFilterSuffix: " \u7bc7\u3002\u9ed8\u8ba4\u6587\u6863\u4e0d\u53ef\u5220\u9664\uff0c\u7528\u6237\u6587\u6863\u53ef\u5220\u9664\u3002",
@@ -163,8 +162,15 @@ function ragTestHitRate(stats?: { total: number; hits: number }) {
   return stats?.total ? Math.round((stats.hits / stats.total) * 100) : 0;
 }
 
+function formatKnowledgeDate(value?: string) {
+  if (!value) return "暂无";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" });
+}
+
 export function KnowledgeWorkspace() {
   const workspace = useKnowledgeWorkspace();
+  const [clearDocumentsOpen, setClearDocumentsOpen] = useState(false);
   const {
     userDocuments, storageStatus, refreshStorage, selectedPack, setSelectedPack, selectedCategory, setSelectedCategory,
     selectedSourceType, setSelectedSourceType, search, setSearch, selectedDocumentId,
@@ -188,6 +194,12 @@ export function KnowledgeWorkspace() {
     return sorted[sorted.length - 1];
   }, [userDocuments]);
   const disabledUserCount = userDocuments.filter((document) => document.enabled === false).length;
+  const writesDisabled = !storageStatus || storageStatus.storageMode === "degraded";
+  const writeDisabledReason = !storageStatus
+    ? "正在检查存储状态，暂时不能修改知识文档。"
+    : storageStatus.storageMode === "degraded"
+      ? "服务端暂不可用，当前工作区为只读状态；恢复连接后可继续修改。"
+      : undefined;
   const activeSourceTypes = useMemo(() => Array.from(new Set(enabledDocuments.map((document) => document.sourceType ?? "default"))).map((sourceType) => sourceTypeLabel(sourceType as KnowledgeSourceType)), [enabledDocuments]);
   const usageDiagnostics = useMemo(() => {
     const sourceCounts = new Map<string, { title: string; count: number }>();
@@ -241,22 +253,27 @@ export function KnowledgeWorkspace() {
 
   return (
     <>
-      <StorageStatusPanel status={storageStatus} onRetry={refreshStorage} onMigrationComplete={refreshStorage} className="mb-4 rounded-lg border shadow-sm" />
+      <StorageStatusPanel status={storageStatus} onRetry={refreshStorage} onMigrationComplete={refreshStorage} className="mb-4 rounded-lg border" />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
       <section className="space-y-5 min-w-0">
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">Knowledge Library</p><h2 className="mt-1 font-semibold text-ink-900">{ui.title}</h2><p className="mt-1 text-sm leading-6 text-ink-500">{ui.intro}</p></div>
-            <button type="button" onClick={handleClearUserDocuments} disabled={!userDocuments.length} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{ui.clearUserDocs}</button>
+            <button type="button" onClick={() => setClearDocumentsOpen(true)} disabled={!userDocuments.length || writesDisabled} aria-describedby={writesDisabled && writeDisabledReason ? "knowledge-write-disabled" : undefined} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{ui.clearUserDocs}</button>
           </div>
           <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-6"><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.defaultDocCount}</p><p className="mt-1 font-semibold text-ink-900">{defaultDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.userDocCount}</p><p className="mt-1 font-semibold text-ink-900">{userDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.enabledDocs}</p><p className="mt-1 font-semibold text-ink-900">{enabledDocuments.length} {ui.docUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.totalChunks}</p><p className="mt-1 font-semibold text-ink-900">{defaultChunkCount + userChunkCount} {ui.chunkUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.activeChunks}</p><p className="mt-1 font-semibold text-ink-900">{activeChunkCount} {ui.chunkUnit}</p></div><div className="rounded-md bg-slate-50 p-3"><p className="text-xs text-ink-500">{ui.lastImportedAt}</p><p className="mt-1 break-words font-semibold text-ink-900">{lastImportedAt ? new Date(lastImportedAt).toLocaleDateString() : ui.neverImported}</p></div></div>
           <p className="mt-3 break-words text-xs text-ink-500">{ui.activeSources}：{activeSourceTypes.join(" / ")}。用户文档禁用后仍会保留在列表中，但不会参与 /chat RAG 检索。</p>
-          <div className="mt-5 grid gap-3 md:grid-cols-3"><select value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allPackOption}>{ui.allPacks}</option><optgroup label="内置知识库包">{knowledgePacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</optgroup>{importWorkspace.packs.length ? <optgroup label="企业知识包">{importWorkspace.packs.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</optgroup> : null}</select><select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allCategoryOption}>{ui.allCategories}</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select><select value={selectedSourceType} onChange={(event) => setSelectedSourceType(event.target.value as SourceFilter)} className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allSourceOption}>{ui.allSources}</option><option value="default">{ui.defaultSource}</option><option value="user_upload">{ui.userUpload}</option><option value="user_paste">{ui.userPaste}</option></select></div>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder={ui.searchPlaceholder} />
-          {notice ? <p className="mt-3 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{notice}</p> : null}
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <label className="text-xs font-medium text-ink-600">知识包<select aria-label="按知识包筛选文档" value={selectedPack} onChange={(event) => setSelectedPack(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-ink-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allPackOption}>{ui.allPacks}</option><optgroup label="内置知识库包">{knowledgePacks.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</optgroup>{importWorkspace.packs.length ? <optgroup label="企业知识包">{importWorkspace.packs.map((pack) => <option key={pack.id} value={pack.id}>{pack.name}</option>)}</optgroup> : null}</select></label>
+            <label className="text-xs font-medium text-ink-600">分类<select aria-label="按分类筛选文档" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-ink-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allCategoryOption}>{ui.allCategories}</option>{categories.map((category) => <option key={category} value={category}>{category}</option>)}</select></label>
+            <label className="text-xs font-medium text-ink-600">来源<select aria-label="按来源筛选文档" value={selectedSourceType} onChange={(event) => setSelectedSourceType(event.target.value as SourceFilter)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-ink-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"><option value={allSourceOption}>{ui.allSources}</option><option value="default">{ui.defaultSource}</option><option value="user_upload">{ui.userUpload}</option><option value="user_paste">{ui.userPaste}</option></select></label>
+          </div>
+          <label className="mt-3 block text-xs font-medium text-ink-600">搜索文档<input aria-label="搜索知识文档" value={search} onChange={(event) => setSearch(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-ink-700 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100" placeholder={ui.searchPlaceholder} /></label>
+          {writeDisabledReason ? <p id="knowledge-write-disabled" role="status" className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{writeDisabledReason}</p> : null}
+          {notice ? <p role="status" aria-live="polite" className="mt-3 rounded-md bg-brand-50 p-3 text-sm text-brand-700">{notice}</p> : null}
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
           <div className="mb-4">
             <h3 className="font-semibold text-ink-900">{ui.builtinSection}</h3>
             <p className="mt-1 text-sm text-ink-500">{ui.builtinDesc}</p>
@@ -291,19 +308,21 @@ export function KnowledgeWorkspace() {
         </div>
         <WorkspaceKnowledgePackPanel workspace={importWorkspace} />
         <KnowledgeBatchImportPanel workspace={importWorkspace} />
-        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h3 className="font-semibold text-ink-900">{ui.userImportTitle}</h3>
-            <p className="mt-1 text-sm text-ink-500">{ui.userImportDesc}</p>
-          </div>
-          <DocumentForm onAdd={(document) => handleAdd(document, allDocuments)} existingDocuments={allDocuments} />
-        </div>
+        <DocumentForm
+          onAdd={(document) => handleAdd(document, allDocuments)}
+          existingDocuments={allDocuments}
+          disabled={writesDisabled}
+          disabledReason={writeDisabledReason}
+        />
         <KnowledgeBackupPanel
           documents={userDocuments}
           onDocumentsChange={handleRestore}
+          restoreDisabled={writesDisabled}
+          disabledReason={writeDisabledReason}
+          exportDisabled={!storageStatus}
         />
         <RagTestBench documents={allDocuments} currentDocument={selectedDocument} suggestedQuestions={selectedSuggestedQuestions} presetQuestion={testBenchQuestion} onHistoryChange={setRagTestHistory} />
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-200 p-4">
             <h3 className="font-semibold text-ink-900">{ui.docList}</h3>
             <p className="mt-1 text-sm text-ink-500">{ui.currentFilterPrefix}{filteredDocuments.length}{ui.currentFilterSuffix}</p>
@@ -317,9 +336,9 @@ export function KnowledgeWorkspace() {
             const questions = suggestedQuestions(document);
             const testStats = ragTestStatsByDocument.get(document.id);
             return (
-              <article key={document.id} className="border-b border-slate-100 p-4 last:border-b-0">
+              <article key={document.id} data-selected={selectedDocument?.id === document.id ? "true" : "false"} className={selectedDocument?.id === document.id ? "border-b border-brand-100 bg-brand-50/60 p-4 last:border-b-0" : "border-b border-slate-100 p-4 transition-colors hover:bg-slate-50/70 last:border-b-0"}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <button type="button" data-testid={`knowledge-document-select-${document.id}`} onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 text-left">
+                  <button type="button" data-testid={`knowledge-document-select-${document.id}`} aria-pressed={selectedDocument?.id === document.id} aria-controls="knowledge-document-detail" onClick={() => setSelectedDocumentId(document.id)} className="min-w-0 flex-1 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="break-words font-semibold text-ink-900">{document.title}</h4>
                       <span className={"rounded px-2 py-0.5 text-xs font-semibold ring-1 " + sourceBadgeClass(document.sourceType)}>{sourceTypeLabel(document.sourceType)}</span>
@@ -332,14 +351,14 @@ export function KnowledgeWorkspace() {
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{document.category}</span>
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{documentChunks.length} chunks</span>
                       <span className={enabled ? "rounded bg-emerald-50 px-2 py-1 text-emerald-700 ring-1 ring-emerald-100" : "rounded bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-100"}>{enabled ? ui.ragIncluded : ui.ragExcluded}</span>
-                      <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">{document.updatedAt}</span>
+                      <span className="rounded bg-slate-50 px-2 py-1 tabular-nums ring-1 ring-slate-200">{formatKnowledgeDate(document.updatedAt)}</span>
                       <span className="rounded bg-slate-50 px-2 py-1 ring-1 ring-slate-200">测试 {testStats?.total ?? 0} 次 · 命中 {testStats?.hits ?? 0} 次 · {ragTestHitRate(testStats)}%</span>
                     </div>
                   </button>
                   {document.sourceType !== "default" ? (
-                    <div className="flex shrink-0 flex-wrap gap-2">
-                      <button type="button" data-testid={`knowledge-document-toggle-${document.id}`} onClick={() => handleToggleEnabled(document.id)} className="rounded-md border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50">{enabled ? ui.disable : ui.enable}</button>
-                      <button type="button" data-testid={`knowledge-document-delete-${document.id}`} onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.delete}</button>
+                    <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
+                      <button type="button" data-testid={`knowledge-document-toggle-${document.id}`} disabled={writesDisabled} onClick={() => handleToggleEnabled(document.id)} className="rounded-md border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{enabled ? ui.disable : ui.enable}</button>
+                      <button type="button" data-testid={`knowledge-document-delete-${document.id}`} disabled={writesDisabled} onClick={() => handleDelete(document.id)} className="rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{ui.delete}</button>
                     </div>
                   ) : null}
                 </div>
@@ -365,12 +384,12 @@ export function KnowledgeWorkspace() {
               </article>
             );
           })}
-          {filteredDocuments.length === 0 ? <p className="p-5 text-sm text-ink-500">{ui.emptyDocs}</p> : null}
+          {filteredDocuments.length === 0 ? <p role="status" className="p-5 text-sm text-ink-500">{ui.emptyDocs}</p> : null}
         </div>
       </section>
 
       <aside className="space-y-5 min-w-0">
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section id="knowledge-document-detail" className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">{ui.docDetail}</p>
@@ -385,15 +404,15 @@ export function KnowledgeWorkspace() {
                 <p className="mt-1 break-words">{selectedDocument.summary ?? selectedDocument.content.slice(0, 180)}</p>
               </div>
               <div className="grid gap-2 rounded-md bg-slate-50 p-3 text-xs sm:grid-cols-2">
-                <p><span className="text-ink-400">{ui.category}</span>{selectedDocument.category}</p>
-                <p><span className="text-ink-400">{ui.updatedAt}</span>{selectedDocument.updatedAt}</p>
-                <p><span className="text-ink-400">{ui.chunks}</span>{chunks.length}</p>
-                <p><span className="text-ink-400">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p>
-                <p><span className="text-ink-400">{ui.ragStatus}</span>{isDocumentEnabled(selectedDocument) ? ui.enabled : ui.disabled}</p>
-                <p><span className="text-ink-400">检索测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.total ?? 0} 次 · 命中率 {ragTestHitRate(ragTestStatsByDocument.get(selectedDocument.id))}%</p>
-                <p><span className="text-ink-400">可删除：</span>{isSelectedUserDocument ? "是" : "否"}</p>
-                <p className="sm:col-span-2 break-words"><span className="text-ink-400">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p>
-                <p className="sm:col-span-2"><span className="text-ink-400">最近测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.latest ? `${new Date(ragTestStatsByDocument.get(selectedDocument.id)!.latest!.testedAt).toLocaleString()} · ${ragTestStatsByDocument.get(selectedDocument.id)!.latest!.hit ? "命中" : "未命中"}` : "暂无"}</p>
+                <p><span className="text-ink-500">{ui.category}</span>{selectedDocument.category}</p>
+                <p><span className="text-ink-500">{ui.updatedAt}</span>{formatKnowledgeDate(selectedDocument.updatedAt)}</p>
+                <p><span className="text-ink-500">{ui.chunks}</span>{chunks.length}</p>
+                <p><span className="text-ink-500">{ui.source}</span>{sourceTypeLabel(selectedDocument.sourceType)}</p>
+                <p><span className="text-ink-500">{ui.ragStatus}</span>{isDocumentEnabled(selectedDocument) ? ui.enabled : ui.disabled}</p>
+                <p><span className="text-ink-500">检索测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.total ?? 0} 次 · 命中率 {ragTestHitRate(ragTestStatsByDocument.get(selectedDocument.id))}%</p>
+                <p><span className="text-ink-500">可删除：</span>{isSelectedUserDocument ? "是" : "否"}</p>
+                <p className="sm:col-span-2 break-words"><span className="text-ink-500">{ui.tags}</span>{(selectedDocument.tags ?? []).join(" / ") || ui.none}</p>
+                <p className="sm:col-span-2"><span className="text-ink-500">最近测试：</span>{ragTestStatsByDocument.get(selectedDocument.id)?.latest ? `${new Date(ragTestStatsByDocument.get(selectedDocument.id)!.latest!.testedAt).toLocaleString()} · ${ragTestStatsByDocument.get(selectedDocument.id)!.latest!.hit ? "命中" : "未命中"}` : "暂无"}</p>
               </div>
               {!isDocumentEnabled(selectedDocument) ? <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800">{ui.disabledNote}</p> : null}
               <div className="rounded-md bg-brand-50 p-3">
@@ -441,14 +460,14 @@ export function KnowledgeWorkspace() {
               </div>
               {isSelectedUserDocument ? (
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => handleToggleEnabled(selectedDocument.id)} className="rounded-md border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50">{isDocumentEnabled(selectedDocument) ? ui.disable : ui.enable}</button>
-                  <button type="button" onClick={() => handleDelete(selectedDocument.id)} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50">{ui.deleteThisDoc}</button>
+                  <button type="button" disabled={writesDisabled} onClick={() => handleToggleEnabled(selectedDocument.id)} className="rounded-md border border-brand-200 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{isDocumentEnabled(selectedDocument) ? ui.disable : ui.enable}</button>
+                  <button type="button" disabled={writesDisabled} onClick={() => handleDelete(selectedDocument.id)} className="rounded-md border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-ink-400">{ui.deleteThisDoc}</button>
                 </div>
               ) : <p className="rounded-md bg-slate-50 p-3 text-xs text-ink-500">{ui.readonlyNote}</p>}
             </div>
           ) : null}
         </section>
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
           <h3 className="font-semibold text-ink-900">{ui.qualityDiagnosis}</h3>
           <p className="mt-1 text-sm text-ink-500">{ui.qualityOverviewDesc}</p>
           <div className="mt-3 grid gap-2 text-sm text-ink-600 sm:grid-cols-2">
@@ -484,9 +503,10 @@ export function KnowledgeWorkspace() {
           </div>
           <p className="mt-3 text-xs leading-5 text-ink-500">诊断数据基于当前浏览器中的 Chat 运行历史和反馈记录；知识文档本身按页面显示的存储模式读取。</p>
         </section>
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold text-ink-900">{ui.chunksTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.chunksDesc}</p><ChunkList chunks={chunks} /></section><MockJsonPanel title={ui.citationExample} data={chunks.slice(0, 4).map((chunk) => ({ documentId: chunk.documentId, packId: chunk.packId, sourceTitle: chunk.sourceTitle, sourceType: chunk.sourceType, category: chunk.category, tags: chunk.tags, chunkIndex: chunk.chunkIndex, keywords: chunk.keywords.slice(0, 8) }))} />
+        <section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="font-semibold text-ink-900">{ui.chunksTitle}</h3><p className="mt-1 text-sm text-ink-500">{ui.chunksDesc}</p><ChunkList chunks={chunks} /></section><MockJsonPanel title={ui.citationExample} data={chunks.slice(0, 4).map((chunk) => ({ documentId: chunk.documentId, packId: chunk.packId, sourceTitle: chunk.sourceTitle, sourceType: chunk.sourceType, category: chunk.category, tags: chunk.tags, chunkIndex: chunk.chunkIndex, keywords: chunk.keywords.slice(0, 8) }))} />
       </aside>
       </div>
+      <ConfirmDialog open={clearDocumentsOpen} title="清空全部用户知识文档？" description="当前存储模式下的用户导入文档将被删除；系统默认知识库不会受影响。" confirmLabel="确认清空" danger onCancel={() => setClearDocumentsOpen(false)} onConfirm={() => { setClearDocumentsOpen(false); void handleClearUserDocuments(true); }} />
     </>
   );
 }
