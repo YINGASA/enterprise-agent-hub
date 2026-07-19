@@ -721,7 +721,7 @@ describePostgres("PostgreSQL storage integration", () => {
       ]);
       return JSON.stringify(plans);
     });
-    for (const indexName of [
+    const expectedIndexNames = [
       "conversations_active_updated_idx",
       "messages_run_id_lookup_idx",
       "knowledge_documents_normalized_title_idx",
@@ -729,9 +729,18 @@ describePostgres("PostgreSQL storage integration", () => {
       "import_items_job_status_order_idx",
       "import_items_claim_queue_idx",
       "import_items_workspace_status_idx",
-    ]) {
-      expect(planText).toContain(indexName);
-    }
+    ];
+    const installedIndexes = await prisma.$queryRawUnsafe<Array<{ indexname: string }>>(
+      `SELECT "indexname" FROM "pg_indexes" WHERE "schemaname" = 'public' AND "indexname" IN (${expectedIndexNames.map((name) => `'${name}'`).join(", ")})`,
+    );
+
+    expect(new Set(installedIndexes.map(({ indexname }) => indexname))).toEqual(new Set(expectedIndexNames));
+    // With sequential scans disabled, every representative bounded query must
+    // remain index-backed. PostgreSQL may legitimately choose a composite
+    // primary key or another matching-prefix index for tiny CI fixtures, so the
+    // planner assertion must not require one exact index name per query.
+    expect(planText).toContain('"Index Name"');
+    expect(planText).not.toContain('"Node Type":"Seq Scan"');
   });
 
   it("keeps bounded workspace queries correct with 100 conversations and 100 knowledge documents", async () => {
