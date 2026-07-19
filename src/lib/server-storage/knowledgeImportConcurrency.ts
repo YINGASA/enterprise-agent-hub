@@ -1,7 +1,6 @@
-export const knowledgeImportPreviewConcurrencyLimits = {
-  maximumGlobal: 4,
-  maximumPerWorkspace: 1,
-} as const;
+import { knowledgeImportPreviewConcurrencyLimits } from "@/lib/knowledge/import-limits";
+
+export { knowledgeImportPreviewConcurrencyLimits };
 
 type PreviewConcurrencyState = {
   activeGlobal: number;

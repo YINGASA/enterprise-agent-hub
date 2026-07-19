@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ImportItemStatus, ImportJobStatus, KnowledgeSourceType, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { knowledgeImportJobLimits } from "@/lib/knowledge/import-limits";
 import { PrismaConversationRepository } from "@/lib/server-storage/conversationRepository";
 import { PrismaKnowledgeRepository } from "@/lib/server-storage/knowledgeRepository";
 import { PrismaKnowledgePackRepository } from "@/lib/server-storage/knowledgePackRepository";
@@ -470,6 +471,92 @@ describePostgres("PostgreSQL storage integration", () => {
     await expect(prisma.importItem.count({ where: { workspaceId, importJobId: preview.id } })).resolves.toBe(1);
   });
 
+  it("expires retained import text transactionally without deleting formal knowledge or crossing workspaces", async () => {
+    const workspaceA = await createWorkspace("retention-a");
+    const workspaceB = await createWorkspace("retention-b");
+    const repository = new PrismaKnowledgeImportRepository(workspaceA, prisma);
+    const cleanupNow = new Date("2026-07-19T00:00:00.000Z");
+    const staleUpdatedAt = new Date(cleanupNow.getTime() - knowledgeImportJobLimits.temporaryExtractedTextRetentionMilliseconds - 1);
+    const documentId = `retained-document-${randomUUID()}`;
+    await new PrismaKnowledgeRepository(workspaceA, prisma).create(knowledgeDocument(
+      documentId,
+      "正式知识文档和分块不能被临时正文清理删除。",
+      "保留正式知识",
+    ));
+    const jobId = `retention-job-${randomUUID()}`;
+    const otherJobId = `retention-other-job-${randomUUID()}`;
+    await prisma.importJob.createMany({ data: [
+      { workspaceId: workspaceA, id: jobId, status: ImportJobStatus.PROCESSING, totalItems: 4, updatedAt: staleUpdatedAt },
+      { workspaceId: workspaceB, id: otherJobId, status: ImportJobStatus.PENDING, totalItems: 1, updatedAt: staleUpdatedAt },
+    ] });
+    const itemData = [
+      { id: `retention-ready-${randomUUID()}`, itemIndex: 0, status: ImportItemStatus.READY },
+      {
+        id: `retention-processing-${randomUUID()}`,
+        itemIndex: 1,
+        status: ImportItemStatus.PROCESSING,
+        claimToken: `expired-${randomUUID()}`,
+        claimedAt: staleUpdatedAt,
+        leaseExpiresAt: new Date(cleanupNow.getTime() - 1_000),
+      },
+      { id: `retention-failed-${randomUUID()}`, itemIndex: 2, status: ImportItemStatus.FAILED, errorCode: "knowledge_import_item_failed" },
+      { id: `retention-completed-${randomUUID()}`, itemIndex: 3, status: ImportItemStatus.COMPLETED, documentId },
+    ];
+    await prisma.importItem.createMany({ data: itemData.map((item) => ({
+      workspaceId: workspaceA,
+      importJobId: jobId,
+      originalFileName: `${item.itemIndex}.txt`,
+      normalizedTitle: `retention${item.itemIndex}`,
+      mimeType: "text/plain",
+      sizeBytes: 32,
+      checksum: createHash("sha256").update(item.id).digest("hex"),
+      extractedText: `临时解析正文-${item.itemIndex}`,
+      updatedAt: staleUpdatedAt,
+      ...item,
+    })) });
+    const otherItemId = `retention-other-item-${randomUUID()}`;
+    await prisma.importItem.create({ data: {
+      workspaceId: workspaceB,
+      id: otherItemId,
+      importJobId: otherJobId,
+      itemIndex: 0,
+      originalFileName: "other.txt",
+      normalizedTitle: "other",
+      mimeType: "text/plain",
+      sizeBytes: 32,
+      checksum: createHash("sha256").update(otherItemId).digest("hex"),
+      status: ImportItemStatus.READY,
+      extractedText: "另一工作区临时正文",
+      updatedAt: staleUpdatedAt,
+    } });
+
+    await expect(repository.cleanupExpiredTemporaryContent(cleanupNow)).resolves.toEqual({
+      deletedPreviewJobs: 0,
+      expiredItems: 3,
+      clearedTerminalItems: 1,
+    });
+
+    const [items, job, documentCount, chunkCount, isolated] = await Promise.all([
+      prisma.importItem.findMany({ where: { workspaceId: workspaceA, importJobId: jobId }, orderBy: { itemIndex: "asc" } }),
+      prisma.importJob.findUnique({ where: { workspaceId_id: { workspaceId: workspaceA, id: jobId } } }),
+      prisma.knowledgeDocument.count({ where: { workspaceId: workspaceA, id: documentId } }),
+      prisma.knowledgeChunk.count({ where: { workspaceId: workspaceA, documentId } }),
+      prisma.importItem.findUnique({ where: { workspaceId_id: { workspaceId: workspaceB, id: otherItemId } } }),
+    ]);
+    expect(items.slice(0, 3).every((item) => (
+      item.status === ImportItemStatus.FAILED
+      && item.extractedText === null
+      && item.errorCode === "knowledge_import_temporary_content_expired"
+      && item.claimToken === null
+      && item.leaseExpiresAt === null
+    ))).toBe(true);
+    expect(items[3]).toMatchObject({ status: ImportItemStatus.COMPLETED, extractedText: null, documentId });
+    expect(job).toMatchObject({ status: ImportJobStatus.PARTIAL_FAILED, completedItems: 1, failedItems: 3 });
+    expect(documentCount).toBe(1);
+    expect(chunkCount).toBeGreaterThan(0);
+    expect(isolated).toMatchObject({ status: ImportItemStatus.READY, extractedText: "另一工作区临时正文" });
+  });
+
   it("imports local data idempotently and keeps server records on conflict", async () => {
     const workspaceId = await createWorkspace("migration");
     const conversationId = `migrated-${randomUUID()}`;
@@ -511,6 +598,302 @@ describePostgres("PostgreSQL storage integration", () => {
     await expect(executeStorageMigration(workspaceId, serverWins.input, prisma)).resolves.toMatchObject({ status: "conflict", conflicted: 2, imported: 0 });
     await expect(new PrismaConversationRepository(workspaceId, prisma).get(conversationId)).resolves.toMatchObject({ title: "本地会话" });
     await expect(new PrismaKnowledgeRepository(workspaceId, prisma).get(documentId)).resolves.toMatchObject({ content: "订单签收后 7 天内可以申请退款。" });
+  });
+
+  it("uses V2.2.2 workspace-scoped lookup and queue indexes without crossing workspaces", async () => {
+    const workspaceA = await createWorkspace("query-plan-a");
+    const workspaceB = await createWorkspace("query-plan-b");
+    const conversationId = `query-plan-conversation-${randomUUID()}`;
+    const runId = `query-plan-run-${randomUUID()}`;
+    const normalizedTitle = "refundpolicy2026";
+    const jobId = `query-plan-job-${randomUUID()}`;
+    const nowDate = new Date(now);
+
+    await Promise.all([
+      prisma.conversation.create({
+        data: { workspaceId: workspaceA, id: conversationId, title: "Query plan", createdAt: nowDate, updatedAt: nowDate },
+      }),
+      prisma.knowledgeDocument.create({
+        data: {
+          workspaceId: workspaceA,
+          id: `query-plan-document-a-${randomUUID()}`,
+          title: "Refund Policy 2026",
+          normalizedTitle,
+          normalizedFileName: "policy.docx",
+          content: "Workspace A indexed knowledge.",
+          sourceType: KnowledgeSourceType.USER_UPLOAD,
+          checksum: randomUUID(),
+        },
+      }),
+      prisma.knowledgeDocument.create({
+        data: {
+          workspaceId: workspaceB,
+          id: `query-plan-document-b-${randomUUID()}`,
+          title: "Refund Policy 2026",
+          normalizedTitle,
+          normalizedFileName: "policy.docx",
+          content: "Workspace B must remain isolated.",
+          sourceType: KnowledgeSourceType.USER_UPLOAD,
+          checksum: randomUUID(),
+        },
+      }),
+      prisma.importJob.create({
+        data: { workspaceId: workspaceA, id: jobId, status: ImportJobStatus.PROCESSING, totalItems: 2 },
+      }),
+    ]);
+    await prisma.message.create({
+      data: {
+        workspaceId: workspaceA,
+        id: `query-plan-message-${randomUUID()}`,
+        conversationId,
+        role: "ASSISTANT",
+        content: "Indexed response",
+        runId,
+        messageOrder: 0,
+      },
+    });
+    await prisma.importItem.createMany({
+      data: [
+        {
+          workspaceId: workspaceA,
+          id: `query-plan-ready-${randomUUID()}`,
+          importJobId: jobId,
+          itemIndex: 0,
+          originalFileName: "ready.txt",
+          normalizedTitle: "ready",
+          mimeType: "text/plain",
+          sizeBytes: 10,
+          checksum: "c".repeat(64),
+          status: ImportItemStatus.READY,
+        },
+        {
+          workspaceId: workspaceA,
+          id: `query-plan-expired-${randomUUID()}`,
+          importJobId: jobId,
+          itemIndex: 1,
+          originalFileName: "expired.txt",
+          normalizedTitle: "expired",
+          mimeType: "text/plain",
+          sizeBytes: 10,
+          checksum: "d".repeat(64),
+          status: ImportItemStatus.PROCESSING,
+          leaseExpiresAt: new Date(nowDate.getTime() - 1_000),
+        },
+      ],
+    });
+
+    await expect(prisma.knowledgeDocument.findMany({
+      where: { workspaceId: workspaceA, normalizedTitle },
+      select: { workspaceId: true },
+    })).resolves.toEqual([{ workspaceId: workspaceA }]);
+
+    const planText = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL enable_seqscan = off");
+      const plans = await Promise.all([
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT "id" FROM "conversations" WHERE "workspace_id" = $1 AND "deleted_at" IS NULL ORDER BY "updated_at" DESC, "id" DESC LIMIT 10`,
+          workspaceA,
+        ),
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT "id" FROM "messages" WHERE "workspace_id" = $1 AND "conversation_id" = $2 AND "role" = 'assistant' AND "run_id" = $3 LIMIT 1`,
+          workspaceA, conversationId, runId,
+        ),
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT "id" FROM "knowledge_documents" WHERE "workspace_id" = $1 AND "normalized_title" = $2`,
+          workspaceA, normalizedTitle,
+        ),
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT "id" FROM "import_jobs" WHERE "workspace_id" = $1 AND "status" = 'processing' ORDER BY "updated_at" DESC, "id" DESC LIMIT 10`,
+          workspaceA,
+        ),
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT "id" FROM "import_items" WHERE "workspace_id" = $1 AND "import_job_id" = $2 AND "status" = 'ready' ORDER BY "item_index" LIMIT 1`,
+          workspaceA, jobId,
+        ),
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT "id" FROM "import_items" WHERE "workspace_id" = $1 AND "import_job_id" = $2 AND "status" = 'processing' AND "lease_expires_at" < $3 ORDER BY "lease_expires_at", "item_index" LIMIT 1`,
+          workspaceA, jobId, nowDate,
+        ),
+        tx.$queryRawUnsafe(
+          `EXPLAIN (FORMAT JSON) SELECT COUNT(*) FROM "import_items" WHERE "workspace_id" = $1 AND "status" = 'ready'`,
+          workspaceA,
+        ),
+      ]);
+      return JSON.stringify(plans);
+    });
+    for (const indexName of [
+      "conversations_active_updated_idx",
+      "messages_run_id_lookup_idx",
+      "knowledge_documents_normalized_title_idx",
+      "import_jobs_status_updated_idx",
+      "import_items_job_status_order_idx",
+      "import_items_claim_queue_idx",
+      "import_items_workspace_status_idx",
+    ]) {
+      expect(planText).toContain(indexName);
+    }
+  });
+
+  it("keeps bounded workspace queries correct with 100 conversations and 100 knowledge documents", async () => {
+    const workspaceA = await createWorkspace("bounded-scale-a");
+    const workspaceB = await createWorkspace("bounded-scale-b");
+    const scalePrefix = randomUUID();
+    const conversationIds = Array.from({ length: 100 }, (_, index) => `scale-conversation-${index}-${scalePrefix}`);
+    const documentIds = Array.from({ length: 100 }, (_, index) => `scale-document-${index}-${scalePrefix}`);
+    const packIds = Array.from({ length: 4 }, (_, index) => `scale-pack-${index}-${scalePrefix}`);
+    const jobIds = Array.from({ length: 10 }, (_, index) => `scale-job-${index}-${scalePrefix}`);
+
+    await prisma.knowledgePack.createMany({
+      data: packIds.map((id, index) => ({
+        workspaceId: workspaceA,
+        id,
+        name: `Scale Pack ${index}`,
+        normalizedName: `scale pack ${index}`,
+      })),
+    });
+    await prisma.conversation.createMany({
+      data: conversationIds.map((id, index) => ({
+        workspaceId: workspaceA,
+        id,
+        title: `Scale conversation ${index}`,
+        createdAt: new Date(Date.parse(now) + index),
+        updatedAt: new Date(Date.parse(now) + index),
+      })),
+    });
+    await prisma.message.createMany({
+      data: conversationIds.flatMap((conversationId, index) => ([
+        {
+          workspaceId: workspaceA,
+          id: `scale-message-user-${index}-${scalePrefix}`,
+          conversationId,
+          role: "USER" as const,
+          content: `Scale question ${index}`,
+          messageOrder: 0,
+        },
+        {
+          workspaceId: workspaceA,
+          id: `scale-message-assistant-${index}-${scalePrefix}`,
+          conversationId,
+          role: "ASSISTANT" as const,
+          content: `Scale answer ${index}`,
+          runId: `scale-run-${index}-${scalePrefix}`,
+          messageOrder: 1,
+        },
+      ])),
+    });
+    await prisma.knowledgeDocument.createMany({
+      data: documentIds.map((id, index) => ({
+        workspaceId: workspaceA,
+        id,
+        title: `Scale Policy ${index}`,
+        normalizedTitle: `scalepolicy${index}`,
+        content: `Workspace A policy ${index}: retain the approved evidence and do not delete it.`,
+        sourceType: KnowledgeSourceType.USER_PASTE,
+        enabled: index % 5 !== 0,
+        checksum: `scale-checksum-${index}-${scalePrefix}`,
+        contentChecksum: createHash("sha256").update(`scale-content-${index}-${scalePrefix}`).digest("hex"),
+        knowledgePackId: packIds[index % packIds.length],
+      })),
+    });
+    await prisma.knowledgeChunk.createMany({
+      data: documentIds.map((documentId, index) => ({
+        workspaceId: workspaceA,
+        id: `scale-chunk-${index}-${scalePrefix}`,
+        documentId,
+        chunkIndex: 0,
+        content: `Searchable scale policy ${index} for workspace A only.`,
+        keywords: ["scale", `policy-${index}`],
+      })),
+    });
+    await prisma.importJob.createMany({
+      data: jobIds.map((id, index) => ({
+        workspaceId: workspaceA,
+        id,
+        status: ImportJobStatus.PROCESSING,
+        totalItems: 10,
+        createdAt: new Date(Date.parse(now) + index),
+        updatedAt: new Date(Date.parse(now) + index),
+      })),
+    });
+    await prisma.importItem.createMany({
+      data: jobIds.flatMap((importJobId, jobIndex) => Array.from({ length: 10 }, (_, itemIndex) => ({
+        workspaceId: workspaceA,
+        id: `scale-item-${jobIndex}-${itemIndex}-${scalePrefix}`,
+        importJobId,
+        itemIndex,
+        originalFileName: `scale-${jobIndex}-${itemIndex}.txt`,
+        normalizedTitle: `scale${jobIndex}${itemIndex}`,
+        mimeType: "text/plain",
+        sizeBytes: 128,
+        checksum: createHash("sha256").update(`scale-item-${jobIndex}-${itemIndex}-${scalePrefix}`).digest("hex"),
+        status: ImportItemStatus.READY,
+      }))),
+    });
+    await prisma.knowledgeDocument.create({
+      data: {
+        workspaceId: workspaceB,
+        id: `scale-isolated-${scalePrefix}`,
+        title: "Scale Policy 42",
+        normalizedTitle: "scalepolicy42",
+        content: "Workspace B private data.",
+        sourceType: KnowledgeSourceType.USER_PASTE,
+        enabled: true,
+        checksum: `scale-isolated-checksum-${scalePrefix}`,
+        contentChecksum: createHash("sha256").update(`scale-content-42-${scalePrefix}`).digest("hex"),
+      },
+    });
+
+    const [conversations, enabledDocuments, jobs, readyItems, checksumMatches, chunks] = await Promise.all([
+      prisma.conversation.findMany({
+        where: { workspaceId: workspaceA, deletedAt: null },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: 10,
+        select: { workspaceId: true },
+      }),
+      prisma.knowledgeDocument.findMany({
+        where: { workspaceId: workspaceA, enabled: true },
+        orderBy: { updatedAt: "desc" },
+        take: 25,
+        select: { id: true, workspaceId: true },
+      }),
+      prisma.importJob.findMany({
+        where: { workspaceId: workspaceA, status: ImportJobStatus.PROCESSING },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: 10,
+        select: { id: true, workspaceId: true },
+      }),
+      prisma.importItem.findMany({
+        where: { workspaceId: workspaceA, status: ImportItemStatus.READY },
+        orderBy: [{ importJobId: "asc" }, { itemIndex: "asc" }],
+        take: 20,
+        select: { id: true, workspaceId: true },
+      }),
+      prisma.knowledgeDocument.findMany({
+        where: {
+          workspaceId: workspaceA,
+          contentChecksum: createHash("sha256").update(`scale-content-42-${scalePrefix}`).digest("hex"),
+        },
+        select: { id: true, workspaceId: true },
+      }),
+      prisma.knowledgeChunk.findMany({
+        where: { workspaceId: workspaceA, documentId: { in: documentIds.slice(0, 25) } },
+        take: 25,
+        select: { documentId: true, workspaceId: true },
+      }),
+    ]);
+
+    expect(conversations).toHaveLength(10);
+    expect(enabledDocuments).toHaveLength(25);
+    expect(jobs).toHaveLength(10);
+    expect(readyItems).toHaveLength(20);
+    expect(checksumMatches).toEqual([{ id: documentIds[42], workspaceId: workspaceA }]);
+    expect(chunks).toHaveLength(25);
+    expect([...conversations, ...enabledDocuments, ...jobs, ...readyItems, ...checksumMatches, ...chunks]
+      .every((record) => record.workspaceId === workspaceA)).toBe(true);
+    await expect(prisma.message.count({ where: { workspaceId: workspaceA } })).resolves.toBe(200);
+    await expect(prisma.knowledgeDocument.count({ where: { workspaceId: workspaceA } })).resolves.toBe(100);
+    await expect(prisma.knowledgeChunk.count({ where: { workspaceId: workspaceA } })).resolves.toBe(100);
+    await expect(prisma.importItem.count({ where: { workspaceId: workspaceA } })).resolves.toBe(100);
   });
 
   it("returns one durable result for concurrent identical migrations and cascades workspace deletion", async () => {

@@ -9,7 +9,7 @@ import {
   type ImportJob,
 } from "@prisma/client";
 import { parseKnowledgeFile } from "@/lib/knowledge/file-parser";
-import { knowledgeImportLimits } from "@/lib/knowledge/import-limits";
+import { knowledgeImportJobLimits, knowledgeImportLimits } from "@/lib/knowledge/import-limits";
 import { sanitizeSafeMetadata } from "@/lib/knowledge/safe-metadata";
 import { agentRequestLimits } from "@/lib/ops/securityLimits";
 import { getPrismaClient } from "@/lib/server-storage/prisma";
@@ -17,6 +17,8 @@ import {
   createKnowledgeContentChecksum,
   knowledgeChunkCreateData,
   knowledgeDocumentCreateData,
+  normalizeKnowledgeDocumentTitle,
+  normalizeKnowledgeOriginalFileName,
 } from "@/lib/server-storage/knowledgeRepository";
 import { KnowledgeRepositoryError } from "@/lib/storage/knowledgeRepository";
 import type {
@@ -30,18 +32,13 @@ import type {
   KnowledgeImportQualityLevel,
 } from "@/types";
 
-export const knowledgeImportJobLimits = {
-  idempotencyKeyCharacters: 128,
-  leaseMilliseconds: 30_000,
-  maximumActiveJobsPerWorkspace: 20,
-  maximumStoredExtractedItemsPerWorkspace: 50,
-  previewRetentionMilliseconds: 24 * 60 * 60 * 1_000,
-  safeErrorCharacters: 400,
-} as const;
+export { knowledgeImportJobLimits } from "@/lib/knowledge/import-limits";
 
 const maximumDatabaseRevision = 2_147_483_646;
 const maximumDatabaseDurationMilliseconds = 2_147_483_647;
-const retryableImportErrorCodes = ["knowledge_import_item_failed"] as const;
+const retryableImportErrorCodes = ["knowledge_import_item_failed", "knowledge_import_item_timeout"] as const;
+const expiredTemporaryContentErrorCode = "knowledge_import_temporary_content_expired";
+const expiredTemporaryContentMessage = "导入临时正文已超过安全保留期限，请重新上传文件。";
 const recoverableImportJobStatuses = [
   ImportJobStatus.PREVIEW_READY,
   ImportJobStatus.PENDING,
@@ -50,6 +47,12 @@ const recoverableImportJobStatuses = [
   ImportJobStatus.PARTIAL_FAILED,
   ImportJobStatus.FAILED,
 ] as const;
+const terminalImportJobStatuses = new Set<ImportJobStatus>([
+  ImportJobStatus.COMPLETED,
+  ImportJobStatus.PARTIAL_FAILED,
+  ImportJobStatus.FAILED,
+  ImportJobStatus.CANCELLED,
+]);
 
 export type KnowledgeUploadFile = {
   fileName: string;
@@ -69,7 +72,7 @@ type StoredPreviewMetadata = KnowledgeImportPreviewMetadata & {
 };
 
 function normalizeTitle(value: string) {
-  return value.normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "").trim();
+  return normalizeKnowledgeDocumentTitle(value);
 }
 
 function comparableBigrams(value: string) {
@@ -90,7 +93,7 @@ function titleSimilarity(left: string, right: string) {
 }
 
 function normalizedFileName(value: string) {
-  return value.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+  return normalizeKnowledgeOriginalFileName(value);
 }
 
 function safeEnum<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -184,6 +187,7 @@ function publicItem(record: ImportItem): PublicImportItem {
     errorMessageSafe: record.errorMessageSafe ?? undefined,
     retryable: record.status === ImportItemStatus.FAILED
       && record.extractedText !== null
+      && record.retryCount < knowledgeImportJobLimits.maximumRetryCount
       && retryableImportErrorCodes.includes(record.errorCode as (typeof retryableImportErrorCodes)[number]),
     retryCount: record.retryCount,
     revision: record.revision,
@@ -318,19 +322,40 @@ async function mapWithConcurrency<T, R>(
 }
 
 function storedMetadata(metadata: KnowledgeImportPreviewMetadata, metrics: Omit<StoredPreviewMetadata, keyof KnowledgeImportPreviewMetadata>): Prisma.InputJsonValue {
-  return { ...metadata, ...metrics } as Prisma.InputJsonValue;
+  const stored: Record<string, unknown> = { ...metadata, ...metrics };
+  // Prisma JSON values cannot contain undefined. Keeping it in the in-memory
+  // preview also makes the safety sanitizer discard otherwise valid metadata.
+  if (stored.knowledgePackId === undefined) delete stored.knowledgePackId;
+  return stored as Prisma.InputJsonValue;
 }
 
 function duplicateFor(
   candidate: { title: string; fileName: string; checksum: string },
-  documents: Array<{ id: string; title: string; originalFileName: string | null; content: string; contentChecksum: string | null; revision: number }>,
+  documents: Array<{
+    id: string;
+    title: string;
+    normalizedTitle: string | null;
+    originalFileName: string | null;
+    normalizedFileName: string | null;
+    content?: string | null;
+    contentChecksum: string | null;
+    revision: number;
+  }>,
 ): { type: KnowledgeDuplicateType; documentId?: string; documentRevision?: number } {
-  const exact = documents.find((document) => (document.contentChecksum ?? createKnowledgeContentChecksum(document.content)) === candidate.checksum);
+  const exact = documents.find((document) => (
+    document.contentChecksum
+    ?? (typeof document.content === "string" ? createKnowledgeContentChecksum(document.content) : null)
+  ) === candidate.checksum);
   if (exact) return { type: "exact_content", documentId: exact.id, documentRevision: exact.revision };
   const normalizedTitleCandidate = normalizeTitle(candidate.title);
-  const sameTitle = documents.find((document) => normalizeTitle(document.title) === normalizedTitleCandidate);
+  const sameTitle = documents.find((document) => (
+    document.normalizedTitle ?? normalizeTitle(document.title)
+  ) === normalizedTitleCandidate);
   if (sameTitle) return { type: "same_title", documentId: sameTitle.id, documentRevision: sameTitle.revision };
-  const sameFileName = documents.find((document) => document.originalFileName && normalizedFileName(document.originalFileName) === normalizedFileName(candidate.fileName));
+  const normalizedFileNameCandidate = normalizedFileName(candidate.fileName);
+  const sameFileName = documents.find((document) => document.originalFileName && (
+    document.normalizedFileName ?? normalizedFileName(document.originalFileName)
+  ) === normalizedFileNameCandidate);
   if (sameFileName) return { type: "same_file_name", documentId: sameFileName.id, documentRevision: sameFileName.revision };
   const possible = documents
     .map((document) => ({ document, score: titleSimilarity(document.title, candidate.title) }))
@@ -388,27 +413,144 @@ function translateError(error: unknown): never {
   throw new KnowledgeRepositoryError("企业知识导入服务暂不可用，请稍后重试。", 503, "server_storage_unavailable");
 }
 
-function statusCounts(statuses: ImportItemStatus[]) {
-  const completed = statuses.filter((status) => status === ImportItemStatus.COMPLETED).length;
-  const failed = statuses.filter((status) => status === ImportItemStatus.FAILED).length;
-  const skipped = statuses.filter((status) => status === ImportItemStatus.SKIPPED).length;
-  const active = statuses.filter((status) => status === ImportItemStatus.READY || status === ImportItemStatus.PROCESSING).length;
-  const preview = statuses.filter((status) => status === ImportItemStatus.PREVIEW_READY || status === ImportItemStatus.CONFLICTED).length;
-  let status: ImportJobStatus = ImportJobStatus.PROCESSING;
+function statusCounts(
+  items: Array<{ status: ImportItemStatus; conflictType?: string | null }>,
+  activeStatus: ImportJobStatus = ImportJobStatus.PROCESSING,
+) {
+  const completed = items.filter((item) => item.status === ImportItemStatus.COMPLETED).length;
+  const failed = items.filter((item) => item.status === ImportItemStatus.FAILED).length;
+  const skipped = items.filter((item) => item.status === ImportItemStatus.SKIPPED).length;
+  const conflicted = items.filter((item) => item.conflictType && item.conflictType !== "none").length;
+  const active = items.filter((item) => item.status === ImportItemStatus.READY || item.status === ImportItemStatus.PROCESSING).length;
+  const preview = items.filter((item) => item.status === ImportItemStatus.PREVIEW_READY || item.status === ImportItemStatus.CONFLICTED).length;
+  let status: ImportJobStatus = activeStatus;
   if (!active && !preview) {
     if (failed === 0 && (completed > 0 || skipped > 0)) status = ImportJobStatus.COMPLETED;
     else if (completed > 0 || skipped > 0) status = ImportJobStatus.PARTIAL_FAILED;
     else status = ImportJobStatus.FAILED;
   }
-  return { completed, failed, skipped, active, preview, status };
+  return { completed, failed, skipped, conflicted, active, preview, status };
 }
 
 function boundedDurationMilliseconds(createdAt: Date, completedAt: Date) {
   return Math.min(maximumDatabaseDurationMilliseconds, Math.max(0, completedAt.getTime() - createdAt.getTime()));
 }
 
+function importTransactionOptions(timeout = knowledgeImportJobLimits.itemProcessingTimeoutMs) {
+  return {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    maxWait: knowledgeImportJobLimits.transactionMaximumWaitMs,
+    timeout,
+  } as const;
+}
+
+function throwIfImportAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw new KnowledgeRepositoryError("导入操作已取消。", 499, "knowledge_import_cancelled");
+  }
+}
+
 export class PrismaKnowledgeImportRepository {
   constructor(private readonly workspaceId: string, private readonly prisma = getPrismaClient()) {}
+
+  /**
+   * Removes expired parser output without touching formal knowledge documents
+   * or chunks. Items that still require the temporary text become terminal
+   * failures so an expired lease can never revive work whose input was erased.
+   */
+  async cleanupExpiredTemporaryContent(now = new Date()) {
+    const previewCutoff = new Date(now.getTime() - knowledgeImportJobLimits.previewRetentionMilliseconds);
+    const contentCutoff = new Date(now.getTime() - knowledgeImportJobLimits.temporaryExtractedTextRetentionMilliseconds);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const deletedPreviews = await tx.importJob.deleteMany({
+          where: {
+            workspaceId: this.workspaceId,
+            status: ImportJobStatus.PREVIEW_READY,
+            updatedAt: { lt: previewCutoff },
+          },
+        });
+        const candidates = await tx.importItem.findMany({
+          where: {
+            workspaceId: this.workspaceId,
+            extractedText: { not: null },
+            updatedAt: { lt: contentCutoff },
+          },
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+          take: knowledgeImportJobLimits.maximumStoredExtractedItemsPerWorkspace * 2,
+          select: { id: true, importJobId: true, status: true },
+        });
+        if (candidates.length === 0) {
+          return { deletedPreviewJobs: deletedPreviews.count, expiredItems: 0, clearedTerminalItems: 0 };
+        }
+
+        const terminalStatuses = new Set<ImportItemStatus>([
+          ImportItemStatus.COMPLETED,
+          ImportItemStatus.SKIPPED,
+          ImportItemStatus.CANCELLED,
+        ]);
+        const terminalIds = candidates.filter((item) => terminalStatuses.has(item.status)).map((item) => item.id);
+        let clearedTerminalItems = 0;
+        if (terminalIds.length > 0) {
+          const cleared = await tx.importItem.updateMany({
+            where: {
+              workspaceId: this.workspaceId,
+              id: { in: terminalIds },
+              extractedText: { not: null },
+              updatedAt: { lt: contentCutoff },
+            },
+            data: { extractedText: null, revision: { increment: 1 } },
+          });
+          clearedTerminalItems = cleared.count;
+        }
+
+        const expirableStatuses = new Set<ImportItemStatus>([
+          ImportItemStatus.PREVIEW_READY,
+          ImportItemStatus.READY,
+          ImportItemStatus.PROCESSING,
+          ImportItemStatus.FAILED,
+          ImportItemStatus.CONFLICTED,
+        ]);
+        const byJob = new Map<string, string[]>();
+        for (const item of candidates) {
+          if (!expirableStatuses.has(item.status)) continue;
+          const ids = byJob.get(item.importJobId) ?? [];
+          ids.push(item.id);
+          byJob.set(item.importJobId, ids);
+        }
+
+        let expiredItems = 0;
+        for (const [jobId, itemIds] of byJob) {
+          const expired = await tx.importItem.updateMany({
+            where: {
+              workspaceId: this.workspaceId,
+              importJobId: jobId,
+              id: { in: itemIds },
+              status: { in: [...expirableStatuses] },
+              extractedText: { not: null },
+              updatedAt: { lt: contentCutoff },
+            },
+            data: {
+              status: ImportItemStatus.FAILED,
+              extractedText: null,
+              errorCode: expiredTemporaryContentErrorCode,
+              errorMessageSafe: expiredTemporaryContentMessage,
+              claimToken: null,
+              claimedAt: null,
+              leaseExpiresAt: null,
+              revision: { increment: 1 },
+            },
+          });
+          if (expired.count === 0) continue;
+          expiredItems += expired.count;
+          await this.updateJobAfterItem(tx, jobId);
+        }
+        return { deletedPreviewJobs: deletedPreviews.count, expiredItems, clearedTerminalItems };
+      }, importTransactionOptions());
+    } catch (error) {
+      return translateError(error);
+    }
+  }
 
   private async packExists(
     packId: string | undefined,
@@ -424,6 +566,7 @@ export class PrismaKnowledgeImportRepository {
   }
 
   private async loadJob(id: string): Promise<JobWithItems> {
+    await this.cleanupExpiredTemporaryContent();
     const record = await this.prisma.importJob.findUnique({
       where: { workspaceId_id: { workspaceId: this.workspaceId, id } },
       include: { items: { orderBy: { itemIndex: "asc" } } },
@@ -437,6 +580,7 @@ export class PrismaKnowledgeImportRepository {
   }
 
   async listRecoverableJobs() {
+    await this.cleanupExpiredTemporaryContent();
     const records = await this.prisma.importJob.findMany({
       where: {
         workspaceId: this.workspaceId,
@@ -468,6 +612,8 @@ export class PrismaKnowledgeImportRepository {
       file: { fileName: file.fileName },
       checksum: createHash("sha256").update(file.bytes).digest("hex"),
     }));
+    await this.packExists(input.knowledgePackId);
+    await this.cleanupExpiredTemporaryContent();
     const existing = await this.prisma.importJob.findUnique({
       where: { workspaceId_idempotencyKey: { workspaceId: this.workspaceId, idempotencyKey: input.idempotencyKey } },
       include: { items: { orderBy: { itemIndex: "asc" } } },
@@ -478,10 +624,6 @@ export class PrismaKnowledgeImportRepository {
       }
       return toPublicImportJob(existing);
     }
-    const expiredPreviewBeforeParsing = new Date(Date.now() - knowledgeImportJobLimits.previewRetentionMilliseconds);
-    await this.prisma.importJob.deleteMany({
-      where: { workspaceId: this.workspaceId, status: ImportJobStatus.PREVIEW_READY, updatedAt: { lt: expiredPreviewBeforeParsing } },
-    });
     const [activeJobsBeforeParsing, storedExtractedItemsBeforeParsing] = await Promise.all([
       this.prisma.importJob.count({
         where: {
@@ -495,13 +637,6 @@ export class PrismaKnowledgeImportRepository {
       || storedExtractedItemsBeforeParsing >= knowledgeImportJobLimits.maximumStoredExtractedItemsPerWorkspace) {
       throw new KnowledgeRepositoryError("当前工作区待处理的导入预览过多，请完成或取消已有任务后重试。", 429, "knowledge_import_workspace_quota");
     }
-    await this.packExists(input.knowledgePackId);
-
-    const documents = await this.prisma.knowledgeDocument.findMany({
-      where: { workspaceId: this.workspaceId },
-      orderBy: { id: "asc" },
-      select: { id: true, title: true, originalFileName: true, content: true, contentChecksum: true, revision: true },
-    });
     const parsedCandidates = await mapWithConcurrency(input.files, knowledgeImportLimits.maximumConcurrentParsers, async (file, itemIndex) => {
       if (input.signal?.aborted) throw new KnowledgeRepositoryError("导入预览已取消。", 499, "knowledge_import_cancelled");
       const rawChecksum = rawFingerprints[itemIndex]!.checksum;
@@ -530,7 +665,6 @@ export class PrismaKnowledgeImportRepository {
         };
       }
       const contentChecksum = createKnowledgeContentChecksum(result.value.text);
-      const conflict = duplicateFor({ title: result.value.title, fileName: file.fileName, checksum: contentChecksum }, documents);
       const qualityLevel: KnowledgeImportQualityLevel = result.value.quality.qualityLevel === "cannot_import"
         ? "blocked"
         : result.value.quality.qualityLevel;
@@ -563,7 +697,7 @@ export class PrismaKnowledgeImportRepository {
         resolvedMimeType: result.value.mimeType,
         checksum: rawChecksum,
         status: ImportItemStatus.PREVIEW_READY,
-        conflict,
+        conflict: { type: "none" as const },
         contentChecksum,
         extractedText: result.value.text,
         previewMetadata: storedMetadata(metadata, {
@@ -578,7 +712,65 @@ export class PrismaKnowledgeImportRepository {
         errorMessageSafe: null,
       };
     });
-    const parsed = parsedCandidates.map((item, itemIndex, allItems) => {
+    const searchableCandidates = parsedCandidates.filter((item) => (
+      item.status === ImportItemStatus.PREVIEW_READY && item.contentChecksum && item.extractedText
+    ));
+    const normalizedTitles = [...new Set(searchableCandidates.map((item) => normalizeTitle(readStoredMetadata(item.previewMetadata).title)))];
+    const normalizedFileNames = [...new Set(searchableCandidates.map((item) => normalizedFileName(item.file.fileName)))];
+    const contentChecksums = [...new Set(searchableCandidates.map((item) => item.contentChecksum!))];
+    const duplicateDocumentSelect = {
+      id: true,
+      title: true,
+      normalizedTitle: true,
+      originalFileName: true,
+      normalizedFileName: true,
+      contentChecksum: true,
+      revision: true,
+    } as const;
+    const [indexedDocuments, legacyDocuments, similarityDocuments] = searchableCandidates.length > 0
+      ? await Promise.all([
+        this.prisma.knowledgeDocument.findMany({
+          where: {
+            workspaceId: this.workspaceId,
+            OR: [
+              { contentChecksum: { in: contentChecksums } },
+              { normalizedTitle: { in: normalizedTitles } },
+              { normalizedFileName: { in: normalizedFileNames } },
+            ],
+          },
+          orderBy: { id: "asc" },
+          take: agentRequestLimits.userDocuments,
+          select: duplicateDocumentSelect,
+        }),
+        this.prisma.knowledgeDocument.findMany({
+          where: { workspaceId: this.workspaceId, contentChecksum: null },
+          orderBy: { id: "asc" },
+          take: agentRequestLimits.userDocuments,
+          select: { ...duplicateDocumentSelect, content: true },
+        }),
+        this.prisma.knowledgeDocument.findMany({
+          where: { workspaceId: this.workspaceId },
+          orderBy: { id: "asc" },
+          take: agentRequestLimits.userDocuments,
+          select: duplicateDocumentSelect,
+        }),
+      ])
+      : [[], [], []];
+    const documentCandidates = new Map(similarityDocuments.map((document) => [document.id, document]));
+    for (const document of indexedDocuments) documentCandidates.set(document.id, document);
+    for (const document of legacyDocuments) documentCandidates.set(document.id, document);
+    const parsedWithExistingConflicts = parsedCandidates.map((item) => {
+      if (item.status !== ImportItemStatus.PREVIEW_READY || !item.contentChecksum) return item;
+      return {
+        ...item,
+        conflict: duplicateFor({
+          title: readStoredMetadata(item.previewMetadata).title,
+          fileName: item.file.fileName,
+          checksum: item.contentChecksum,
+        }, [...documentCandidates.values()]),
+      };
+    });
+    const parsed = parsedWithExistingConflicts.map((item, itemIndex, allItems) => {
       if (item.status !== ImportItemStatus.PREVIEW_READY || item.conflict.type !== "none" || !item.contentChecksum) return item;
       const earlier = allItems.slice(0, itemIndex).filter((candidate) => (
         candidate.status === ImportItemStatus.PREVIEW_READY && candidate.contentChecksum
@@ -653,7 +845,7 @@ export class PrismaKnowledgeImportRepository {
             })),
           },
         }, include: { items: { orderBy: { itemIndex: "asc" } } } });
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, importTransactionOptions());
       return toPublicImportJob(record);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -675,6 +867,7 @@ export class PrismaKnowledgeImportRepository {
   }
 
   async confirmJob(id: string, input: SanitizedJobConfirmation) {
+    await this.cleanupExpiredTemporaryContent();
     try {
       const record = await this.prisma.$transaction(async (tx) => {
         const job = await tx.importJob.findUnique({ where: { workspaceId_id: { workspaceId: this.workspaceId, id } }, include: { items: true } });
@@ -730,23 +923,30 @@ export class PrismaKnowledgeImportRepository {
           },
           include: { items: { orderBy: { itemIndex: "asc" } } },
         });
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, importTransactionOptions());
       return toPublicImportJob(record);
     } catch (error) {
       return translateError(error);
     }
   }
 
-  private async updateJobAfterItem(tx: Prisma.TransactionClient, jobId: string) {
+  private async updateJobAfterItem(
+    tx: Prisma.TransactionClient,
+    jobId: string,
+    activeStatus: ImportJobStatus = ImportJobStatus.PROCESSING,
+  ) {
     const job = await tx.importJob.findUnique({
       where: { workspaceId_id: { workspaceId: this.workspaceId, id: jobId } },
-      select: { createdAt: true },
+      select: { createdAt: true, completedAt: true, durationMs: true },
     });
     if (!job) throw new KnowledgeRepositoryError("导入任务不存在。", 404, "knowledge_import_not_found");
-    const statuses = (await tx.importItem.findMany({ where: { workspaceId: this.workspaceId, importJobId: jobId }, select: { status: true } })).map((item) => item.status);
-    const counts = statusCounts(statuses);
+    const items = await tx.importItem.findMany({
+      where: { workspaceId: this.workspaceId, importJobId: jobId },
+      select: { status: true, conflictType: true },
+    });
+    const counts = statusCounts(items, activeStatus);
     const terminal = counts.status === ImportJobStatus.COMPLETED || counts.status === ImportJobStatus.PARTIAL_FAILED || counts.status === ImportJobStatus.FAILED;
-    const completedAt = terminal ? new Date() : null;
+    const completedAt = terminal ? job.completedAt ?? new Date() : null;
     return tx.importJob.update({
       where: { workspaceId_id: { workspaceId: this.workspaceId, id: jobId } },
       data: {
@@ -754,8 +954,9 @@ export class PrismaKnowledgeImportRepository {
         completedItems: counts.completed,
         failedItems: counts.failed,
         skippedItems: counts.skipped,
+        conflictedItems: counts.conflicted,
         completedAt,
-        durationMs: completedAt ? boundedDurationMilliseconds(job.createdAt, completedAt) : null,
+        durationMs: completedAt ? job.durationMs ?? boundedDurationMilliseconds(job.createdAt, completedAt) : null,
         revision: { increment: 1 },
       },
       include: { items: { orderBy: { itemIndex: "asc" } } },
@@ -806,8 +1007,37 @@ export class PrismaKnowledgeImportRepository {
         data: { status: ImportJobStatus.PROCESSING, revision: { increment: 1 } },
       });
       if (claimed.count !== 1 || updatedJob.count !== 1) throw new KnowledgeRepositoryError("导入项已由其他处理器领取。", 409, "knowledge_import_claim_conflict");
-      return { itemId: candidate.id, claimToken };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return {
+        itemId: candidate.id,
+        claimToken,
+        recoveredExpiredLease: candidate.status === ImportItemStatus.PROCESSING,
+      };
+    }, importTransactionOptions());
+  }
+
+  /**
+   * Extends ownership immediately before the bounded item transaction. The
+   * item transaction timeout is shorter than the lease, so a second heartbeat
+   * is not needed while the row is held by the serializable transaction.
+   */
+  private async renewClaim(jobId: string, itemId: string, claimToken: string) {
+    const now = new Date();
+    const renewed = await this.prisma.importItem.updateMany({
+      where: {
+        workspaceId: this.workspaceId,
+        id: itemId,
+        importJobId: jobId,
+        status: ImportItemStatus.PROCESSING,
+        claimToken,
+        leaseExpiresAt: { gt: now },
+      },
+      data: {
+        leaseExpiresAt: new Date(now.getTime() + knowledgeImportJobLimits.leaseMilliseconds),
+      },
+    });
+    if (renewed.count !== 1) {
+      throw new KnowledgeRepositoryError("导入项领取已失效。", 409, "knowledge_import_claim_conflict");
+    }
   }
 
   private async completeClaim(jobId: string, itemId: string, claimToken: string) {
@@ -887,6 +1117,7 @@ export class PrismaKnowledgeImportRepository {
           where: { workspaceId: this.workspaceId, id: documentId, revision: item.conflictDocumentRevision! },
           data: {
             title: data.title,
+            normalizedTitle: data.normalizedTitle,
             content: data.content,
             sourceType: data.sourceType,
             enabled: data.enabled,
@@ -900,6 +1131,7 @@ export class PrismaKnowledgeImportRepository {
             packId: data.packId,
             knowledgePackId: data.knowledgePackId,
             originalFileName: data.originalFileName,
+            normalizedFileName: data.normalizedFileName,
             mimeType: data.mimeType,
             sizeBytes: data.sizeBytes,
             importJobId: jobId,
@@ -931,12 +1163,18 @@ export class PrismaKnowledgeImportRepository {
         },
       });
       return this.updateJobAfterItem(tx, jobId);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, importTransactionOptions());
   }
 
   private async failClaim(jobId: string, itemId: string, claimToken: string, error: unknown) {
-    const code = error instanceof KnowledgeRepositoryError ? error.code : "knowledge_import_item_failed";
-    const message = error instanceof KnowledgeRepositoryError ? error.message : "该文件导入失败，请稍后重试。";
+    const transactionTimedOut = error instanceof Prisma.PrismaClientKnownRequestError
+      && (error.code === "P2024" || error.code === "P2028");
+    const code = error instanceof KnowledgeRepositoryError
+      ? error.code
+      : transactionTimedOut ? "knowledge_import_item_timeout" : "knowledge_import_item_failed";
+    const message = error instanceof KnowledgeRepositoryError
+      ? error.message
+      : transactionTimedOut ? "该文件处理超时，可以稍后重试。" : "该文件导入失败，请稍后重试。";
     try {
       return await this.prisma.$transaction(async (tx) => {
         const updated = await tx.importItem.updateMany({
@@ -953,28 +1191,41 @@ export class PrismaKnowledgeImportRepository {
         });
         if (updated.count !== 1) throw new KnowledgeRepositoryError("导入项领取已失效。", 409, "knowledge_import_claim_conflict");
         return this.updateJobAfterItem(tx, jobId);
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, importTransactionOptions());
     } catch (failure) {
       return translateError(failure);
     }
   }
 
-  async processNext(id: string, expectedRevision: number) {
+  async processNext(id: string, expectedRevision: number, signal?: AbortSignal) {
+    throwIfImportAborted(signal);
+    await this.cleanupExpiredTemporaryContent();
     let claim: { itemId: string; claimToken: string } | null;
     try {
       claim = await this.claimNext(id, expectedRevision);
       if (!claim) return this.getJob(id);
     } catch (error) {
+      if (error instanceof KnowledgeRepositoryError && error.code === "knowledge_import_revision_conflict") {
+        const current = await this.loadJob(id);
+        if (terminalImportJobStatuses.has(current.status)) {
+          return toPublicImportJob(current);
+        }
+      }
       return translateError(error);
     }
     try {
+      // Once claimed, finish or fail durably even if the HTTP client disconnects.
+      // A later retry observes the persisted result instead of duplicating it.
+      await this.renewClaim(id, claim.itemId, claim.claimToken);
       return toPublicImportJob(await this.completeClaim(id, claim.itemId, claim.claimToken));
     } catch (error) {
       return toPublicImportJob(await this.failClaim(id, claim.itemId, claim.claimToken, error));
     }
   }
 
-  async retryFailed(id: string, expectedRevision: number) {
+  async retryFailed(id: string, expectedRevision: number, signal?: AbortSignal) {
+    throwIfImportAborted(signal);
+    await this.cleanupExpiredTemporaryContent();
     try {
       const record = await this.prisma.$transaction(async (tx) => {
         const job = await tx.importJob.findUnique({ where: { workspaceId_id: { workspaceId: this.workspaceId, id } } });
@@ -989,6 +1240,7 @@ export class PrismaKnowledgeImportRepository {
             status: ImportItemStatus.FAILED,
             extractedText: { not: null },
             errorCode: { in: [...retryableImportErrorCodes] },
+            retryCount: { lt: knowledgeImportJobLimits.maximumRetryCount },
           },
           data: {
             status: ImportItemStatus.READY,
@@ -1002,19 +1254,16 @@ export class PrismaKnowledgeImportRepository {
           },
         });
         if (retryable.count === 0) throw new KnowledgeRepositoryError("没有可重试的失败项；解析失败的文件需要重新上传。", 400, "knowledge_import_nothing_to_retry");
-        return tx.importJob.update({
-          where: { workspaceId_id: { workspaceId: this.workspaceId, id } },
-          data: { status: ImportJobStatus.PENDING, failedItems: { decrement: retryable.count }, completedAt: null, revision: { increment: 1 } },
-          include: { items: { orderBy: { itemIndex: "asc" } } },
-        });
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        return this.updateJobAfterItem(tx, id, ImportJobStatus.PENDING);
+      }, importTransactionOptions());
       return toPublicImportJob(record);
     } catch (error) {
       return translateError(error);
     }
   }
 
-  async cancel(id: string, expectedRevision: number) {
+  async cancel(id: string, expectedRevision: number, signal?: AbortSignal) {
+    throwIfImportAborted(signal);
     try {
       const record = await this.prisma.$transaction(async (tx) => {
         const job = await tx.importJob.findUnique({ where: { workspaceId_id: { workspaceId: this.workspaceId, id } } });
@@ -1041,7 +1290,7 @@ export class PrismaKnowledgeImportRepository {
           },
           include: { items: { orderBy: { itemIndex: "asc" } } },
         });
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, importTransactionOptions());
       return toPublicImportJob(record);
     } catch (error) {
       return translateError(error);

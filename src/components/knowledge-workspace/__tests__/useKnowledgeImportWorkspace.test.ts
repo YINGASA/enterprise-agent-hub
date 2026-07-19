@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildKnowledgeImportConfirmations,
+  continueKnowledgeImportJob,
   createKnowledgeImportIdempotencyKey,
   isTerminalKnowledgeImportJob,
   resolveKnowledgeImportRecovery,
@@ -79,6 +80,53 @@ describe("knowledge import workspace pure rules", () => {
     expect(shouldContinueKnowledgeImportJob({ status: "processing" })).toBe(true);
     expect(shouldContinueKnowledgeImportJob({ status: "preview_ready" })).toBe(false);
     expect(shouldContinueKnowledgeImportJob({ status: "failed" })).toBe(false);
+  });
+
+  it("polls an unexpired durable lease and resumes after another processor disappears", async () => {
+    const processing = { ...previewJob(), status: "processing" as const, revision: 2, totalItems: 1 };
+    const completed = {
+      ...processing,
+      status: "completed" as const,
+      revision: 3,
+      completedItems: 1,
+    };
+    const processNext = vi.fn()
+      .mockResolvedValueOnce(processing)
+      .mockResolvedValueOnce(completed);
+    const wait = vi.fn(async () => undefined);
+    const controller = new AbortController();
+
+    await expect(continueKnowledgeImportJob(
+      repository({ processNext }),
+      processing,
+      controller.signal,
+      { now: () => 0, wait },
+    )).resolves.toMatchObject({ status: "completed", revision: 3 });
+
+    expect(processNext).toHaveBeenCalledTimes(2);
+    expect(processNext).toHaveBeenNthCalledWith(1, "job", 2, controller.signal);
+    expect(processNext).toHaveBeenNthCalledWith(2, "job", 2, controller.signal);
+    expect(wait).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops recovery polling when the active request is aborted", async () => {
+    const processing = { ...previewJob(), status: "processing" as const, revision: 2, totalItems: 1 };
+    const controller = new AbortController();
+    const processNext = vi.fn(async () => {
+      controller.abort();
+      return processing;
+    });
+    const wait = vi.fn(async () => undefined);
+
+    await expect(continueKnowledgeImportJob(
+      repository({ processNext }),
+      processing,
+      controller.signal,
+      { now: () => 0, wait },
+    )).resolves.toBe(processing);
+
+    expect(processNext).toHaveBeenCalledTimes(1);
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it("restores the remembered job without querying the recovery feed", async () => {
