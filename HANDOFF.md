@@ -1,12 +1,14 @@
 # Enterprise Agent Hub 项目交接文档
 
-最后更新：2026-07-19（Asia/Shanghai）
+最后更新：2026-07-20（Asia/Shanghai）
 
 这份文档面向没有当前对话上下文的接手者。任何提交、发布或部署前，先实时核对 Git、工作区和测试，不要依据本文预填尚未产生的 commit。不得读取或打印 `.env.local`、数据库连接串、Cookie、Token、API Key 或 Secret。
 
 ## 1. 当前版本与边界
 
-当前开发版本是 **V2.2.3：界面体验与产品质感优化**，开发分支为 `feature/v2.2.3-ui-product-polish`，基线 master 为 `780d104bf331aa917bb4e9e27be1b746243b5c1d`，上一稳定标签为 `v2.2.2-stable`。
+当前正式版本是 **V2.2.3：界面体验与产品质感优化**。产品代码的 master merge commit 为 `739fa7dd54a3565d6e04f424ef8a40692c611c4a`，附注稳定标签 `v2.2.3-stable` 解引用后指向同一 commit。开发分支 `feature/v2.2.3-ui-product-polish` 保留，最终 feature commit 为 `d34ac093e7644b9a62092bcaae6152dde9938f15`。
+
+`v2.2.3-stable` 是 V2.2.3 产品代码的不可移动基线。本交接文档的发布状态修正可以作为该标签之后的独立 docs-only commit 位于 master；因此接手时允许 master 比 Stable Tag 多纯文档提交，但必须实时检查 `git log` 和 diff，确认没有未经说明的产品代码变化。
 
 V2.2.3 在 V2.2.2 生产加固基线上进行前端体验收口：
 
@@ -17,9 +19,9 @@ V2.2.3 在 V2.2.2 生产加固基线上进行前端体验收口：
 - 优化评测中心、运行监控、业务工具、首页和 About 的数据密度与中文状态。
 - 统一 Loading、Empty、Error、Degraded、Conflict 等状态，并补齐响应式、键盘和 reduced-motion 验证。
 
-`redesign-existing-projects` Skill 仅作为审查和设计指导；企业工作台定位优先。明确不包含：业务核心语义改动、数据库 Schema/migration、对象存储、OCR、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22、大型 UI 框架或腾讯云部署。
+`redesign-existing-projects` Skill 仅作为审查和设计指导；企业工作台定位优先。V2.2.3 未包含：业务核心语义改动、数据库 Schema/migration、对象存储、OCR、完整账号权限、向量数据库、长期记忆、跨会话记忆、Node 22 或大型 UI 框架。
 
-腾讯云应用仍运行 V2.0.4。本轮只发布 Git 版本，不执行生产 PostgreSQL migration、服务器 Release、Canary 或 PM2 切换。
+腾讯云生产环境已经部署 V2.2.3，运行 commit 与 `v2.2.3-stable` 均为 `739fa7dd54a3565d6e04f424ef8a40692c611c4a`。生产当前仍为 `local` 存储模式，数据库未配置，因此本次部署没有执行 PostgreSQL migration；不得把“代码支持 server 模式”误写成“生产已启用 PostgreSQL”。
 
 ## 2. 接手检查
 
@@ -35,7 +37,7 @@ git tag --list 'v2.*-stable' --sort=version:refname
 git diff --check
 ```
 
-如果工作区包含 V2.2.3 未提交实现，必须原地保留并继续；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时截图/录像、真实凭据或无关改动，停止并报告。
+预期工作区和暂存区干净。若只看到 `HANDOFF.md` 修改但 `git diff` 为空，应先检查 `git ls-files --eol HANDOFF.md`、工作区/索引/HEAD 哈希和 Git stat 缓存，不要把 LF/CRLF 假修改当作内容变化。任何真实用户改动必须原地保留；不得 reset、restore、stash、clean 或覆盖。如果出现 `.env.local`、测试数据库数据、临时截图/录像、真实凭据或无关改动，停止并报告。
 
 ## 3. 数据与工作区模型
 
@@ -139,24 +141,37 @@ git diff --check
 
 真实 PostgreSQL 门禁只能使用独立 PostgreSQL 16 测试库，设置测试专用 `RUN_POSTGRES_INTEGRATION=1` 与 `TEST_DATABASE_URL`；不得连接腾讯云生产数据库、输出连接串或执行 `prisma migrate reset`。`test:migration:v221` 验证 V2.2.0 → V2.2.1，`test:migration:v222` 验证带旧数据的 V2.2.1 → V2.2.2 和重复 deploy；CI 还会运行 claim/lease 恢复、查询计划和真实 server-mode Workspace 隔离 E2E。
 
-最后一次代码变化后必须完整重跑。任一关键门禁失败，不提交稳定 master、不创建 Tag、不部署。
+V2.2.3 发布门禁已通过：本地全量单测 370/370（本机仅跳过 11 项 PostgreSQL-only 集成）、UI 专项 21/21、Real API Node 20 专项 44/44、Full Mock 80/80、浏览器 E2E 本地 44 项通过且 1 项 PostgreSQL-only 跳过；GitHub CI 补跑真实 PostgreSQL 16 集成和 server-mode E2E 后覆盖全部 45 个 E2E 场景。Typecheck、Production Build、Prisma generate/validate、导入加固/压力和 `git diff --check` 均通过。
+
+后续最后一次代码变化后仍必须完整重跑。任一关键门禁失败，不提交稳定 master、不创建 Tag、不部署。
 
 ## 9. Git 发布
 
-全部 feature 门禁通过后：
+V2.2.3 Git 发布已经完成：
 
-1. 按逻辑提交 V2.2.3 UI、测试和文档。
-2. 普通 push `feature/v2.2.3-ui-product-polish`，等待 GitHub feature CI。
-3. fetch 并确认 `origin/master` 仍是预期基线；未知前进立即停止。
-4. `--no-ff` 合并到 master，不 squash、rebase 或改写历史。
-5. 从 merge commit 重新执行全部门禁。
-6. push master，并确认 GitHub master CI。
-7. 在最终 master merge commit 创建附注 `v2.2.3-stable` 并 push。
+1. `feature/v2.2.3-ui-product-polish` 最终 commit：`d34ac093e7644b9a62092bcaae6152dde9938f15`。
+2. Feature GitHub CI `29688102039` 对该精确 SHA 全绿。
+3. 使用 `--no-ff` 合并到 master，merge commit：`739fa7dd54a3565d6e04f424ef8a40692c611c4a`。
+4. Master GitHub CI `29688754375` 对该精确 merge commit 全绿。
+5. 附注标签 `v2.2.3-stable` 已推送，解引用后指向该 merge commit。
+6. 本地和远端 feature 分支继续保留。
 
-禁止 force push、tag -f、移动 `v2.2.2-stable`、删除 feature 分支或自动部署腾讯云。
+禁止 force push、tag -f、移动任何旧 Stable Tag、删除 feature 分支或改写已发布历史。后续 docs-only 修正不得移动 `v2.2.3-stable`。
 
-## 10. 当前发布状态
+## 10. 当前生产状态
 
-V2.2.3 的最终 commit、feature/master CI、合并 commit、门禁数字和 Stable Tag 只能在操作实际成功后写入最终报告，不在交接文档中预填。
+- 正式版本：V2.2.3。
+- Commit：`739fa7dd54a3565d6e04f424ef8a40692c611c4a`。
+- Release：`/var/www/enterprise-agent-hub-releases/v2.2.3-20260719T134941Z`。
+- 公网地址：`http://43.136.104.95`。
+- PM2：`enterprise-agent-hub online`，部署核验时 `restart=0`；Canary 已删除。
+- `/`、`/chat`、`/knowledge`、`/tools`、`/evaluation`、`/about`、`/ops` 均返回 200，About 与 Ops 显示 V2.2.3。
+- 应用 Health 返回 200，`applicationHealthy=true`。
+- Mock 流式通过；Real API Health 返回 200，至少一次 Real 流式请求以 `responseMode=real` 完成且未降级。
+- Real Evaluation、Ops 无口令和错误口令均返回 401；无效 Feedback runId 返回 400。
+- 生产检查、Typecheck、Build 和 Full Mock 80/80 通过；服务器未重复安装浏览器，E2E 沿用精确发布 commit 的 GitHub CI 45 场景基线。
+- 生产使用经过哈希校验的旁路 Node 20.19.5，未替换系统 Node。
+- 新备份：`/var/backups/enterprise-agent-hub/20260719T134941Z-pre-v2.2.3`。V2.0.4、V2.0.2、V1.12.5 Release 及既有备份均保留；新旧 `.env.local` 权限保持 600，运行数据保留。
+- 当前生产存储模式：`local`。数据库未配置，未执行生产 PostgreSQL migration。需要启用 server 模式时，必须另行完成数据库准备、备份、migration、Canary 和回滚验证。
 
-截至本文更新时，腾讯云仍为 V2.0.4，V2.2.3 尚未部署云端。
+以上生产事实来自 2026-07-19 完成的部署与验收记录。后续接手者仍须在任何新部署前重新核验 PM2、健康检查、存储模式、当前 Release 链接和备份，不得读取或打印 `.env.local`、数据库连接串或其他 Secret。
